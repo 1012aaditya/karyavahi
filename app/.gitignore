@@ -1,0 +1,7 @@
+node_modules/
+.next/
+next-env.d.ts
+# The working copy is created from karyavahi.pristine.db by `npm run db:init`.
+.data/karyavahi.db
+.data/karyavahi.db-wal
+.data/karyavahi.db-shm

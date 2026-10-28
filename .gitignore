@@ -1,0 +1,24 @@
+# Dependencies and build output
+node_modules/
+.next/
+next-env.d.ts
+
+# The database is three files in WAL mode. Only the pristine seed is tracked (through Git LFS);
+# the working copy is made from it by `npm run db:init`, which runs automatically before `npm run
+# dev`. Committing the working copy would mean committing whatever state the demo was clicked into.
+app/.data/karyavahi.db
+app/.data/karyavahi.db-wal
+app/.data/karyavahi.db-shm
+app/.data/karyavahi.pristine.db-wal
+app/.data/karyavahi.pristine.db-shm
+
+# Left behind by scripts/write-test.mts if it dies before restoring.
+app/.data/karyavahi.testbackup.db*
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*.log
+
+# TypeScript incremental build cache
+app/tsconfig.tsbuildinfo
