@@ -8,6 +8,23 @@ import { pick } from '@/lib/i18n';
 import { Card, CardHead, PageHead, Callout, Facts, Field, Mono, fmtDate } from '@/components/ui';
 import { Pill, AiDrafted } from '@/components/labels';
 import { DISCLAIMER } from '@domain/catalog';
+import { ReportView } from '@/components/ReportView';
+import { PrintButton } from '@/components/PrintButton';
+import { Icon } from '@/components/Icon';
+import type { BuiltReport } from '@/lib/reports';
+
+function ExportBar({ id, type, snapshot }: { id: string; type: string; snapshot: boolean }) {
+  const regen = ['atr', 'learning_impact', 'exceptions', 'review_pack', 'block_performance', 'intervention_effectiveness', 'data_quality', 'executive_summary'].includes(type)
+    ? type : type === 'learning_outcome' ? 'learning_impact' : type === 'overdue_tasks' || type === 'district_escalation' ? 'exceptions' : type === 'executive_brief' ? 'executive_summary' : 'atr';
+  return (
+    <div className="flex flex-wrap items-center gap-2 no-print">
+      <a href={`/api/reports/${id}/export?format=xlsx`} className="btn-quiet btn-sm"><Icon name="download" size={14} />Excel</a>
+      <a href={`/api/reports/${id}/export?format=csv`} className="btn-quiet btn-sm"><Icon name="download" size={14} />CSV</a>
+      <PrintButton />
+      <Link href={`/reports/new?type=${regen}`} className="btn-primary btn-sm" title={snapshot ? 'This page is a frozen snapshot; regenerate to use current records' : undefined}><Icon name="refresh" size={14} />Regenerate from current records</Link>
+    </div>
+  );
+}
 
 /** One report, laid out to be read on screen or printed for a meeting. */
 
@@ -56,13 +73,29 @@ function Value({ v }: { v: unknown }) {
   );
 }
 
-export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ReportPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ generated?: string }> }) {
   const session = await pageSession();
   const lang = await getLanguage();
   const { id } = await params;
   const r = getReport(session, id);
   if (!r) notFound();
   const users = userNames([r.generated_by]);
+  const { generated } = await searchParams;
+
+  if ((r.content as { builder?: string }).builder === 'v2') {
+    const built = r.content as unknown as BuiltReport;
+    return (
+      <article className="mx-auto max-w-6xl space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 no-print">
+          <p className="text-[12.5px] text-ink-faint"><Link href="/reports" className="link">{pick(lang, 'Reports', 'रिपोर्ट')}</Link> › <Mono>{r.id}</Mono></p>
+          <ExportBar id={r.id} type={r.report_type} snapshot />
+        </div>
+        {generated ? <Callout tone="good" title="Report generated">Saved as snapshot {r.id} and recorded in the audit trail. It will not change when the records do.</Callout> : null}
+        <Callout tone="method">Snapshot generated {fmtDate(r.generated_at, true)} by {users.get(r.generated_by) ?? r.generated_by}. Figures are frozen as of that moment.</Callout>
+        <ReportView r={built} snapshotId={r.id} />
+      </article>
+    );
+  }
 
   return (
     <article className="mx-auto max-w-4xl space-y-4">
@@ -73,6 +106,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         right={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Pill>{r.report_type.replace(/_/g, ' ')}</Pill>
+            <ExportBar id={r.id} type={r.report_type} snapshot />
             {r.narrative_model ? <AiDrafted lang={lang} model={r.narrative_model} /> : null}
           </div>
         }

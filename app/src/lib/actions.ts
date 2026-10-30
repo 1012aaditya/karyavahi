@@ -217,3 +217,49 @@ export async function demoResetAction(_prev: State, _form: FormData): Promise<St
   revalidatePath('/', 'layout');
   return res;
 }
+
+// ------------------------------------------------------------------ blockers
+export async function reportBlockerAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const { reportBlocker } = await import('./blockers');
+  const taskId = str(form, 'task_id');
+  let id = '';
+  const res = await attempt(() => {
+    id = reportBlocker(s, { taskId, type: str(form, 'type'), severity: str(form, 'severity'), description: str(form, 'description') });
+  }, 'Blocker recorded.');
+  if (res.ok) res.ok = `Blocker ${id} recorded and written to the audit trail.`;
+  revalidatePath(`/tasks/${taskId}`);
+  revalidatePath('/execution');
+  return res;
+}
+
+export async function updateBlockerAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const { updateBlocker } = await import('./blockers');
+  const action = str(form, 'action') === 'escalate' ? 'escalate' : 'resolve';
+  const res = await attempt(() => updateBlocker(s, str(form, 'blocker_id'), action, str(form, 'note')),
+    action === 'escalate' ? 'Blocker escalated to the next level.' : 'Blocker marked resolved.');
+  revalidatePath('/execution');
+  return res;
+}
+
+// ------------------------------------------------------------------ reports
+export async function generateReportAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const { buildReport, saveReport } = await import('./reports');
+  const bool = (k: string) => form.get(k) === '1';
+  let id = '';
+  const res = await attempt(() => {
+    const r = buildReport(s, {
+      type: str(form, 'type') as never,
+      from: str(form, 'from') || undefined, to: str(form, 'to') || undefined,
+      includeEvidence: bool('include_evidence'), includeUnresolved: bool('include_unresolved'),
+      includeDataQuality: bool('include_dq'), includeSummary: bool('include_summary'),
+    });
+    if (!r) throw new Refused('Your role cannot generate reports.', 'role');
+    id = saveReport(s, r);
+  }, 'Report generated.');
+  revalidatePath('/reports');
+  if (res.ok) redirect(`/reports/${id}?generated=1`);
+  return res;
+}

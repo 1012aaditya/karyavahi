@@ -1,3 +1,6 @@
+import { listBlockers, BLOCKER_TYPES, blockerMeta } from '@/lib/blockers';
+import { reportBlockerAction } from '@/lib/actions';
+import { grant as grantOf } from '@/lib/guard';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLanguage } from '@/lib/session';
@@ -263,6 +266,52 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           </ul>
         )}
       </Card>
+      {(() => {
+        const bl = listBlockers(session, { limit: 50 }).filter((b) => b.task_ids.includes(t.id));
+        const canReport = t.owner_user_id === session.user_id || grantOf(session, 'task.assign') === 'yes';
+        return (
+          <Card>
+            <CardHead
+              title={pick(lang, 'Blockers', 'बाधाएँ')}
+              hint={pick(lang, 'What is stopping this task, recorded so the pattern is visible and the right level can act.', 'इस काम को क्या रोक रहा है — ताकि सही स्तर कार्रवाई कर सके।')}
+            />
+            {bl.length > 0 ? (
+              <ul className="divide-y divide-line">
+                {bl.map((b) => (
+                  <li key={b.id} className="px-4 py-2.5 text-[13px] sm:px-5">
+                    <span className={`chip mr-2 ${b.status === 'resolved' ? 'border-good/30 bg-good-light text-good' : 'border-warn/30 bg-warn-light text-warn'}`}>{b.status}</span>
+                    <span className="font-medium text-ink">{blockerMeta(b.blocker_type).label}</span>
+                    <span className="text-ink-soft"> — {b.description}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="px-4 py-3 text-[13px] text-ink-faint sm:px-5">{pick(lang, 'No blocker reported on this task.', 'कोई बाधा दर्ज नहीं।')}</p>}
+            {canReport && !t.submitted_at ? (
+              <div className="border-t border-line px-4 py-3 sm:px-5">
+                <Disclose label={pick(lang, 'Report a blocker…', 'बाधा दर्ज करें…')}>
+                  <ActionForm action={reportBlockerAction} hidden={{ task_id: t.id }} label={pick(lang, 'Record blocker', 'दर्ज करें')}>
+                    <div className="mb-2 grid gap-2 sm:grid-cols-2">
+                      <label className="block"><span className="label">{pick(lang, 'Type', 'प्रकार')}</span>
+                        <select name="type" required className="input mt-1">
+                          {BLOCKER_TYPES.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
+                        </select>
+                      </label>
+                      <label className="block"><span className="label">{pick(lang, 'Severity', 'गंभीरता')}</span>
+                        <select name="severity" defaultValue="medium" className="input mt-1">
+                          <option value="high">High — work cannot proceed</option>
+                          <option value="medium">Medium — work is slowed</option>
+                          <option value="low">Low — minor</option>
+                        </select>
+                      </label>
+                    </div>
+                    <ReasonBox name="description" required label={pick(lang, 'What is happening', 'क्या हो रहा है')} placeholder={pick(lang, 'e.g. Activity cards not delivered to 3 of 5 schools', 'उदा. 5 में से 3 विद्यालयों को कार्ड नहीं मिले')} />
+                  </ActionForm>
+                </Disclose>
+              </div>
+            ) : null}
+          </Card>
+        );
+      })()}
     </div>
   );
 }

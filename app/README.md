@@ -23,6 +23,43 @@ npm run verify       # typecheck, read-layer scoping, write-layer rules, the aud
 npm run verify:full  # the above, plus a build, a crawl of every route, and the UI walkthrough
 ```
 
+## The redesign (v2) — what was added
+
+The product is organised into eight sections, each a real, data-backed workspace:
+
+| Section | Route | What it does |
+|---|---|---|
+| Overview | `/overview` | "What needs my attention today": KPIs that link to filtered views, ranked priority actions, hotspot preview, trends, AI briefing, readable activity feed. Demo controls moved out. |
+| Learning hotspots | `/hotspots` | Schematic tile map (no coordinates exist in the seed — labelled as such) with district → block → cluster → school drill-down, class/subject/competency/round filters, map/list toggle, detail panel. Severity in `src/lib/hotspots.ts` uses the detector's method (change vs district + two-proportion z, sample-size gate, "insufficient data" never shown as stable). |
+| Cases & action plans | `/cases`, `/cases/[id]` | Tabbed ledger (open, critical, pending approval, overdue, awaiting verification, reopened, closed). The case page is a workspace: lifecycle stepper, section nav, next legal moves, rule-based intervention options, similar past cases, blockers. |
+| Intervention studio | `/interventions`, `/interventions/compare`, `/interventions/[id]` | Case-ranked matching with every point explained (`src/lib/studio.ts`), side-by-side comparison with no composite score, what-if delivery-feasibility planner (budget, staff, weeks, attendance, training, connectivity) that never predicts an outcome. |
+| Field execution | `/execution` | Overdue, due-soon, awaiting proof check, blockers (structured, escalate/resolve, audited), workload by officer with plain flags. Blockers are reported from any task page. |
+| Impact & reports | `/impact`, `/reports`, `/reports/new` | Outcome verification workspace (DiD with interval, participation, delivery, closure eligibility). Report builder with 8 report types built from the ledger, preview, saved snapshots, Excel (.xlsx), CSV and print/save-as-PDF exports. |
+| Karyavahi AI | `/assistant` + drawer on every page | Live Claude model through controlled, scope-checked tools (`src/lib/ai/tools.ts`), streaming, citations, flagged unretrieved ids, follow-ups, page context. The original computed "instant answers" remain alongside. |
+| Administration | `/admin` | Hub for audit, imports, AI activity, roles & permissions, settings, jobs, outbox and `/admin/demo` (clock, sweep, reset). |
+
+Also: public landing page (`/`), email sign-in (`/login`, honestly passwordless), demo personas (`/demo`), global scoped search (`/search`).
+
+### AI configuration
+
+Copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY` (server-side only). Model defaults to
+`claude-opus-5-5` (`KARYAVAHI_AI_MODEL`), effort `medium` (`KARYAVAHI_AI_EFFORT`). Server-side refusal
+fallback is on (`KARYAVAHI_AI_FALLBACKS=off` to disable). Without a key the AI panels say "not connected";
+nothing pretends to be a model. Every interaction is logged to `ai_interactions` (model, tools, cited ids,
+token counts, status — and only a short excerpt of the question). The model has **no write tools**: it
+cannot approve, assign, verify, close or reopen.
+
+### New tests
+
+```bash
+node scripts/e2e-v2.cjs        # 28 UI/HTTP acceptance checks on the redesigned app (system Chrome)
+node scripts/e2e-v2.cjs --ai   # + live model checks: tool use, citations, out-of-scope refusal
+node scripts/shots.cjs <email> <dir> /overview v:/hotspots m:/overview   # screenshots
+```
+
+The blockers table is created by the app in its SQLite copy (`src/lib/blockers.ts`) and back-filled from
+reasons the seed already records (deadline changes, reassignments), each marked `derived_from_seed`.
+
 ## What it is
 
 A case ledger. A learning drop is detected from assessment data, diagnosed against context,

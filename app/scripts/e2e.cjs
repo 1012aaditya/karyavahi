@@ -2,7 +2,9 @@
  * Drives the demo story through the real UI: sign in as the Rampur Sadar block officer,
  * read CASE-0184, approve the plan, and check the case actually moved.
  */
-const { chromium } = require('playwright');
+// playwright if installed, otherwise playwright-core driving the system Chrome.
+let chromium, launchOpts = {};
+try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require('playwright-core')); launchOpts = { channel: 'chrome' }; }
 const SHOTS = process.env.KARYAVAHI_SHOTS ?? '/tmp/karyavahi-shots';
 require('node:fs').mkdirSync(SHOTS, { recursive: true });
 const BASE = 'http://localhost:3000';
@@ -14,7 +16,7 @@ const ok = (label, cond, extra = '') => {
 };
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(launchOpts);
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   const errors = [];
@@ -22,13 +24,13 @@ const ok = (label, cond, extra = '') => {
   page.on('pageerror', (e) => errors.push(String(e)));
 
   // ---- sign in ----
-  await page.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/demo`, { waitUntil: 'networkidle' });
   await page.screenshot({ path: `${SHOTS}/01-login.png`, fullPage: true });
-  ok('the login page lists demo accounts', (await page.getByText('Vikas Qureshi').count()) > 0);
+  ok('the demo page offers the block officer walkthrough', (await page.getByText('Vikas Qureshi').count()) > 0);
 
-  await page.getByRole('button', { name: /Sign in as the Rampur Sadar block officer/i }).click();
+  await page.getByRole('button', { name: /Enter as block officer/i }).click();
   await page.waitForLoadState('networkidle');
-  ok('signing in lands on the block officer dashboard', page.url().includes('/beo'), page.url());
+  ok('signing in lands on the overview', page.url().includes('/overview'), page.url());
 
   // The BEO prefers Hindi; switch to English for the walkthrough.
   const toEnglish = page.getByRole('button', { name: /English/ });
@@ -38,7 +40,7 @@ const ok = (label, cond, extra = '') => {
   const bodyText = await page.locator('body').innerText();
   ok('the demo banner is on the page', bodyText.includes('DEMO MODE'));
   ok('the dashboard leads with what is waiting on the officer',
-    /waiting on your decision|waiting on a decision/i.test(bodyText));
+    /needs your attention|Priority actions/i.test(bodyText));
 
   // ---- the hero case ----
   await page.goto(`${BASE}/cases/CASE-0184`, { waitUntil: 'networkidle' });
@@ -82,23 +84,21 @@ const ok = (label, cond, extra = '') => {
   const next = await page.locator('body').innerText();
   ok('the next legal move is offered', next.includes('Work assigned'));
   ok('closing is listed but blocked, with the reason',
-    /Closing needs an outcome evaluation|no outcome evaluation/i.test(next) || next.includes('What can happen next'));
+    /Closing needs an outcome evaluation|no outcome evaluation/i.test(next) || next.includes('What can happen next') || next.includes('Next moves'));
 
   // ---- the other roles ----
   const roles = [
-    ['state.lead@demo.karyavahi.test', 'state', '07-state'],
-    ['deo.rmp@demo.karyavahi.test', 'district', '08-district'],
+    ['state.lead@demo.karyavahi.test', 'overview', '07-state'],
+    ['deo.rmp@demo.karyavahi.test', 'overview', '08-district'],
     ['crc.clu-001@demo.karyavahi.test', 'field', '09-field'],
     ['auditor.state@demo.karyavahi.test', 'audit', '10-audit'],
   ];
   for (const [email, path, shot] of roles) {
-    // An existing session redirects away from /login, so sign out first.
-    await page.goto(`${BASE}/beo`, { waitUntil: 'domcontentloaded' }).catch(() => {});
-    const out = page.getByRole('button', { name: /^Sign out$/ });
-    if (await out.count()) { await out.first().click(); await page.waitForLoadState('networkidle'); }
+    // An existing session redirects away from /login, so drop it first.
+    await ctx.clearCookies();
     await page.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
-    const row = page.locator('li', { hasText: email });
-    await row.getByRole('button', { name: /Sign in/ }).click();
+    await page.fill('input[name=email]', email);
+    await page.getByRole('button', { name: /Sign in/ }).first().click();
     await page.waitForLoadState('networkidle');
     const en = page.getByRole('button', { name: /English/ });
     if (await en.count()) { await en.first().click(); await page.waitForLoadState('networkidle'); }
@@ -113,8 +113,7 @@ const ok = (label, cond, extra = '') => {
   ok('refused attempts are counted', /refused attempts/i.test(auditText));
 
   // headmaster, the narrowest view
-  const out2 = page.getByRole('button', { name: /^Sign out$/ });
-  if (await out2.count()) { await out2.first().click(); await page.waitForLoadState('networkidle'); }
+  await ctx.clearCookies();
   await page.goto(`${BASE}/login/headmaster`, { waitUntil: 'networkidle' });
   await page.locator('li').first().getByRole('button', { name: /Sign in/ }).click();
   await page.waitForLoadState('networkidle');

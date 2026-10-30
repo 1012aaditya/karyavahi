@@ -67,6 +67,16 @@ const COMMON = [
   '/reports', '/import', '/settings', '/audit', '/audit?result=failure', '/ai-log',
   '/assistant', '/assistant?q=waiting_on_me', '/assistant?q=what_worked', '/assistant?q=worst_now',
   '/assistant?q=detector_refused', '/assistant?q=stuck', '/assistant?q=reopened',
+  // redesign
+  '/overview', '/admin/demo', '/admin/access', '/search?q=subtraction', '/search?q=CASE-0184',
+  '/hotspots', '/hotspots?view=list', '/hotspots?grade=3&subject=N', '/hotspots?level=cluster&selected=CLU-001',
+  '/cases?tab=critical', '/cases?tab=approval', '/cases?tab=overdue', '/cases?tab=verification', '/cases?tab=reopened', '/cases?tab=all&order=recent',
+  '/interventions?case=CASE-0184', '/interventions?subject=numeracy&lever=block', '/interventions/compare?ids=INT-01,INT-04',
+  '/interventions/INT-01?schools=5&budget=5000&teachers=2&weeks=4&attendance=70',
+  '/execution', '/execution?tab=overdue', '/execution?tab=soon', '/execution?tab=check', '/execution?tab=blockers', '/execution?tab=workload',
+  '/impact', '/impact?state=improved_confirmed', '/reports/new', '/reports/new?type=atr', '/reports/new?type=learning_impact',
+  '/reports/new?type=exceptions', '/reports/new?type=review_pack', '/reports/new?type=block_performance',
+  '/reports/new?type=intervention_effectiveness', '/reports/new?type=data_quality', '/reports/new?type=executive_summary',
 ];
 
 // Real failure signatures. Next serialises its own 404 component into every page's payload,
@@ -136,6 +146,7 @@ await expectRefusal('a headmaster cannot read the audit trail', hm.id, '/audit',
 await expectRefusal('a headmaster cannot verify proof', hm.id, '/evidence', 'does not verify proof');
 await expectRefusal('a headmaster cannot import data', hm.id, '/import', 'import data');
 await expectRefusal('a CRC cannot open the demo admin controls', crc.id, '/admin', 'Only the demo administrator');
+await expectRefusal('a CRC cannot open the demo controls page', crc.id, '/admin/demo', 'Only the demo administrator');
 await expectRefusal('a CRC cannot read the AI log', crc.id, '/ai-log', 'can read this log');
 await expectRefusal('an unknown session is sent to sign in', 'USR-NOPE', '/cases', 'redirect-to-login');
 

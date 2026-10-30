@@ -8,6 +8,8 @@ import { pick } from '@/lib/i18n';
 import { Card, CardHead, PageHead, Callout, Toolbar, Empty, Mono, fmtDate } from '@/components/ui';
 import { Pill, AiDrafted } from '@/components/labels';
 import { FilterChips } from '@/components/lists';
+import { Icon } from '@/components/Icon';
+import { REPORT_TYPES } from '@/lib/reports';
 
 /** Generated reports: action-taken reports, review packs, escalations and briefs. */
 
@@ -23,7 +25,7 @@ const TYPE_LABEL: Record<string, { en: string; hi: string }> = {
 
 export default async function ReportsPage({
   searchParams,
-}: { searchParams: Promise<{ type?: string }> }) {
+}: { searchParams: Promise<{ type?: string; q?: string }> }) {
   const session = await pageSession();
   const lang = await getLanguage();
   const sp = await searchParams;
@@ -38,7 +40,8 @@ export default async function ReportsPage({
   }
 
   const counts = reportTypeCounts(session);
-  const reports = listReports(session, { type: sp.type || undefined, limit: 120 });
+  const q = (sp.q ?? '').trim().toLowerCase().slice(0, 80);
+  const reports = listReports(session, { type: sp.type || undefined, limit: q ? 600 : 120 }).filter((r) => !q || r.title.toLowerCase().includes(q) || r.id.toLowerCase().includes(q)).slice(0, 120);
   const users = userNames(reports.map((r) => r.generated_by));
 
   return (
@@ -50,15 +53,29 @@ export default async function ReportsPage({
           'Built from the case ledger, so a report cannot say something the records do not. Every one carries the demo disclaimer.',
           'प्रकरण-पंजी से बनी, अतः रिपोर्ट वह नहीं कह सकती जो रिकॉर्ड में नहीं है।',
         )}
+        right={<div className="flex gap-2"><Link href="/impact" className="btn-quiet"><Icon name="target" size={15} />Outcome verification</Link><Link href="/reports/new" className="btn-primary"><Icon name="plus" size={15} />New report</Link></div>}
       />
+      <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Build a report">
+        {REPORT_TYPES.filter((t) => ['atr', 'learning_impact', 'exceptions', 'review_pack'].includes(t.key)).map((t) => (
+          <Link key={t.key} href={`/reports/new?type=${t.key}`} className="group rounded-xl border border-line bg-white p-4 shadow-card transition-all hover:-translate-y-px hover:shadow-lift">
+            <p className="flex items-center justify-between text-[14px] font-semibold text-ink">{t.label}<Icon name="arrow-right" size={15} className="text-ink-faint transition-transform group-hover:translate-x-0.5" /></p>
+            <p className="mt-1 text-[12.5px] leading-snug text-ink-soft">{t.blurb}</p>
+          </Link>
+        ))}
+      </section>
       <Toolbar>
+        <form method="get" action="/reports" className="relative">
+          {sp.type ? <input type="hidden" name="type" value={sp.type} /> : null}
+          <Icon name="search" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
+          <input type="search" name="q" defaultValue={sp.q ?? ''} placeholder="Search report titles or ids" aria-label="Search reports" className="input h-9 w-64 pl-9 text-[13px]" />
+        </form>
         <FilterChips
           base="/reports" param="type" current={sp.type} lang={lang}
           options={[
             { value: '', label: pick(lang, 'All', 'सभी'), count: Object.values(counts).reduce((a, b) => a + b, 0) },
             ...Object.entries(counts).map(([t, c]) => ({
               value: t,
-              label: pick(lang, TYPE_LABEL[t]?.en ?? t, TYPE_LABEL[t]?.hi ?? t),
+              label: pick(lang, TYPE_LABEL[t]?.en ?? REPORT_TYPES.find((x) => x.key === t)?.label ?? t, TYPE_LABEL[t]?.hi ?? t),
               count: c,
             })),
           ]}
@@ -77,6 +94,7 @@ export default async function ReportsPage({
                   <th scope="col">{pick(lang, 'Period', 'अवधि')}</th>
                   <th scope="col">{pick(lang, 'Cases', 'प्रकरण')}</th>
                   <th scope="col">{pick(lang, 'Generated', 'निर्मित')}</th>
+                  <th scope="col"><span className="sr-only">Download</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -90,7 +108,7 @@ export default async function ReportsPage({
                       </p>
                     </td>
                     <td className="text-[12.5px]">
-                      <Pill>{pick(lang, TYPE_LABEL[r.report_type]?.en ?? r.report_type, TYPE_LABEL[r.report_type]?.hi ?? r.report_type)}</Pill>
+                      <Pill>{pick(lang, TYPE_LABEL[r.report_type]?.en ?? REPORT_TYPES.find((x) => x.key === r.report_type)?.label ?? r.report_type, TYPE_LABEL[r.report_type]?.hi ?? r.report_type)}</Pill>
                     </td>
                     <td className="text-[12.5px]">{scopeName(r.scope_type, r.scope_id)}</td>
                     <td className="tnum text-[12px]">{r.period_start} → {r.period_end}</td>
@@ -98,6 +116,10 @@ export default async function ReportsPage({
                     <td className="text-[12.5px]">
                       <span className="tnum">{fmtDate(r.generated_at)}</span>
                       <span className="block text-[11.5px] text-ink-faint">{users.get(r.generated_by) ?? r.generated_by}</span>
+                    </td>
+                    <td className="whitespace-nowrap text-right">
+                      <a href={`/api/reports/${r.id}/export?format=xlsx`} className="btn-ghost btn-sm" title="Download Excel"><Icon name="download" size={14} />XLSX</a>
+                      <a href={`/api/reports/${r.id}/export?format=csv`} className="btn-ghost btn-sm" title="Download CSV">CSV</a>
                     </td>
                   </tr>
                 ))}
