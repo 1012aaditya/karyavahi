@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------ base */
+:root {
+  /* Chart roles. Categorical slots 1–3 of the validated default palette, checked
+     against this app's white chart surface with --pairs all:
+       CVD ΔE 9.2 · normal-vision ΔE 24.0 · aqua is sub-3:1, so every chart that
+       uses it ships direct labels and a table view (the relief rule). */
+  --surface-1: #ffffff;
+  --series-1: #2a78d6; /* blue   — the cluster / the treated schools */
+  --series-2: #eb6834; /* orange — the district / the comparison schools */
+  --series-3: #1baf7a; /* aqua   — third series, labelled */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+  --viz-grid: #e8ebf2;
+  --viz-axis: #898781;
+  --viz-ink: #14181f;
+  --viz-ink-soft: #52514e;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  background: #f5f7fb;
+  color: #14181f;
+  font-feature-settings: 'tnum' 0;
+}
+
+/* Tabular figures wherever numbers line up in columns. */
+.tnum { font-variant-numeric: tabular-nums; }
+
+:focus-visible {
+  outline: 2px solid #1b4ea8;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Devanagari needs a little more line height to stay legible at small sizes. */
+:lang(hi) { line-height: 1.65; }
+
+@layer components {
+  .card {
+    @apply bg-white border border-line rounded-lg;
+  }
+  .card-pad { @apply p-4 sm:p-5; }
+  .card-head {
+    @apply flex items-start justify-between gap-3 border-b border-line px-4 py-3 sm:px-5;
+  }
+  .h-section { @apply text-[13px] font-semibold uppercase tracking-wide text-ink-faint; }
+  .label { @apply text-[11px] font-medium uppercase tracking-wide text-ink-faint; }
+  .val { @apply text-sm text-ink; }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border px-3 py-1.5
+           text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary { @apply btn border-brand bg-brand text-white hover:bg-brand-dark; }
+  .btn-quiet { @apply btn border-line-strong bg-white text-ink-soft hover:bg-paper-sunk hover:text-ink; }
+  .btn-danger { @apply btn border-crit/40 bg-crit-light text-crit hover:bg-crit hover:text-white; }
+  .btn-good { @apply btn border-good/40 bg-good-light text-good hover:bg-good hover:text-white; }
+
+  .input {
+    @apply w-full rounded-md border border-line-strong bg-white px-3 py-2 text-sm text-ink
+           placeholder:text-ink-faint focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20;
+  }
+
+  .link { @apply text-brand underline decoration-brand/30 underline-offset-2 hover:decoration-brand; }
+
+  .table { @apply w-full border-collapse text-sm; }
+  .table thead th {
+    @apply border-b border-line bg-paper-sunk px-3 py-2 text-left text-[11px] font-semibold
+           uppercase tracking-wide text-ink-faint;
+  }
+  .table tbody td { @apply border-b border-line px-3 py-2.5 align-top text-ink; }
+  .table tbody tr:hover { @apply bg-paper-sunk/60; }
+
+  /* Honesty chips. Fictional data, AI drafts and illustrative numbers must always
+     read as such; these are used on every surface that shows one. */
+  .chip {
+    @apply inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium leading-tight;
+  }
+}
+
+/* Print: reports and review packs get carried into meetings on paper. */
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+  .card { border-color: #bbb; break-inside: avoid; }
+  a { text-decoration: none; color: #000; }
+}
