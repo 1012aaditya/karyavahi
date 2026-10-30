@@ -66,7 +66,8 @@ export const HOTSPOT_STYLE: Record<HotspotSeverity, { fill: string; text: string
 };
 
 export function HotspotPreview({ units, levelLabel }: { units: HotspotUnit[]; levelLabel: string }) {
-  const worst = units.filter((u) => ['critical', 'significant', 'moderate'].includes(u.severity)).slice(0, 5);
+  const worst = units.filter((u) => ['critical', 'significant', 'moderate'].includes(u.severity) || u.hotChildren > 0)
+    .sort((a, b) => b.hotChildren - a.hotChildren || (a.relPp ?? 0) - (b.relPp ?? 0)).slice(0, 5);
   const tiles = units.slice(0, 24);
   return (
     <div className="grid gap-5 p-4 sm:p-5 md:grid-cols-[1fr_1.1fr]">
@@ -99,6 +100,7 @@ export function HotspotPreview({ units, levelLabel }: { units: HotspotUnit[]; le
                   <Link href={`/hotspots?level=${u.level}&selected=${u.id}`} className="flex items-center gap-2.5 rounded-lg border border-line px-3 py-2 hover:border-line-strong hover:bg-paper-sunk">
                     <span className={`h-3 w-3 shrink-0 rounded-sm ${st.fill}`} aria-hidden />
                     <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-ink">{u.name}</span>
+                    {u.hotChildren > 0 ? <span className="chip border-crit/30 bg-crit-light text-crit">{u.hotChildren} hot inside</span> : null}
                     <span className="tnum text-[13px] font-semibold text-crit">{u.relPp !== null ? `${u.relPp > 0 ? '+' : '−'}${Math.abs(u.relPp).toFixed(1)} pp` : '—'}</span>
                     <span className="sr-only">{st.label}</span>
                   </Link>

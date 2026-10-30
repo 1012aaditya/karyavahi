@@ -37,6 +37,8 @@ export const RULES = {
 export interface HotspotFilters {
   grade?: number;
   competencyId?: string;
+  /** 'N' numeracy or 'L' literacy. */
+  subject?: 'N' | 'L';
   /** The later of the two rounds being compared; defaults to the latest completed round. */
   roundId?: string;
 }
@@ -64,6 +66,8 @@ export interface HotspotUnit {
   overallRelPp: number | null;
   /** How many grade × competency cells are in each severity band. */
   cells: Partial<Record<HotspotSeverity, number>>;
+  /** Sub-areas one level down whose worst cell is a critical or significant decline. */
+  hotChildren: number;
   openCases: number;
   criticalCases: number;
   overdueTasks: number;
@@ -92,6 +96,7 @@ function rowFilter(f: HotspotFilters): Pred[] {
   const parts: Pred[] = [{ sql: `ar.metric_id = 'MET-PCT-PROF'`, params: [] }];
   if (f.grade) parts.push({ sql: 'ar.grade = ?', params: [f.grade] });
   if (f.competencyId) parts.push({ sql: 'ar.competency_id = ?', params: [f.competencyId] });
+  if (f.subject) parts.push({ sql: 'ar.competency_id like ?', params: [`CMP-${f.subject}%`] });
   return parts;
 }
 
@@ -159,7 +164,7 @@ export function classify(level: Level, a: { nPrev: number; nCurr: number; relPp:
   return { severity: 'stable', reason: rel <= RULES.moderate.relPp ? `${r1(rel)} pp, but not statistically clear (z ${z.toFixed(1)})` : 'Within normal variation of the district' };
 }
 
-function finish(level: Level, id: string, name: string, parentId: string | null, a: Agg, dChange: number | undefined): Omit<HotspotUnit, 'openCases' | 'criticalCases' | 'overdueTasks' | 'focus' | 'overallRelPp' | 'cells'> {
+function finish(level: Level, id: string, name: string, parentId: string | null, a: Agg, dChange: number | undefined): Omit<HotspotUnit, 'openCases' | 'criticalCases' | 'overdueTasks' | 'focus' | 'overallRelPp' | 'cells' | 'hotChildren'> {
   const prevPct = a.nPrev > 0 ? (100 * a.pPrev) / a.nPrev : null;
   const currPct = a.nCurr > 0 ? (100 * a.pCurr) / a.nCurr : null;
   const changePp = prevPct !== null && currPct !== null ? currPct - prevPct : null;
@@ -219,6 +224,7 @@ export function hotspotUnits(
   );
   const workload = workloadBy(s, level);
   const cells = cellStats(s, level, pair, f, parent);
+  const hot = hotChildCounts(s, level, pair, f, parent);
 
   const units: HotspotUnit[] = [...aggs.entries()].map(([id, e]) => {
     const overall = finish(level, id, e.name ?? names?.get(id) ?? id, e.parent, e.agg, dChange.get(e.district));
@@ -247,6 +253,7 @@ export function hotspotUnits(
       overallRelPp: overall.relPp,
       focus: worst ? { grade: worst.grade, competency_id: worst.competency_id, prevPct: worst.prevPct, currPct: worst.currPct, relPp: worst.relPp, z: worst.z, nCurr: worst.nCurr } : null,
       cells: counts,
+      hotChildren: hot.get(id) ?? 0,
       openCases: workload.open.get(id) ?? 0,
       criticalCases: workload.critical.get(id) ?? 0,
       overdueTasks: workload.overdue.get(id) ?? 0,
@@ -300,6 +307,24 @@ function cellStats(s: Session, level: Level, pair: RoundPair, f: HotspotFilters,
     const dc = d?.prev !== undefined && d?.curr !== undefined ? d.curr - d.prev : undefined;
     const u = { ...finish(level, c.uid, '', null, c.agg, dc), grade: c.grade, competency_id: c.competency_id };
     out.set(c.uid, [...(out.get(c.uid) ?? []), u]);
+  }
+  return out;
+}
+
+/** For each unit, how many of its children have a critical/significant worst cell. */
+function hotChildCounts(s: Session, level: Level, pair: RoundPair, f: HotspotFilters, parent?: { level: Level; id: string }): Map<string, number> {
+  const child = CHILD[level];
+  const out = new Map<string, number>();
+  if (!child) return out;
+  const cells = cellStats(s, child, pair, f, parent);
+  const col = `${level}_id`;
+  const table = child === 'school' ? 'schools' : child === 'cluster' ? 'clusters' : 'blocks';
+  const up = new Map(all<{ id: string; p: string }>(`select id, ${col} p from ${table}`).map((r) => [r.id, r.p]));
+  for (const [uid, list] of cells) {
+    if (list.some((c) => c.severity === 'critical' || c.severity === 'significant')) {
+      const p = up.get(uid);
+      if (p) out.set(p, (out.get(p) ?? 0) + 1);
+    }
   }
   return out;
 }

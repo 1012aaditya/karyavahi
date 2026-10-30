@@ -10,26 +10,57 @@ import {
   Card, CardHead, PageHead, Callout, Facts, Field, Mono, fmtInr, fmtDate,
 } from '@/components/ui';
 import { Pill, Illustrative, EvidenceStrength, EvidenceTypeName, RoleName } from '@/components/labels';
+import { matchForCase, feasibility, interventionHistory } from '@/lib/studio';
+import { getCase } from '@/lib/cases';
+import { FitPanel, HistoryPanel, FeasibilityPanel } from '@/components/studio';
+import { Icon } from '@/components/Icon';
 
 /** One intervention card, in full, including the parts that argue against using it. */
 
-export default async function InterventionPage({ params }: { params: Promise<{ id: string }> }) {
+type WF = { case?: string; schools?: string; budget?: string; teachers?: string; weeks?: string; attendance?: string; training?: string; connectivity?: string };
+const numOr = (v: string | undefined, min: number, max: number): number | null => {
+  if (v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : null;
+};
+
+export default async function InterventionPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<WF> }) {
   const session = await pageSession();
   const lang = await getLanguage();
   const { id } = await params;
+  const sp = await searchParams;
   const i = intervention(id);
   if (!i) notFound();
+
+  // Case context: only honoured if the case is in the user's scope.
+  const caseId = sp.case && getCase(session, sp.case.toUpperCase()) ? sp.case.toUpperCase() : undefined;
+  const ctx = caseId ? matchForCase(session, caseId) : null;
+  const fit = ctx?.matches.find((m) => m.intervention.id === i.id) ?? null;
+  const caseSchools = caseId ? getCase(session, caseId)?.school_ids.length ?? 1 : 1;
+
+  const wfValues = {
+    schools: numOr(sp.schools, 1, 500) ?? Math.max(1, caseSchools),
+    budget: sp.budget ?? '', teachers: sp.teachers ?? '', weeks: sp.weeks ?? '', attendance: sp.attendance ?? '',
+    training: sp.training === '1', connectivity: sp.connectivity === '1',
+  };
+  const wf = feasibility(i, {
+    schools: wfValues.schools,
+    budgetInr: numOr(sp.budget, 0, 1e9), teachersAvailable: numOr(sp.teachers, 0, 2000),
+    weeksAvailable: numOr(sp.weeks, 0, 52), attendancePct: numOr(sp.attendance, 0, 100),
+    trainingComplete: wfValues.training, connectivity: wfValues.connectivity,
+  });
+  const hist = interventionHistory(i.id).get(i.id) ?? { plans: 0, evaluated: 0, improved: 0, confirmed: 0, notImproved: 0, inconclusive: 0 };
 
   const comps = new Map(competencies().map((c) => [c.id, pick(lang, c.name_en, c.name_hi)]));
   const using = listCases(session, { limit: 200 }).slice(0, 0); // cases link via plans; listed below from plans
   const look = lookupsFor(lang);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
+    <div className="mx-auto max-w-5xl space-y-5">
       <PageHead
         breadcrumb={
           <>
-            <Link href="/interventions" className="link">{pick(lang, 'Interventions', 'हस्तक्षेप')}</Link>
+            <Link href={`/interventions${caseId ? `?case=${caseId}` : ''}`} className="link">{pick(lang, 'Intervention studio', 'हस्तक्षेप स्टूडियो')}</Link>
             {' › '}<Mono>{i.id}</Mono>
           </>
         }
@@ -44,6 +75,15 @@ export default async function InterventionPage({ params }: { params: Promise<{ i
           </div>
         }
       />
+
+      {fit && ctx && caseId ? (
+        <FitPanel caseId={caseId} caseTitle={ctx.caseTitle} match={fit} factors={ctx.factors.map((f) => f.label)} />
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-line-strong bg-white px-4 py-3 text-[13px] text-ink-soft">
+          <span><Icon name="info" size={14} className="mr-1 inline text-ink-faint" />{pick(lang, 'Open this card from a case to see why it does or does not fit that case.', 'किसी प्रकरण से खोलें ताकि उपयुक्तता दिखे।')}</span>
+          <Link href={`/interventions/compare?ids=${i.id}`} className="btn-quiet btn-sm"><Icon name="scale" size={14} />{pick(lang, 'Compare with others', 'तुलना करें')}</Link>
+        </div>
+      )}
 
       <Card>
         <CardHead title={pick(lang, 'At a glance', 'एक नज़र में')} />
@@ -99,6 +139,10 @@ export default async function InterventionPage({ params }: { params: Promise<{ i
           ) : null}
         </div>
       </Card>
+
+      <HistoryPanel h={hist} />
+
+      <FeasibilityPanel id={i.id} caseId={caseId} values={wfValues} checks={wf.checks} totalCost={wf.totalCost} verdict={wf.verdict} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

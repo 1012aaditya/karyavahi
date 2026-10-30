@@ -185,6 +185,10 @@ export interface CaseFilter {
   competencyId?: string;
   grade?: number;
   q?: string;
+  /** Cases with at least one task past its due date and not yet submitted. */
+  overdue?: boolean;
+  /** Cases reopened at least once. */
+  reopened?: boolean;
   limit?: number;
   offset?: number;
   order?: 'severity' | 'recent' | 'due' | 'oldest';
@@ -205,6 +209,8 @@ function caseFilterPred(s: Session, f: CaseFilter): Pred {
   if (f.competencyId) parts.push({ sql: 'c.competency_id = ?', params: [f.competencyId] });
   if (f.grade) parts.push({ sql: 'c.grade = ?', params: [f.grade] });
   if (f.q) parts.push({ sql: '(c.title like ? or c.id like ?)', params: [`%${f.q}%`, `%${f.q}%`] });
+  if (f.overdue) parts.push({ sql: 'exists (select 1 from tasks ot where ot.case_id = c.id and ot.submitted_at is null and ot.due_date < ?)', params: [today()] });
+  if (f.reopened) parts.push({ sql: 'c.reopen_count > 0', params: [] });
   return and(...parts);
 }
 
