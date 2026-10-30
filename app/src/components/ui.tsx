@@ -13,7 +13,7 @@ export function CardHead({
   return (
     <header className="card-head" id={id}>
       <div className="min-w-0">
-        <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">{title}</h2>
         {hint ? <p className="mt-0.5 text-[13px] leading-snug text-ink-soft">{hint}</p> : null}
       </div>
       {right ? <div className="shrink-0 no-print">{right}</div> : null}
@@ -22,28 +22,33 @@ export function CardHead({
 }
 
 export function Stat({
-  label, value, sub, tone = 'neutral', href,
+  label, value, sub, tone = 'neutral', href, icon,
 }: {
   label: ReactNode; value: ReactNode; sub?: ReactNode;
   tone?: 'neutral' | 'good' | 'warn' | 'crit' | 'pend' | 'brand';
   href?: string;
+  icon?: ReactNode;
 }) {
-  const toneRing = {
-    neutral: 'border-line', good: 'border-good/30', warn: 'border-warn/30',
-    crit: 'border-crit/30', pend: 'border-pend/30', brand: 'border-brand/30',
-  }[tone];
   const toneText = {
     neutral: 'text-ink', good: 'text-good', warn: 'text-warn',
     crit: 'text-crit', pend: 'text-pend', brand: 'text-brand',
   }[tone];
+  const toneBar = {
+    neutral: 'bg-line-strong', good: 'bg-good', warn: 'bg-warn',
+    crit: 'bg-crit', pend: 'bg-pend', brand: 'bg-brand',
+  }[tone];
   const body = (
     <>
-      <div className="label">{label}</div>
-      <div className={`mt-1 text-2xl font-semibold tnum ${toneText}`}>{value}</div>
-      {sub ? <div className="mt-0.5 text-[12px] leading-snug text-ink-soft">{sub}</div> : null}
+      <span className={`absolute inset-y-3 left-0 w-[3px] rounded-r ${toneBar}`} aria-hidden />
+      <div className="flex items-start justify-between gap-2">
+        <div className="label">{label}</div>
+        {icon ? <span className="text-ink-faint">{icon}</span> : null}
+      </div>
+      <div className={`kpi-num mt-2 ${toneText}`}>{value}</div>
+      {sub ? <div className="mt-1.5 text-[12px] leading-snug text-ink-soft">{sub}</div> : null}
     </>
   );
-  const cls = `block rounded-lg border bg-white p-3.5 ${toneRing} ${href ? 'transition-colors hover:bg-paper-sunk' : ''}`;
+  const cls = `relative block overflow-hidden rounded-xl border border-line bg-white px-4 py-3.5 shadow-card ${href ? 'transition-all hover:-translate-y-px hover:shadow-lift' : ''}`;
   return href ? <Link href={href} className={cls}>{body}</Link> : <div className={cls}>{body}</div>;
 }
 
@@ -59,7 +64,7 @@ export function Field({ label, children, hint }: { label: ReactNode; children: R
 
 export function Empty({ children }: { children?: ReactNode }) {
   return (
-    <p className="px-4 py-6 text-center text-sm text-ink-faint sm:px-5">
+    <p className="px-4 py-8 text-center text-sm text-ink-faint sm:px-5">
       {children ?? 'Nothing here yet'}
     </p>
   );
@@ -76,7 +81,7 @@ export function Callout({
     good: 'border-good/30 bg-good-light text-ink',
   }[tone];
   return (
-    <div className={`rounded-md border px-3 py-2.5 text-[13px] leading-relaxed ${styles}`}>
+    <div className={`rounded-lg border px-3.5 py-2.5 text-[13px] leading-relaxed ${styles}`}>
       {title ? <p className="mb-0.5 font-semibold">{title}</p> : null}
       {children}
     </div>
@@ -108,12 +113,12 @@ export function PageHead({
   title, sub, right, breadcrumb,
 }: { title: ReactNode; sub?: ReactNode; right?: ReactNode; breadcrumb?: ReactNode }) {
   return (
-    <header className="mb-5">
-      {breadcrumb ? <div className="mb-1.5 text-[12px] text-ink-faint">{breadcrumb}</div> : null}
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <header className="mb-6">
+      {breadcrumb ? <div className="mb-2 text-[12.5px] text-ink-faint">{breadcrumb}</div> : null}
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold leading-tight text-ink sm:text-[22px]">{title}</h1>
-          {sub ? <p className="mt-1 max-w-3xl text-sm leading-relaxed text-ink-soft">{sub}</p> : null}
+          <h1 className="font-display text-[24px] font-semibold leading-tight tracking-tight text-ink sm:text-[28px]">{title}</h1>
+          {sub ? <p className="mt-1.5 max-w-3xl text-[14px] leading-relaxed text-ink-soft">{sub}</p> : null}
         </div>
         {right ? <div className="shrink-0 no-print">{right}</div> : null}
       </div>

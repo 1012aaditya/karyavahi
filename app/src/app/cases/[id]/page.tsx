@@ -26,6 +26,11 @@ import {
 } from '@/lib/actions';
 import { TRANSITIONS, STATUS_LABELS, reasonRequired } from '@domain/lifecycle';
 import type { CaseStatus } from '@domain/types';
+import { matchForCase } from '@/lib/studio';
+import { similarCases, lessonsFrom } from '@/lib/memory';
+import { listBlockers } from '@/lib/blockers';
+import { LifecycleStepper, SectionNav, RecommendationsCard, SimilarCasesCard, CaseBlockersCard, RailCard } from '@/components/case-workspace';
+import { Icon } from '@/components/Icon';
 
 /**
  * One case, end to end.
@@ -106,6 +111,12 @@ export default async function CasePage({
   const audit = may(session, 'audit.view') ? auditFor(session, 'case', c.id, 60) : [];
 
   const legalNext = TRANSITIONS[c.status] ?? [];
+  const match = matchForCase(session, c.id);
+  const similar = similarCases(session, c.id, 4);
+  const lessons = lessonsFrom(similar);
+  const blockers = listBlockers(session, { caseId: c.id, limit: 20 });
+  const overdueTasks = tasks.filter((t) => !t.submitted_at && t.due_date < today()).length;
+  const pendingProof = evidence.filter((e) => e.status === 'pending').length;
   const decidesLever = canDecideLever(session, c.lever);
   const pendingApproval = approvals.find((a) => a.decision === 'pending');
   const eligibleOutcome = outcomes.find((o) => o.closure_eligible);
@@ -161,49 +172,52 @@ export default async function CasePage({
   }
 
   return (
-    <article className="space-y-4">
-      <PageHead
-        breadcrumb={
-          <>
-            <Link href="/cases" className="link">{pick(lang, 'Cases', 'प्रकरण')}</Link>
-            {' › '}
-            <Mono>{c.id}</Mono>
-          </>
-        }
-        title={c.title}
-        sub={
-          <>
-            {pick(lang, 'Class', 'कक्षा')} {c.grade} · {names.competency} ·{' '}
-            {names.clusters.get(c.cluster_id) ?? c.cluster_id} {pick(lang, 'cluster', 'संकुल')} ·{' '}
-            {names.blocks.get(c.block_id) ?? c.block_id} ·{' '}
-            {names.districts.get(c.district_id) ?? c.district_id}
-          </>
-        }
-        right={
-          <div className="flex flex-wrap items-center justify-end gap-2">
+    <article className="space-y-5">
+      <header className="card p-5 sm:p-6">
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink-faint">
+          <Link href="/cases" className="hover:text-ink">{pick(lang, 'Cases', 'प्रकरण')}</Link>
+          <Icon name="chevron-right" size={13} />
+          <Mono>{c.id}</Mono>
+        </div>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 max-w-3xl">
+            <h1 className="font-display text-[24px] font-semibold leading-tight tracking-tight text-ink sm:text-[26px]">{c.title}</h1>
+            <p className="mt-1.5 text-[13.5px] text-ink-soft">
+              {pick(lang, 'Class', 'कक्षा')} {c.grade} · {names.competency} ·{' '}
+              {names.clusters.get(c.cluster_id) ?? c.cluster_id} {pick(lang, 'cluster', 'संकुल')} ·{' '}
+              {names.blocks.get(c.block_id) ?? c.block_id} · {names.districts.get(c.district_id) ?? c.district_id}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <StatusPill status={c.status} lang={lang} />
             <SeverityPill severity={c.severity} lang={lang} />
             {c.closure_type ? <OutcomePill category={c.closure_type} lang={lang} /> : null}
             <ProvenanceChip provenance="synthetic_demo" lang={lang} />
           </div>
-        }
-      />
+        </div>
+        <div className="mt-5"><LifecycleStepper status={c.status} reopenCount={c.reopen_count} /></div>
+        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line pt-4 text-[13px] sm:grid-cols-3 lg:grid-cols-6">
+          <div><dt className="label">{pick(lang, 'Accountable officer', 'उत्तरदायी अधिकारी')}</dt><dd className="mt-0.5 font-medium text-ink">{names.users.get(c.owner_user_id) ?? c.owner_user_id}</dd></div>
+          <div><dt className="label">{pick(lang, 'Authority', 'अधिकार')}</dt><dd className="mt-0.5 font-medium text-ink">{c.lever === 'block' ? pick(lang, 'Block lever · BEO/DEO', 'खंड स्तर') : c.lever === 'district' ? pick(lang, 'District lever · DEO/State', 'ज़िला स्तर') : 'PAB · DEO/State'}</dd></div>
+          <div><dt className="label">{pick(lang, 'Opened', 'खोला गया')}</dt><dd className="mt-0.5 font-medium text-ink">{fmtDate(c.created_at)} <span className="font-normal text-ink-faint">· {c.origin === 'detected' ? pick(lang, 'detector', 'पहचान-तंत्र') : pick(lang, 'officer', 'अधिकारी')}</span></dd></div>
+          <div><dt className="label">{pick(lang, 'Due', 'नियत तिथि')}</dt><dd className={`mt-0.5 font-medium ${c.due_date && c.due_date < today() && !c.closed_at ? 'text-crit' : 'text-ink'}`}>{fmtDate(c.due_date)}</dd></div>
+          <div><dt className="label">{pick(lang, 'Tasks', 'काम')}</dt><dd className="mt-0.5 font-medium text-ink">{tasks.filter((t) => t.status === 'verified').length}/{tasks.length} {pick(lang, 'verified', 'सत्यापित')}{overdueTasks ? <span className="ml-1 text-crit">· {overdueTasks} late</span> : null}</dd></div>
+          <div><dt className="label">{pick(lang, 'Proof', 'सबूत')}</dt><dd className="mt-0.5 font-medium text-ink">{evidence.filter((e) => e.status === 'verified').length}/{evidence.length} {pick(lang, 'verified', 'सत्यापित')}{pendingProof ? <span className="ml-1 text-warn">· {pendingProof} pending</span> : null}</dd></div>
+        </dl>
+      </header>
 
-      <Grid cols={5}>
-        <Stat label={pick(lang, 'Accountable officer', 'उत्तरदायी अधिकारी')} value={
-          <span className="text-base">{names.users.get(c.owner_user_id) ?? c.owner_user_id}</span>
-        } sub={c.lever === 'block' ? pick(lang, 'block lever', 'खंड स्तर') : c.lever === 'district' ? pick(lang, 'district lever', 'ज़िला स्तर') : 'PAB'} />
-        <Stat label={pick(lang, 'Opened', 'खोला गया')} value={<span className="text-base">{fmtDate(c.created_at)}</span>}
-          sub={c.origin === 'detected' ? pick(lang, 'by the detector', 'पहचान-तंत्र द्वारा') : pick(lang, 'by an officer', 'अधिकारी द्वारा')} />
-        <Stat label={pick(lang, 'Due', 'नियत तिथि')} value={<span className="text-base">{fmtDate(c.due_date)}</span>}
-          tone={c.due_date && c.due_date < today() && !c.closed_at ? 'crit' : 'neutral'} />
-        <Stat label={pick(lang, 'Proof', 'सबूत')} value={`${evidence.filter((e) => e.status === 'verified').length}/${evidence.length}`}
-          sub={pick(lang, 'verified', 'सत्यापित')}
-          tone={evidence.length > 0 && evidence.every((e) => e.status === 'verified') ? 'good' : 'neutral'} />
-        <Stat label={pick(lang, 'Reopened', 'फिर खोला')} value={c.reopen_count}
-          tone={c.reopen_count > 0 ? 'warn' : 'neutral'}
-          sub={c.reopen_count > 0 ? pick(lang, 'delivered, but no gain shown', 'कार्य हुआ, सुधार नहीं') : undefined} />
-      </Grid>
+      <SectionNav items={[
+        { id: 'finding', label: pick(lang, 'Finding', 'निष्कर्ष') },
+        { id: 'diagnosis', label: pick(lang, 'Diagnosis', 'निदान') },
+        { id: 'plan', label: pick(lang, 'Plan', 'योजना'), badge: c.status === 'awaiting_approval' ? '!' : undefined, tone: 'warn' },
+        { id: 'work', label: pick(lang, 'Work', 'काम'), badge: overdueTasks ? String(overdueTasks) : undefined, tone: 'crit' },
+        { id: 'proof', label: pick(lang, 'Proof', 'सबूत'), badge: pendingProof ? String(pendingProof) : undefined, tone: 'warn' },
+        { id: 'outcome', label: pick(lang, 'Outcome', 'परिणाम'), badge: outcomes.length ? String(outcomes.length) : undefined },
+        { id: 'history', label: pick(lang, 'History', 'इतिहास') },
+      ]} />
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="min-w-0 space-y-5">
 
       {done ? (
         <Callout tone="good" title={pick(lang, 'Done', 'पूर्ण')}>
@@ -221,9 +235,9 @@ export default async function CasePage({
         </Callout>
       ) : null}
 
-      <FindingPanel finding={finding} trend={trend} names={names} lang={lang} grade={c.grade} />
+      <div id="finding" className="scroll-mt-36"><FindingPanel finding={finding} trend={trend} names={names} lang={lang} grade={c.grade} /></div>
 
-      <DiagnosisPanel diagnosis={diagnosis} names={names} lang={lang}>
+      <div id="diagnosis" className="scroll-mt-36"><DiagnosisPanel diagnosis={diagnosis} names={names} lang={lang}>
         {may(session, 'case.edit_diagnosis') ? (
           <div className="mt-3">
             <Disclose label={diagnosis?.human_conclusion
@@ -245,9 +259,9 @@ export default async function CasePage({
             </Disclose>
           </div>
         ) : null}
-      </DiagnosisPanel>
+      </DiagnosisPanel></div>
 
-      <PlanPanel
+      <div id="plan" className="scroll-mt-36"><PlanPanel
         plans={plans} currentPlan={currentPlan} approvals={approvals}
         intervention={iv} names={names} lang={lang}
       >
@@ -314,11 +328,11 @@ export default async function CasePage({
             )}
           </div>
         ) : null}
-      </PlanPanel>
+      </PlanPanel></div>
 
-      <WorkPanel tasks={tasks} names={names} lang={lang} today={today()} />
+      <div id="work" className="scroll-mt-36"><WorkPanel tasks={tasks} names={names} lang={lang} today={today()} /></div>
 
-      <ProofPanel evidence={evidence} names={names} lang={lang}>
+      <div className="scroll-mt-36"><ProofPanel evidence={evidence} names={names} lang={lang}>
         {evidence.some((e) => e.status === 'pending') && may(session, 'evidence.verify') ? (
           <div className="border-t border-line px-4 py-3 sm:px-5">
             <p className="text-[13px] text-ink-soft">
@@ -328,9 +342,9 @@ export default async function CasePage({
             </p>
           </div>
         ) : null}
-      </ProofPanel>
+      </ProofPanel></div>
 
-      <OutcomePanel outcomes={outcomes} names={names} lang={lang}>
+      <div className="scroll-mt-36"><OutcomePanel outcomes={outcomes} names={names} lang={lang}>
         <div className="mt-3 flex flex-wrap gap-3">
           {may(session, 'outcome.recompute') ? (
             <ActionForm
@@ -354,12 +368,86 @@ export default async function CasePage({
             />
           ) : null}
         </div>
-      </OutcomePanel>
+      </OutcomePanel></div>
 
+      {visits.length > 0 ? (
+        <Card>
+          <CardHead
+            title={pick(lang, 'Visits linked to this case', 'इस प्रकरण से जुड़े भ्रमण')}
+            hint={pick(lang, 'Coaching, spot assessments and follow-up visits logged against it.', 'सहयोग, त्वरित आकलन और अनुवर्ती भ्रमण।')}
+          />
+          <ul className="divide-y divide-line">
+            {visits.slice(0, 12).map((v: VisitRow) => (
+              <li key={v.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5 sm:px-5">
+                <span className="tnum w-24 shrink-0 text-[12.5px] text-ink-faint">{fmtDate(v.visit_date)}</span>
+                <Pill>{v.purpose.replace(/_/g, ' ')}</Pill>
+                <Link href={`/schools/${v.school_id}`} className="link text-[13px]">
+                  {names.schools.get(v.school_id) ?? v.school_id}
+                </Link>
+                <span className="text-[13px] text-ink-soft">{names.users.get(v.visitor_user_id) ?? v.visitor_role}</span>
+                {v.notes ? <span className="basis-full text-[12.5px] text-ink-soft">{v.notes}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      <div id="history" className="scroll-mt-36"><TimelinePanel events={timeline} names={names} lang={lang} /></div>
+
+      {audit.length > 0 ? (
+        <Card>
+          <CardHead
+            title={pick(lang, 'Audit trail for this case', 'इस प्रकरण का अंकेक्षण')}
+            hint={pick(
+              lang,
+              'Append-only and hash-chained. Refused attempts are recorded too.',
+              'केवल जोड़ने योग्य, हैश-श्रृंखलाबद्ध। अस्वीकृत प्रयास भी दर्ज।',
+            )}
+            right={<Link href={`/audit?entityType=case&entityId=${c.id}`} className="link text-[13px]">{pick(lang, 'Open in the audit trail', 'अंकेक्षण में खोलें')}</Link>}
+          />
+          <div className="overflow-x-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">{pick(lang, 'When', 'कब')}</th>
+                  <th scope="col">{pick(lang, 'Who', 'कौन')}</th>
+                  <th scope="col">{pick(lang, 'Action', 'कार्य')}</th>
+                  <th scope="col">{pick(lang, 'Result', 'परिणाम')}</th>
+                  <th scope="col">{pick(lang, 'Hash', 'हैश')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {audit.map((a) => (
+                  <tr key={a.id}>
+                    <td className="tnum whitespace-nowrap text-[12.5px]">{fmtDate(a.ts, true)}</td>
+                    <td className="text-[12.5px]">
+                      {a.actor_user_id ? (names.users.get(a.actor_user_id) ?? a.actor_label) : a.actor_label}
+                      <span className="block text-[11px] text-ink-faint">{a.actor_role}</span>
+                    </td>
+                    <td className="text-[12.5px]">
+                      <Mono>{a.action}</Mono>
+                      {a.reason ? <span className="block text-[11.5px] text-ink-soft">{a.reason}</span> : null}
+                    </td>
+                    <td>
+                      {a.result === 'success'
+                        ? <Pill tone="good">{pick(lang, 'done', 'हुआ')}</Pill>
+                        : <Pill tone="critical">{pick(lang, 'refused', 'अस्वीकृत')}</Pill>}
+                    </td>
+                    <td><Mono>{shortHash(a.hash)}</Mono></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
+      </div>
+
+      <aside className="space-y-5 xl:sticky xl:top-[148px] xl:max-h-[calc(100vh-160px)] xl:self-start xl:overflow-y-auto xl:pb-4">
       {/* ---- what can happen next ---- */}
       <Card>
         <CardHead
-          title={pick(lang, 'What can happen next', 'आगे क्या हो सकता है')}
+          title={pick(lang, 'Next moves', 'अगले कदम')}
           hint={pick(
             lang,
             'The only moves the lifecycle allows from here. Anything not listed is refused by the server, not merely hidden.',
@@ -423,77 +511,18 @@ export default async function CasePage({
         )}
       </Card>
 
-      {visits.length > 0 ? (
-        <Card>
-          <CardHead
-            title={pick(lang, 'Visits linked to this case', 'इस प्रकरण से जुड़े भ्रमण')}
-            hint={pick(lang, 'Coaching, spot assessments and follow-up visits logged against it.', 'सहयोग, त्वरित आकलन और अनुवर्ती भ्रमण।')}
-          />
-          <ul className="divide-y divide-line">
-            {visits.slice(0, 12).map((v: VisitRow) => (
-              <li key={v.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5 sm:px-5">
-                <span className="tnum w-24 shrink-0 text-[12.5px] text-ink-faint">{fmtDate(v.visit_date)}</span>
-                <Pill>{v.purpose.replace(/_/g, ' ')}</Pill>
-                <Link href={`/schools/${v.school_id}`} className="link text-[13px]">
-                  {names.schools.get(v.school_id) ?? v.school_id}
-                </Link>
-                <span className="text-[13px] text-ink-soft">{names.users.get(v.visitor_user_id) ?? v.visitor_role}</span>
-                {v.notes ? <span className="basis-full text-[12.5px] text-ink-soft">{v.notes}</span> : null}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
 
-      <TimelinePanel events={timeline} names={names} lang={lang} />
-
-      {audit.length > 0 ? (
-        <Card>
-          <CardHead
-            title={pick(lang, 'Audit trail for this case', 'इस प्रकरण का अंकेक्षण')}
-            hint={pick(
-              lang,
-              'Append-only and hash-chained. Refused attempts are recorded too.',
-              'केवल जोड़ने योग्य, हैश-श्रृंखलाबद्ध। अस्वीकृत प्रयास भी दर्ज।',
-            )}
-            right={<Link href={`/audit?entityType=case&entityId=${c.id}`} className="link text-[13px]">{pick(lang, 'Open in the audit trail', 'अंकेक्षण में खोलें')}</Link>}
-          />
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">{pick(lang, 'When', 'कब')}</th>
-                  <th scope="col">{pick(lang, 'Who', 'कौन')}</th>
-                  <th scope="col">{pick(lang, 'Action', 'कार्य')}</th>
-                  <th scope="col">{pick(lang, 'Result', 'परिणाम')}</th>
-                  <th scope="col">{pick(lang, 'Hash', 'हैश')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {audit.map((a) => (
-                  <tr key={a.id}>
-                    <td className="tnum whitespace-nowrap text-[12.5px]">{fmtDate(a.ts, true)}</td>
-                    <td className="text-[12.5px]">
-                      {a.actor_user_id ? (names.users.get(a.actor_user_id) ?? a.actor_label) : a.actor_label}
-                      <span className="block text-[11px] text-ink-faint">{a.actor_role}</span>
-                    </td>
-                    <td className="text-[12.5px]">
-                      <Mono>{a.action}</Mono>
-                      {a.reason ? <span className="block text-[11.5px] text-ink-soft">{a.reason}</span> : null}
-                    </td>
-                    <td>
-                      {a.result === 'success'
-                        ? <Pill tone="good">{pick(lang, 'done', 'हुआ')}</Pill>
-                        : <Pill tone="critical">{pick(lang, 'refused', 'अस्वीकृत')}</Pill>}
-                    </td>
-                    <td><Mono>{shortHash(a.hash)}</Mono></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <RailCard title={pick(lang, 'Ask about this case', 'इस प्रकरण के बारे में पूछें')} icon="sparkles">
+          <div className="space-y-2 p-4 text-[13px] text-ink-soft">
+            <p>{pick(lang, 'Karyavahi AI can explain the finding, what blocks closure, or how similar cases went — citing the records.', 'AI निष्कर्ष, बंद होने की बाधाएँ या समान प्रकरण समझा सकता है।')}</p>
+            <p className="text-[12px] text-ink-faint">{pick(lang, 'Use the “Ask Karyavahi AI” button — it already knows you are on', '“Ask Karyavahi AI” बटन उपयोग करें —')} {c.id}.</p>
           </div>
-        </Card>
-      ) : null}
+        </RailCard>
+        {match ? <RecommendationsCard caseId={c.id} matches={match.matches} /> : null}
+        <SimilarCasesCard cases={similar} lessons={lessons} />
+        <CaseBlockersCard blockers={blockers} />
+      </aside>
+      </div>
     </article>
   );
 }
