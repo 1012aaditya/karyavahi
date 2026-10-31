@@ -89,9 +89,30 @@ export function Markdown({ text }: { text: string }) {
   return <>{blocks}</>;
 }
 
+// ---------------------------------------------------------------- conversation store
+// Conversations live in sessionStorage (gone when the browser session ends), keyed by user so
+// two officers sharing a browser never see each other's history.
+interface Convo { id: string; title: string; updated: number; msgs: Msg[] }
+interface Store { active: string; convos: Convo[] }
+const storeKey = (user?: string) => `${STORE}:${user ?? 'anon'}`;
+const newConvo = (): Convo => ({ id: `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title: 'New conversation', updated: Date.now(), msgs: [] });
+function loadStore(user?: string): Store {
+  try {
+    const raw = sessionStorage.getItem(storeKey(user));
+    if (raw) {
+      const s = JSON.parse(raw) as Store;
+      if (s.convos?.length) return { active: s.active, convos: s.convos.map((c) => ({ ...c, msgs: c.msgs.map((m) => ({ ...m, streaming: false })) })) };
+    }
+  } catch { /* ignore */ }
+  const c = newConvo();
+  return { active: c.id, convos: [c] };
+}
+
 // ---------------------------------------------------------------- the panel
-export function ChatPanel({ context, starters, compact = false, configured = true }: { context?: ChatContext; starters: string[]; compact?: boolean; configured?: boolean }) {
-  const [msgs, setMsgs] = useState<Msg[]>([]);
+export function ChatPanel({ context, starters, compact = false, configured = true, userKey, withHistory = false, scopeLabel }: {
+  context?: ChatContext; starters: string[]; compact?: boolean; configured?: boolean; userKey?: string; withHistory?: boolean; scopeLabel?: string;
+}) {
+  const [store, setStore] = useState<Store | null>(null);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
@@ -99,13 +120,52 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
   const endRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    try { const raw = sessionStorage.getItem(STORE); if (raw) setMsgs((JSON.parse(raw) as Msg[]).map((m) => ({ ...m, streaming: false }))); } catch { /* ignore */ }
+  useEffect(() => { setStore(loadStore(userKey)); }, [userKey]);
+  const active = store?.convos.find((c) => c.id === store.active) ?? store?.convos[0];
+  const msgs = active?.msgs ?? [];
+  const setMsgs = useCallback((upd: Msg[] | ((xs: Msg[]) => Msg[])) => {
+    setStore((st) => {
+      if (!st) return st;
+      const id = st.active;
+      return {
+        ...st,
+        convos: st.convos.map((c) => {
+          if (c.id !== id) return c;
+          const next = typeof upd === 'function' ? upd(c.msgs) : upd;
+          const firstQ = next.find((m) => m.role === 'user')?.content;
+          return { ...c, msgs: next, updated: Date.now(), title: firstQ ? firstQ.slice(0, 70) : 'New conversation' };
+        }),
+      };
+    });
   }, []);
   useEffect(() => {
-    try { sessionStorage.setItem(STORE, JSON.stringify(msgs.slice(-30))); } catch { /* quota */ }
+    if (!store) return;
+    try {
+      const trimmed: Store = { active: store.active, convos: [...store.convos].sort((a, b) => b.updated - a.updated).slice(0, 20).map((c) => ({ ...c, msgs: c.msgs.slice(-30) })) };
+      sessionStorage.setItem(storeKey(userKey), JSON.stringify(trimmed));
+    } catch { /* quota */ }
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [msgs]);
+  }, [store, userKey]);
+  const startNew = () => {
+    abortRef.current?.abort();
+    setStore((st) => {
+      if (!st) return st;
+      const cur = st.convos.find((c) => c.id === st.active);
+      if (cur && cur.msgs.length === 0) return st;
+      const c = newConvo();
+      return { active: c.id, convos: [c, ...st.convos] };
+    });
+  };
+  const switchTo = (id: string) => { if (busy) return; setStore((st) => (st ? { ...st, active: id } : st)); };
+  const remove = (id: string) => {
+    if (busy) return;
+    setStore((st) => {
+      if (!st) return st;
+      const rest = st.convos.filter((c) => c.id !== id);
+      if (!rest.length) { const c = newConvo(); return { active: c.id, convos: [c] }; }
+      return { active: st.active === id ? rest[0].id : st.active, convos: rest };
+    });
+  };
 
   const patchLast = (fn: (m: Msg) => Msg) => setMsgs((xs) => (xs.length ? [...xs.slice(0, -1), fn(xs[xs.length - 1])] : xs));
 
@@ -172,8 +232,37 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
     try { await navigator.clipboard.writeText(msgs[i].content); setCopied(i); setTimeout(() => setCopied(null), 1500); } catch { /* blocked */ }
   };
 
+  const sorted = store ? [...store.convos].sort((a, b) => b.updated - a.updated) : [];
+  const history = withHistory ? (
+    <aside className="hidden w-60 shrink-0 flex-col border-r border-line pr-3 md:flex" aria-label="Conversation history">
+      <button type="button" onClick={startNew} className="btn-quiet btn-sm mb-3 w-full justify-center"><Icon name="plus" size={14} />New conversation</button>
+      <p className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">This session</p>
+      <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
+        {sorted.map((c) => (
+          <li key={c.id} className="group relative">
+            <button type="button" onClick={() => switchTo(c.id)} aria-current={c.id === active?.id ? 'true' : undefined}
+              className={`block w-full rounded-lg px-2 py-1.5 pr-7 text-left ${c.id === active?.id ? 'bg-brand-light/70 text-ink' : 'text-ink-soft hover:bg-paper-sunk hover:text-ink'}`}>
+              <span className="block truncate text-[13px]">{c.title}</span>
+              <span className="block text-[11px] text-ink-faint">{c.msgs.filter((m) => m.role === 'user').length} question{c.msgs.filter((m) => m.role === 'user').length === 1 ? '' : 's'} · {new Date(c.updated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+            </button>
+            <button type="button" onClick={() => remove(c.id)} aria-label={`Delete conversation ${c.title}`} className="absolute right-1 top-1.5 hidden rounded p-1 text-ink-faint hover:bg-white hover:text-crit group-hover:block"><Icon name="x" size={13} /></button>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 px-2 text-[11px] leading-snug text-ink-faint">Kept only for this browser session, and only for you.</p>
+    </aside>
+  ) : null;
+
   return (
-    <div className={`flex min-h-0 flex-col ${compact ? 'h-full' : 'h-[calc(100vh-190px)] min-h-[520px]'}`}>
+    <div className={`flex min-h-0 gap-4 ${compact ? 'h-full' : 'h-[calc(100vh-280px)] min-h-[480px]'}`}>
+    {history}
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-paper-sunk/60 px-3 py-2 text-[12px] text-ink-soft">
+        <Icon name="target" size={13} className="text-brand" />
+        <span>Context: <span className="font-medium text-ink">{context?.label ?? 'All records in your scope'}</span></span>
+        {scopeLabel ? <span className="text-ink-faint">· scope {scopeLabel}</span> : null}
+        {withHistory ? <button type="button" onClick={startNew} className="ml-auto text-brand hover:text-brand-dark md:hidden">New</button> : null}
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-4" aria-live="polite">
         {msgs.length === 0 ? (
           <div className="mx-auto max-w-2xl pt-6 text-center">
@@ -241,6 +330,7 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
                           ) : null}
                           <div className="flex flex-wrap items-center gap-1.5">
                             <button type="button" onClick={() => copy(i)} className="btn-ghost btn-sm px-2 text-[12px]"><Icon name={copied === i ? 'check' : 'copy'} size={13} />{copied === i ? 'Copied' : 'Copy'}</button>
+                            {i === msgs.length - 1 ? <button type="button" onClick={retry} disabled={busy} className="btn-ghost btn-sm px-2 text-[12px]"><Icon name="refresh" size={13} />Retry</button> : null}
                             {m.model ? <span className="text-[11px] text-ink-faint">{m.model} · AI-generated, verify before acting</span> : null}
                           </div>
                           {i === msgs.length - 1 && m.followUps && m.followUps.length > 0 ? (
@@ -262,10 +352,7 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
         )}
       </div>
 
-      <form onSubmit={(e) => { e.preventDefault(); void send(input); }} className="border-t border-line bg-ivory/80 pt-3">
-        {context?.label ? (
-          <p className="mb-2 flex items-center gap-1.5 text-[12px] text-ink-faint"><Icon name="target" size={13} />Context: <span className="font-medium text-ink-soft">{context.label}</span></p>
-        ) : null}
+      <form onSubmit={(e) => { e.preventDefault(); void send(input); }} className="border-t border-line pt-3">
         <div className="flex items-end gap-2 rounded-xl border border-line-strong bg-white p-2 shadow-card focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/15">
           <textarea
             ref={taRef} value={input} onChange={(e) => setInput(e.target.value)} rows={1} maxLength={2000}
@@ -287,6 +374,7 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
         </div>
       </form>
     </div>
+    </div>
   );
 }
 
@@ -298,8 +386,10 @@ function useChatContext(): ChatContext {
   const caseMatch = path.match(/^\/cases\/(CASE-\d{4})/);
   if (caseMatch) { ctx.caseId = caseMatch[1]; ctx.label = `Case ${caseMatch[1]}`; }
   if (path.startsWith('/hotspots')) {
-    const sel = sp.get('selected');
-    const level = sp.get('level');
+    // The map selection lives in ?sel=; the level follows from the id prefix. The server
+    // re-checks that the area is inside the user's scope before using it.
+    const sel = sp.get('sel');
+    const level = sel ? ({ DST: 'district', BLK: 'block', CLU: 'cluster', SCH: 'school' } as Record<string, string>)[sel.slice(0, 3)] : undefined;
     if (sel && level) { ctx.area = { level, id: sel }; ctx.label = `Selected ${level} ${sel}`; }
     else ctx.label = 'Learning hotspots';
   }
@@ -315,7 +405,7 @@ const STARTERS_FOR = (ctx: ChatContext): string[] =>
   : ctx.reportId ? ['Summarise this report', 'What decisions does this report call for?']
   : ['What should I prioritise this week?', 'Which cases need my approval?', 'Why are tasks overdue, and what is blocking them?', 'Prepare an agenda for tomorrow’s review meeting'];
 
-export function AssistantDrawer({ configured }: { configured: boolean }) {
+export function AssistantDrawer({ configured, userKey }: { configured: boolean; userKey?: string }) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
   const ctx = useChatContext();
@@ -349,7 +439,7 @@ export function AssistantDrawer({ configured }: { configured: boolean }) {
               </div>
             </header>
             <div className="min-h-0 flex-1 px-4 pb-3 pt-3">
-              <ChatPanel compact context={ctx} starters={STARTERS_FOR(ctx)} configured={configured} />
+              <ChatPanel compact context={ctx} starters={STARTERS_FOR(ctx)} configured={configured} userKey={userKey} />
             </div>
           </div>
         </div>

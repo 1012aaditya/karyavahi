@@ -81,7 +81,7 @@ export default async function Shell({ children }: { children: ReactNode }) {
               className="h-9 w-52 rounded-lg border border-line bg-white pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15 xl:w-64" />
           </form>
           <Link href="/search" className="btn-ghost px-2 md:hidden"><Icon name="search" size={19} label={t(lang, 'navSearch')} /></Link>
-          {may(session, 'ai.assistant') ? <Suspense fallback={null}><AssistantDrawer configured={aiStatus().configured} /></Suspense> : null}
+          {may(session, 'ai.assistant') ? <Suspense fallback={null}><AssistantDrawer configured={aiStatus().configured} userKey={session.user_id} /></Suspense> : null}
           <Link href="/notifications" className="btn-ghost relative px-2" title={t(lang, 'navNotifications')}>
             <Icon name="bell" size={19} label={t(lang, 'navNotifications')} />
             {badges.notifications > 0 ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-crit" aria-label={`${badges.notifications} unread`} /> : null}

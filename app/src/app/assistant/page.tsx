@@ -5,6 +5,7 @@ import { QUESTIONS, answer } from '@/lib/assistant';
 import { may } from '@/lib/guard';
 import { aiStatus } from '@/lib/ai/config';
 import { pick } from '@/lib/i18n';
+import { scopeName } from '@/lib/repo';
 import { PageHead, Callout, Mono } from '@/components/ui';
 import { ChatPanel } from '@/components/Chat';
 import { Icon } from '@/components/Icon';
@@ -45,7 +46,7 @@ export default async function AssistantPage({ searchParams }: { searchParams: Pr
   return (
     <div>
       <PageHead
-        title="Karyavahi AI"
+        title={pick(lang, 'AI assistant', 'AI सहायक')}
         sub={pick(lang, 'Ask in your own words. Answers come only from records in your scope, cite the ids they used, and say what is uncertain or missing.', 'अपने शब्दों में पूछें। उत्तर केवल आपके दायरे के रिकॉर्ड से आते हैं और स्रोत बताते हैं।')}
         right={
           <span className={`chip ${st.configured ? 'border-good/30 bg-good-light text-good' : 'border-warn/30 bg-warn-light text-warn'}`}>
@@ -55,9 +56,9 @@ export default async function AssistantPage({ searchParams }: { searchParams: Pr
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="card p-4 sm:p-5">
-          <ChatPanel starters={STARTERS} configured={st.configured} context={{ path: '/assistant' }} />
+          <ChatPanel withHistory starters={STARTERS} configured={st.configured} context={{ path: '/assistant' }} userKey={session.user_id} scopeLabel={scopeName(session.scope_type, session.scope_id)} />
         </div>
 
         <aside className="space-y-4">
