@@ -5,22 +5,23 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Language } from '@domain/types';
 import { Icon } from './Icon';
+import { Logo } from './Brand';
 
 /**
- * Client-side chrome: the sidebar with active-section highlighting, the mobile drawer, the
- * user menu, the header's page title and the language switch. Everything here receives
- * already-translated, already-authorised data from the server-rendered Shell.
+ * Client-side chrome: the grouped, collapsible sidebar; header breadcrumbs; the mobile drawer;
+ * the user menu; the language switch. Everything here receives already-translated,
+ * already-authorised data from the server-rendered Shell.
  */
 
 export interface ClientNavItem { href: string; label: string; badge?: number }
 export interface ClientNavSection extends ClientNavItem { icon: string; children: ClientNavItem[] }
+export interface ClientNavGroup { key: string; label: string; sections: ClientNavSection[] }
 
 const matches = (path: string, href: string) => path === href || path.startsWith(`${href}/`);
 
-/** The most specific nav entry for the current path (so /admin/jobs beats /admin). */
-function activeHref(path: string, sections: ClientNavSection[]): string | null {
+function activeHref(path: string, groups: ClientNavGroup[]): string | null {
   let best: string | null = null;
-  for (const s of sections) {
+  for (const g of groups) for (const s of g.sections) {
     for (const h of [s.href, ...s.children.map((c) => c.href)]) {
       if (matches(path, h) && (!best || h.length > best.length)) best = h;
     }
@@ -28,89 +29,115 @@ function activeHref(path: string, sections: ClientNavSection[]): string | null {
   return best;
 }
 
-function Badge({ n, active }: { n?: number; active?: boolean }) {
+function Count({ n, onDark = true }: { n?: number; onDark?: boolean }) {
   if (!n || n <= 0) return null;
-  return (
-    <span className={`tnum ml-auto shrink-0 rounded-full px-1.5 py-px text-[10.5px] font-semibold ${
-      active ? 'bg-white text-navy' : 'bg-white/10 text-navy-100'
-    }`}>
-      {n > 99 ? '99+' : n}
-    </span>
-  );
+  return <span className={`tnum ml-auto shrink-0 rounded-full px-1.5 text-[11px] font-semibold leading-[18px] ${onDark ? 'bg-white/10 text-navy-100' : 'bg-paper-deep text-ink-soft'}`}>{n > 99 ? '99+' : n}</span>;
 }
 
-export function SidebarNav({ sections, label }: { sections: ClientNavSection[]; label: string }) {
+function NavBody({ groups, collapsed }: { groups: ClientNavGroup[]; collapsed: boolean }) {
   const path = usePathname();
-  const active = activeHref(path, sections);
+  const active = activeHref(path, groups);
   return (
-    <nav aria-label={label} className="space-y-0.5">
-      {sections.map((s) => {
-        const inSection = active === s.href || s.children.some((c) => c.href === active);
-        const selfActive = active === s.href;
-        const childBadge = s.children.reduce((n, c) => n + (c.badge ?? 0), 0);
-        return (
-          <div key={s.href}>
-            <Link
-              href={s.href}
-              aria-current={selfActive ? 'page' : undefined}
-              className={`group flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors ${
-                inSection ? 'bg-white/[0.09] font-semibold text-white' : 'text-navy-200 hover:bg-white/[0.06] hover:text-white'
-              }`}
-            >
-              <Icon name={s.icon} size={18} className={inSection ? 'text-brand-soft' : 'text-navy-300 group-hover:text-navy-100'} />
-              <span className="truncate">{s.label}</span>
-              {!inSection ? <Badge n={(s.badge ?? 0) + childBadge} /> : <Badge n={s.badge} active />}
-            </Link>
-            {inSection && s.children.length > 0 ? (
-              <div className="mb-1 ml-[21px] mt-0.5 space-y-px border-l border-white/10 pl-3">
-                {s.children.map((c) => {
-                  const on = active === c.href;
-                  return (
-                    <Link
-                      key={c.href}
-                      href={c.href}
-                      aria-current={on ? 'page' : undefined}
-                      className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
-                        on ? 'bg-white/[0.08] font-medium text-white' : 'text-navy-300 hover:text-white'
-                      }`}
-                    >
-                      <span className="truncate">{c.label}</span>
-                      <Badge n={c.badge} active={on} />
-                    </Link>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
+    <nav aria-label="Main" className="space-y-5">
+      {groups.map((g) => (
+        <div key={g.key}>
+          {collapsed ? <div className="mx-3 mb-2 h-px bg-white/10" aria-hidden /> : <p className="mb-1.5 px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-navy-300">{g.label}</p>}
+          <ul className="space-y-0.5">
+            {g.sections.map((s) => {
+              const inSection = active === s.href || s.children.some((c) => c.href === active);
+              const total = (s.badge ?? 0) + s.children.reduce((n, c) => n + (c.badge ?? 0), 0);
+              return (
+                <li key={s.href}>
+                  <Link
+                    href={s.href} aria-current={active === s.href ? 'page' : undefined} title={collapsed ? s.label : undefined}
+                    className={`group relative flex items-center gap-3 rounded-lg py-2 text-[13.5px] transition-colors ${collapsed ? 'justify-center px-0' : 'px-3'} ${
+                      inSection ? 'bg-white/[0.07] font-medium text-white' : 'text-navy-200 hover:bg-white/[0.05] hover:text-white'}`}
+                  >
+                    {inSection ? <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r bg-brand-soft" aria-hidden /> : null}
+                    <Icon name={s.icon} size={17} className={inSection ? 'text-white' : 'text-navy-300 group-hover:text-navy-100'} />
+                    {collapsed ? (total > 0 ? <span className="absolute right-2 top-1.5 h-2 w-2 rounded-full bg-amber" aria-label={`${total} pending`} /> : null) : (
+                      <>
+                        <span className="truncate">{s.label}</span>
+                        <Count n={total} />
+                      </>
+                    )}
+                  </Link>
+                  {inSection && !collapsed && s.children.length > 0 ? (
+                    <ul className="mb-1 ml-[22px] mt-0.5 space-y-px border-l border-white/10 pl-3">
+                      {s.children.map((c) => (
+                        <li key={c.href}>
+                          <Link href={c.href} aria-current={active === c.href ? 'page' : undefined}
+                            className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[12.5px] ${active === c.href ? 'font-medium text-white' : 'text-navy-300 hover:text-white'}`}>
+                            <span className="truncate">{c.label}</span><Count n={c.badge} />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
     </nav>
   );
 }
 
-/** The page title in the header, taken from the navigation so it always matches the sidebar. */
-export function HeaderTitle({ sections }: { sections: ClientNavSection[] }) {
-  const path = usePathname();
-  const active = activeHref(path, sections);
-  const sec = sections.find((s) => s.href === active || s.children.some((c) => c.href === active));
-  const child = sec?.children.find((c) => c.href === active);
-  if (!sec) return null;
+/** Desktop sidebar: 240px expanded, 72px collapsed; the choice is remembered on this device. */
+export function Sidebar({ groups, homeHref, footer, scope }: { groups: ClientNavGroup[]; homeHref: string; footer: ReactNode; scope: { name: string; role: string } }) {
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => { setCollapsed(localStorage.getItem('kv_sidebar') === 'collapsed'); }, []);
+  const toggle = () => setCollapsed((c) => { localStorage.setItem('kv_sidebar', c ? 'open' : 'collapsed'); return !c; });
   return (
-    <div className="flex min-w-0 items-center gap-1.5 text-[13.5px]">
-      <Link href={sec.href} className={`truncate ${child ? 'text-ink-faint hover:text-ink' : 'font-semibold text-ink'}`}>
-        {sec.label}
-      </Link>
-      {child ? (
-        <>
-          <Icon name="chevron-right" size={14} className="text-ink-faint" />
-          <span className="truncate font-semibold text-ink">{child.label}</span>
-        </>
+    <aside className={`sticky top-0 hidden h-screen shrink-0 flex-col bg-navy transition-[width] duration-200 lg:flex no-print ${collapsed ? 'w-[72px]' : 'w-[240px]'}`}>
+      <div className={`flex h-16 shrink-0 items-center ${collapsed ? 'justify-center' : 'gap-2.5 px-4'}`}>
+        <Link href={homeHref} className="flex min-w-0 items-center gap-2.5" aria-label="Karyavahi home">
+          <Logo size={30} />
+          {!collapsed ? (
+            <span className="min-w-0 leading-tight">
+              <span className="block text-[15.5px] font-semibold tracking-tight text-white">Karyavahi</span>
+              <span className="block truncate text-[11px] text-navy-300">Education accountability</span>
+            </span>
+          ) : null}
+        </Link>
+      </div>
+      {!collapsed ? (
+        <div className="mx-3 mb-3 rounded-lg bg-white/[0.04] px-3 py-2">
+          <p className="truncate text-[12.5px] font-medium text-white" title={scope.name}>{scope.name}</p>
+          <p className="truncate text-[11px] text-navy-300">{scope.role}</p>
+        </div>
       ) : null}
-    </div>
+      <div className={`min-h-0 flex-1 overflow-y-auto pb-4 ${collapsed ? 'px-2' : 'px-2.5'}`}><NavBody groups={groups} collapsed={collapsed} /></div>
+      <div className={`shrink-0 border-t border-white/10 ${collapsed ? 'px-2 py-3' : 'px-4 py-3'}`}>
+        {!collapsed ? footer : null}
+        <button type="button" onClick={toggle} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}
+          className={`mt-2 flex w-full items-center gap-2 rounded-md py-1.5 text-[12px] text-navy-300 hover:bg-white/[0.05] hover:text-white ${collapsed ? 'justify-center' : 'px-2'}`}>
+          <Icon name={collapsed ? 'chevron-right' : 'chevron-left'} size={15} />{collapsed ? null : 'Collapse'}
+        </button>
+      </div>
+    </aside>
   );
 }
 
-export function MobileDrawer({ children, label }: { children: ReactNode; label: string }) {
+/** Header breadcrumb: Section › Page, taken from the navigation so it matches the sidebar. */
+export function HeaderTitle({ groups }: { groups: ClientNavGroup[] }) {
+  const path = usePathname();
+  const active = activeHref(path, groups);
+  const sec = groups.flatMap((g) => g.sections).find((s) => s.href === active || s.children.some((c) => c.href === active));
+  const child = sec?.children.find((c) => c.href === active);
+  const deeper = active && path !== active ? path.slice(active.length + 1).split('/')[0] : null;
+  if (!sec) return null;
+  return (
+    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13.5px]">
+      <Link href={sec.href} className={`truncate ${child || deeper ? 'text-ink-faint hover:text-ink' : 'font-semibold text-ink'}`}>{sec.label}</Link>
+      {child ? (<><Icon name="chevron-right" size={13} className="text-ink-faint" /><Link href={child.href} className={`truncate ${deeper ? 'text-ink-faint hover:text-ink' : 'font-semibold text-ink'}`}>{child.label}</Link></>) : null}
+      {deeper ? (<><Icon name="chevron-right" size={13} className="text-ink-faint" /><span className="truncate font-semibold text-ink">{decodeURIComponent(deeper)}</span></>) : null}
+    </nav>
+  );
+}
+
+export function MobileDrawer({ groups, label, footer }: { groups: ClientNavGroup[]; label: string; footer?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
   useEffect(() => { setOpen(false); }, [path]);
@@ -121,23 +148,21 @@ export function MobileDrawer({ children, label }: { children: ReactNode; label: 
     document.body.style.overflow = 'hidden';
     return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
   }, [open]);
-
   return (
     <>
-      <button
-        type="button" onClick={() => setOpen(true)}
-        className="btn-ghost -ml-2 px-2 lg:hidden" aria-expanded={open} aria-controls="mobile-nav"
-      >
+      <button type="button" onClick={() => setOpen(true)} className="btn-ghost -ml-2 px-2 lg:hidden" aria-expanded={open} aria-controls="mobile-nav">
         <Icon name="menu" size={20} label={label} />
       </button>
       {open ? (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={label}>
-          <button type="button" aria-label="Close menu" className="absolute inset-0 bg-navy-950/50 backdrop-blur-[1px]" onClick={() => setOpen(false)} />
-          <div id="mobile-nav" className="absolute inset-y-0 left-0 flex w-[290px] max-w-[85vw] animate-fade-in flex-col overflow-y-auto bg-navy p-4 shadow-pop">
-            <button type="button" onClick={() => setOpen(false)} className="mb-2 self-end rounded-md p-1.5 text-navy-200 hover:bg-white/10 hover:text-white">
-              <Icon name="x" size={20} label="Close menu" />
-            </button>
-            {children}
+          <button type="button" aria-label="Close menu" className="absolute inset-0 bg-navy-950/50" onClick={() => setOpen(false)} />
+          <div id="mobile-nav" className="absolute inset-y-0 left-0 flex w-[280px] max-w-[85vw] animate-fade-in flex-col overflow-y-auto bg-navy px-3 py-4">
+            <div className="mb-4 flex items-center justify-between px-1">
+              <span className="flex items-center gap-2"><Logo size={28} /><span className="text-[15px] font-semibold text-white">Karyavahi</span></span>
+              <button type="button" onClick={() => setOpen(false)} className="rounded-md p-1.5 text-navy-200 hover:bg-white/10 hover:text-white"><Icon name="x" size={20} label="Close menu" /></button>
+            </div>
+            <NavBody groups={groups} collapsed={false} />
+            {footer ? <div className="mt-auto border-t border-white/10 px-2 pt-3">{footer}</div> : null}
           </div>
         </div>
       ) : null}
@@ -145,9 +170,7 @@ export function MobileDrawer({ children, label }: { children: ReactNode; label: 
   );
 }
 
-export function UserMenu({
-  name, role, scope, email, children,
-}: { name: string; role: string; scope: string; email: string; children?: ReactNode }) {
+export function UserMenu({ name, role, scope, email, children }: { name: string; role: string; scope: string; email: string; children?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const path = usePathname();
@@ -161,26 +184,18 @@ export function UserMenu({
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [open]);
   const initials = name.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
-
   return (
     <div className="relative" ref={ref}>
-      <button
-        type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="menu"
-        className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-1.5 text-left hover:bg-paper-deep"
-      >
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="menu" aria-label="Account menu"
+        className="flex items-center gap-2 rounded-lg p-1 hover:bg-paper-deep">
         <span className="grid h-8 w-8 place-items-center rounded-full bg-navy text-[12px] font-semibold text-white">{initials}</span>
-        <span className="hidden leading-tight xl:block">
-          <span className="block max-w-[160px] truncate text-[13px] font-medium text-ink">{name}</span>
-          <span className="block max-w-[160px] truncate text-[11px] text-ink-faint">{role}</span>
-        </span>
-        <Icon name="chevron-down" size={14} className="hidden text-ink-faint xl:block" />
       </button>
       {open ? (
         <div role="menu" className="absolute right-0 top-full z-40 mt-2 w-72 animate-fade-in overflow-hidden rounded-xl border border-line bg-white shadow-pop">
-          <div className="border-b border-line bg-paper-sunk px-4 py-3">
-            <p className="text-sm font-semibold text-ink">{name}</p>
+          <div className="border-b border-line px-4 py-3">
+            <p className="text-[14px] font-semibold text-ink">{name}</p>
             <p className="text-[12px] text-ink-faint">{email}</p>
-            <p className="mt-2 text-[12px] text-ink-soft"><span className="font-medium text-ink">{role}</span> · {scope}</p>
+            <p className="mt-1.5 text-[12px] text-ink-soft"><span className="font-medium text-ink">{role}</span> · {scope}</p>
           </div>
           <div className="p-1.5">{children}</div>
         </div>
@@ -193,14 +208,10 @@ export function LanguageToggle({ current, compact = false }: { current: Language
   return (
     <form action="/api/language" method="post">
       <input type="hidden" name="to" value={current === 'en' ? 'hi' : 'en'} />
-      <button
-        type="submit"
+      <button type="submit"
         className={compact ? 'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-[13px] text-ink-soft hover:bg-paper-sunk hover:text-ink' : 'btn-ghost btn-sm'}
-        aria-label={current === 'en' ? 'हिंदी में बदलें' : 'Switch to English'}
-        title={current === 'en' ? 'हिंदी में बदलें' : 'Switch to English'}
-      >
-        <Icon name="globe" size={16} />
-        {current === 'en' ? 'हिंदी' : 'English'}
+        aria-label={current === 'en' ? 'हिंदी में बदलें' : 'Switch to English'}>
+        <Icon name="globe" size={16} />{current === 'en' ? 'हिंदी' : 'English'}
       </button>
     </form>
   );

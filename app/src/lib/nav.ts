@@ -47,7 +47,8 @@ export function navFor(s: Session): NavSection[] {
     if (hasRole(s, 'deo')) overviewChildren.push({ href: '/district', key: 'navDistrictDesk' });
     if (hasRole(s, 'state_admin', 'demo_admin')) overviewChildren.push({ href: '/state', key: 'navStateDesk' });
   }
-  out.push({ href: home, key: 'navOverview', icon: 'home', children: overviewChildren });
+  // Field roles: their home is the Field Operations workspace, listed under Operations.
+  if (home !== '/field') out.push({ href: home, key: 'navOverview', icon: 'home', children: overviewChildren });
 
   // 2. Learning hotspots
   if (!isOnlyHeadmaster(s)) {
@@ -80,7 +81,9 @@ export function navFor(s: Session): NavSection[] {
   if (isFieldRole(s) || may(s, 'task.update_own')) exec.push({ href: '/tasks', key: 'navTasks', badge: 'tasks' });
   if (may(s, 'evidence.verify')) exec.push({ href: '/evidence', key: 'navEvidence', badge: 'evidence' });
   if (isFieldRole(s)) exec.push({ href: '/visits', key: 'navVisits' });
-  if (!isOnlyHeadmaster(s)) {
+  if (home === '/field') {
+    out.push({ href: '/field', key: 'navExecution', icon: 'clipboard', children: [{ href: '/execution', key: 'navExecutionAll' }, ...exec] });
+  } else if (!isOnlyHeadmaster(s)) {
     out.push({ href: '/execution', key: 'navExecution', icon: 'clipboard', children: exec });
   } else if (exec.length) {
     out.push({ ...exec[0], icon: 'clipboard', children: exec.slice(1) });
@@ -123,6 +126,22 @@ export function navFor(s: Session): NavSection[] {
   if (admin.length > 0) out.push({ href: '/admin', key: 'navAdminHub', icon: 'shield', children: admin });
 
   // A role's home may also appear as a child link (the auditor's home is /audit).
-  for (const sec of out) sec.children = sec.children.filter((c) => c.href !== sec.href && c.href !== home);
+  for (const sec of out) sec.children = sec.children.filter((c) => c.href !== sec.href && (c.href !== home || sec.href === '/field'));
   return out;
+}
+
+/** The sidebar's groups. Sections not listed fall into Administration. */
+const GROUP_OF: Record<string, 'overview' | 'intelligence' | 'operations' | 'insights' | 'admin'> = {
+  navOverview: 'overview', navHotspots: 'intelligence', navSchools: 'intelligence', navCases: 'intelligence',
+  navInterventions: 'operations', navExecution: 'operations', navTasks: 'operations', navComplaints: 'operations',
+  navReports: 'insights', navAssistant: 'insights',
+};
+export const GROUP_LABEL = { overview: 'Overview', intelligence: 'Intelligence', operations: 'Operations', insights: 'Insights', admin: 'Administration' } as const;
+
+export function navGroups(s: Session): { key: keyof typeof GROUP_LABEL; sections: NavSection[] }[] {
+  const order: (keyof typeof GROUP_LABEL)[] = ['overview', 'intelligence', 'operations', 'insights', 'admin'];
+  const all = navFor(s);
+  return order
+    .map((key) => ({ key, sections: all.filter((sec) => (GROUP_OF[sec.key] ?? 'admin') === key) }))
+    .filter((g) => g.sections.length > 0);
 }

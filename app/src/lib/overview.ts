@@ -9,6 +9,7 @@ import { rounds, scopeName } from './repo';
 import { may } from './guard';
 import { STATUS_LABELS } from '@domain/lifecycle';
 import { AS_OF_TS } from '@domain/catalog';
+import { listComplaints, slaState, STATUS as CSTATUS, complaintsPred } from './complaints';
 import type { CaseStatus } from '@domain/types';
 
 /**
@@ -23,7 +24,7 @@ export type Priority = 'critical' | 'high' | 'medium';
 
 export interface PriorityItem {
   id: string;
-  kind: 'approval' | 'overdue' | 'evidence' | 'no_gain' | 'data_quality' | 'investigation';
+  kind: 'approval' | 'overdue' | 'evidence' | 'no_gain' | 'data_quality' | 'investigation' | 'complaint';
   priority: Priority;
   title: string;
   detail: string;
@@ -143,7 +144,20 @@ export function priorityActions(s: Session, limit = 8): { items: PriorityItem[];
     }
   }
 
-  const counts = { approval: approvals.length, overdue: late.length, evidence: proof.length, no_gain: outcomes.length, data_quality: items.filter((i) => i.kind === 'data_quality').length, investigation: stalled.length };
+  // 7. Complaints waiting on this user.
+  const mine = listComplaints(s, { queue: 'mine', limit: 50 });
+  for (const c of mine.slice(0, 4)) {
+    const sla = slaState(c);
+    items.push({
+      id: `cm-${c.id}`, kind: 'complaint',
+      priority: c.priority === 'critical' || sla.tone === 'crit' ? 'critical' : c.priority === 'high' || sla.tone === 'warn' ? 'high' : 'medium',
+      title: c.title, detail: `${c.id} · complaint · ${CSTATUS[c.status]?.label ?? c.status}`,
+      owner: 'You', when: sla.label || 'Open', scope: blockNames.get(c.block_id ?? '') ?? '',
+      href: `/complaints?open=${c.id}`, action: ['submitted', 'escalated'].includes(c.status) ? 'Acknowledge' : 'Respond', sources: [c.id],
+    });
+  }
+
+  const counts = { complaint: mine.length, approval: approvals.length, overdue: late.length, evidence: proof.length, no_gain: outcomes.length, data_quality: items.filter((i) => i.kind === 'data_quality').length, investigation: stalled.length };
   items.sort((a, b) => rank[a.priority] - rank[b.priority]);
   return { items: items.slice(0, limit), counts };
 }
@@ -247,5 +261,60 @@ export function overviewSummary(s: Session): OverviewSummary {
     lifecycle: lifecycleCounts(s),
     delivery: deliveryProgress(s),
     latestRound: systemStatus().latestRound,
+  };
+}
+
+// ---------------------------------------------------------------- progress timeline
+export interface ProgressItem { id: string; ts: string; text: string; href: string; kind: 'approved' | 'evidence' | 'escalated' | 'reopened' | 'verified' | 'resolved' | 'other' }
+
+/** Meaningful operational events — approvals, proof, escalations, reopenings, verified outcomes. */
+export function recentProgress(s: Session, limit = 8): ProgressItem[] {
+  const out: ProgressItem[] = [];
+  const p = and(casesPred(s, 'c'), { sql: 'e.ts <= ?', params: [nowIso()] });
+  for (const r of all<{ id: string; ts: string; case_id: string; kind: string; to_status: string | null; summary: string }>(
+    `select e.id, e.ts, e.case_id, e.kind, e.to_status, e.summary from case_events e join cases c on c.id = e.case_id
+      where ${p.sql} and (e.to_status in ('approved','closed','reopened','outcome_pending','awaiting_verification') or e.kind in ('outcome_evaluated','escalated'))
+      order by e.ts desc limit ?`, ...p.params, limit * 8)) {
+    const kind: ProgressItem['kind'] = r.to_status === 'approved' ? 'approved' : r.to_status === 'closed' ? 'verified' : r.to_status === 'reopened' ? 'reopened'
+      : r.to_status === 'awaiting_verification' ? 'evidence' : r.kind === 'escalated' ? 'escalated' : r.kind === 'outcome_evaluated' ? 'verified' : 'other';
+    const text = kind === 'approved' ? `Intervention approved on ${r.case_id}` : kind === 'verified' && r.to_status === 'closed' ? `${r.case_id} closed on a verified gain`
+      : kind === 'verified' ? `Outcome evaluated for ${r.case_id}` : kind === 'reopened' ? `${r.case_id} reopened — no gain shown`
+      : kind === 'evidence' ? `All proof submitted on ${r.case_id}` : kind === 'escalated' ? `Overdue task on ${r.case_id} escalated` : r.summary;
+    out.push({ id: r.id, ts: r.ts, text, href: `/cases/${r.case_id}`, kind });
+  }
+  const kp = complaintsPred(s, 'k');
+  for (const r of all<{ id: string; ts: string; complaint_id: string; kind: string }>(
+    `select ce.id, ce.ts, ce.complaint_id, ce.kind from complaint_events ce join complaints k on k.id = ce.complaint_id
+      where (${kp.sql}) and ce.internal = 0 and ce.kind in ('escalated','resolved','reopened') order by ce.ts desc limit ?`, ...kp.params, limit)) {
+    out.push({ id: r.id, ts: r.ts, href: `/complaints?open=${r.complaint_id}`, kind: r.kind === 'escalated' ? 'escalated' : r.kind === 'resolved' ? 'resolved' : 'reopened',
+      text: `Complaint ${r.complaint_id} ${r.kind === 'escalated' ? 'escalated' : r.kind === 'resolved' ? 'resolved' : 'reopened'}` });
+  }
+  // Variety over volume: one entry per case, and at most two escalations.
+  const seen = new Set<string>();
+  let esc = 0;
+  return out.sort((a, b) => b.ts.localeCompare(a.ts)).filter((x) => {
+    if (seen.has(x.href)) return false;
+    if (x.kind === 'escalated' && ++esc > 2) return false;
+    seen.add(x.href);
+    return true;
+  }).slice(0, limit);
+}
+
+/** A deterministic, non-AI brief built from the same summary the AI narrates. */
+export interface PlainBrief { finding: string; changed: string; geography: string; concern: string; next: string; sources: string[] }
+export function plainBrief(s: Session): PlainBrief {
+  const pa = priorityActions(s, 10);
+  const t = learningTrend(s);
+  const h = headline(s);
+  const last = t.scope.length - 1;
+  const likeForLike = last >= 2 && t.scope[last] !== null && t.scope[last - 2] !== null ? (t.scope[last]! - t.scope[last - 2]!) : null;
+  const top = pa.items[0];
+  return {
+    finding: top ? `${top.title}.` : 'Nothing urgent is waiting on you.',
+    changed: likeForLike === null ? 'Not enough comparable rounds to compare.' : `${t.labels[last]}: ${t.scope[last]}% proficient, ${likeForLike >= 0 ? 'up' : 'down'} ${Math.abs(likeForLike).toFixed(1)} pp on the same round last year${t.state[last] !== null ? ` (state ${t.state[last]}%)` : ''}.`,
+    geography: `${h.critical} critical case${h.critical === 1 ? '' : 's'} open across ${t.scopeLabel}.`,
+    concern: h.overdue_tasks ? `${h.overdue_tasks} overdue task${h.overdue_tasks === 1 ? '' : 's'}, ${h.escalated_tasks} escalated to the district.` : 'No overdue work.',
+    next: top ? `${top.action}: ${top.title}` : 'Review the learning hotspots for new declines.',
+    sources: pa.items.flatMap((i) => i.sources).slice(0, 8),
   };
 }

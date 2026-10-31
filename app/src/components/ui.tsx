@@ -29,26 +29,15 @@ export function Stat({
   href?: string;
   icon?: ReactNode;
 }) {
-  const toneText = {
-    neutral: 'text-ink', good: 'text-good', warn: 'text-warn',
-    crit: 'text-crit', pend: 'text-pend', brand: 'text-brand',
-  }[tone];
-  const toneBar = {
-    neutral: 'bg-line-strong', good: 'bg-good', warn: 'bg-warn',
-    crit: 'bg-crit', pend: 'bg-pend', brand: 'bg-brand',
-  }[tone];
+  const toneText = { neutral: 'text-ink', good: 'text-good', warn: 'text-warn', crit: 'text-crit', pend: 'text-pend', brand: 'text-brand' }[tone];
   const body = (
     <>
-      <span className={`absolute inset-y-3 left-0 w-[3px] rounded-r ${toneBar}`} aria-hidden />
-      <div className="flex items-start justify-between gap-2">
-        <div className="label">{label}</div>
-        {icon ? <span className="text-ink-faint">{icon}</span> : null}
-      </div>
-      <div className={`kpi-num mt-2 ${toneText}`}>{value}</div>
-      {sub ? <div className="mt-1.5 text-[12px] leading-snug text-ink-soft">{sub}</div> : null}
+      <div className="flex items-center justify-between gap-2"><span className="label">{label}</span>{icon ? <span className="text-ink-faint">{icon}</span> : null}</div>
+      <div className={`kpi-num mt-1.5 ${toneText}`}>{value}</div>
+      {sub ? <div className="mt-1 text-[12px] leading-snug text-ink-faint">{sub}</div> : null}
     </>
   );
-  const cls = `relative block overflow-hidden rounded-xl border border-line bg-white px-4 py-3.5 shadow-card ${href ? 'transition-all hover:-translate-y-px hover:shadow-lift' : ''}`;
+  const cls = `block rounded-xl border border-line bg-white px-4 py-3 ${href ? 'transition-colors hover:border-line-strong hover:bg-paper-sunk' : ''}`;
   return href ? <Link href={href} className={cls}>{body}</Link> : <div className={cls}>{body}</div>;
 }
 
@@ -110,15 +99,16 @@ export function Toolbar({ children }: { children: ReactNode }) {
 }
 
 export function PageHead({
-  title, sub, right, breadcrumb,
-}: { title: ReactNode; sub?: ReactNode; right?: ReactNode; breadcrumb?: ReactNode }) {
+  title, sub, right, breadcrumb, meta,
+}: { title: ReactNode; sub?: ReactNode; right?: ReactNode; breadcrumb?: ReactNode; meta?: ReactNode }) {
   return (
     <header className="mb-6">
       {breadcrumb ? <div className="mb-2 text-[12.5px] text-ink-faint">{breadcrumb}</div> : null}
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">
-          <h1 className="font-display text-[24px] font-semibold leading-tight tracking-tight text-ink sm:text-[28px]">{title}</h1>
-          {sub ? <p className="mt-1.5 max-w-3xl text-[14px] leading-relaxed text-ink-soft">{sub}</p> : null}
+          <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-ink sm:text-[28px]">{title}</h1>
+          {sub ? <p className="mt-1 max-w-3xl text-[14px] leading-snug text-ink-soft">{sub}</p> : null}
+          {meta ? <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-ink-faint">{meta}</div> : null}
         </div>
         {right ? <div className="shrink-0 no-print">{right}</div> : null}
       </div>

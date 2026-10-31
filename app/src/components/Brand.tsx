@@ -7,7 +7,7 @@ import { Icon } from './Icon';
 export function Logo({ size = 32 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden className="shrink-0">
-      <rect width="32" height="32" rx="8" fill="#0f766e" />
+      <rect width="32" height="32" rx="8" fill="#167D78" />
       {/* A rising line that ends in a check: a learning gap turned into a verified outcome. */}
       <path d="M7 20.5 12 15.5l4 3.5 4.5-6" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
       <path d="m19.5 21 2.5 2.5 4.5-5" fill="none" stroke="#a7e3d8" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />

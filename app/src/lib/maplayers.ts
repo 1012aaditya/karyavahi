@@ -15,7 +15,7 @@ export interface LayerDef {
 }
 
 export const SEVERITY_COLORS: Record<string, string> = {
-  critical: '#b42318', significant: '#e0763c', moderate: '#f2c14e', stable: '#dfe6ee', improving: '#0f766e', insufficient: '#f3efe6',
+  critical: '#B94B3E', significant: '#D9774A', moderate: '#D9A441', stable: '#DDE5E8', improving: '#167D78', insufficient: '#F3EFE6',
 };
 export const SEVERITY_LABEL: Record<string, string> = {
   critical: 'Critical decline', significant: 'Significant decline', moderate: 'Moderate concern', stable: 'Stable', improving: 'Improving', insufficient: 'Insufficient data',
@@ -51,7 +51,10 @@ export const layerDef = (k: string) => LAYERS.find((l) => l.key === k) ?? LAYERS
 export function labelValue(layer: LayerKey, p: Record<string, unknown>): string {
   const n = (k: string) => Number(p[k] ?? 0);
   switch (layer) {
-    case 'learning': return p.severity === 'insufficient' ? 'n/a' : p.relPp === null || p.relPp === undefined ? '—' : `${Number(p.relPp) > 0 ? '+' : Number(p.relPp) < 0 ? '−' : ''}${Math.abs(Number(p.relPp)).toFixed(1)} pp`;
+    case 'learning': {
+      const v = p.severity === 'insufficient' ? 'n/a' : p.relPp === null || p.relPp === undefined ? '—' : `${Number(p.relPp) > 0 ? '+' : Number(p.relPp) < 0 ? '−' : ''}${Math.abs(Number(p.relPp)).toFixed(1)} pp`;
+      return n('hotChildren') > 0 ? `${v} · ${n('hotChildren')} hot` : v;
+    }
     case 'critical': return `${n('critical')} critical`;
     case 'complaints': return `${n('complaints')} open`;
     case 'overdue': return `${n('overdue')} overdue`;

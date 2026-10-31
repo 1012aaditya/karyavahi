@@ -24,7 +24,7 @@ const BASE = process.env.KV_BASE ?? 'http://localhost:3000';
     page.on('pageerror', (e) => errors.push(`${p}: ${e.message}`));
     page.on('console', (m) => { if (m.type() === 'error') errors.push(`${p}: ${m.text()}`); });
     await page.goto(`${BASE}${p}`, { waitUntil: 'networkidle', timeout: 120000 });
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(Number(process.env.KV_WAIT ?? 600));
     const name = `${mobile ? 'm-' : vp ? 'v-' : ''}${p.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '') || 'root'}.png`;
     await page.screenshot({ path: `${out}/${name}`, fullPage: !mobile && !vp });
     console.log('shot', name);

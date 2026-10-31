@@ -325,17 +325,14 @@ export function AssistantDrawer({ configured }: { configured: boolean }) {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
-  if (path.startsWith('/assistant')) return null;
+  if (path.startsWith('/assistant')) return <Link href="/assistant" className="btn-ghost gap-1.5 px-2.5 text-brand"><Icon name="sparkles" size={17} /><span className="hidden text-[13px] font-medium xl:inline">Ask AI</span></Link>;
 
   return (
     <>
-      <button
-        type="button" onClick={() => setOpen(true)}
-        className="fixed bottom-4 right-4 z-30 flex items-center gap-2 rounded-full bg-navy py-2.5 pl-3 pr-4 text-[13.5px] font-medium text-white shadow-pop transition-transform hover:-translate-y-0.5 no-print sm:bottom-6 sm:right-6"
-        aria-haspopup="dialog" aria-expanded={open}
-      >
-        <Icon name="sparkles" size={17} className="text-brand-soft" />
-        <span className="hidden sm:inline">Ask Karyavahi AI</span><span className="sm:hidden">AI</span>
+      <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open}
+        className="btn-ghost gap-1.5 px-2.5 text-brand no-print" title="Ask Karyavahi AI about this page">
+        <Icon name="sparkles" size={17} />
+        <span className="hidden text-[13px] font-medium xl:inline">Ask AI</span>
       </button>
       {open ? (
         <div className="fixed inset-0 z-50 no-print" role="dialog" aria-modal="true" aria-label="Karyavahi AI">

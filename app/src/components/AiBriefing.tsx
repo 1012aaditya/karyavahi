@@ -5,16 +5,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { Icon } from './Icon';
 
 /**
- * The AI briefing panel. It renders whatever /api/ai/briefing returns — a cached briefing, a
- * freshly generated one, an honest "not configured" notice, or an error with a retry. It never
- * fills in text of its own.
+ * Karyavahi Intelligence Brief. Renders what /api/ai/briefing returns — cached, freshly
+ * generated, or an honest error. When the model is not configured (or fails), it shows the
+ * deterministic summary computed on the server, clearly labelled as not AI. It never invents text.
  */
 
 interface Briefing {
-  headline: string; what_changed: string[]; priorities: { text: string; source_ids: string[] }[];
+  headline: string; geographic_impact?: string; what_changed: string[]; priorities: { text: string; source_ids: string[] }[];
   risks: string[]; next_actions: string[]; caveat: string;
 }
-interface Envelope { status: 'ok' | 'unconfigured' | 'error'; briefing?: Briefing; generatedAt?: string; model?: string; cached?: boolean; message?: string }
+interface Envelope { status: 'ok' | 'unconfigured' | 'error'; briefing?: Briefing; generatedAt?: string; model?: string; cached?: boolean; message?: string; sources?: string[] }
+export interface PlainBriefProps { finding: string; changed: string; geography: string; concern: string; next: string; sources: string[] }
 
 const href = (id: string) =>
   id.startsWith('CASE-') ? `/cases/${id}` : id.startsWith('TSK-') ? `/tasks/${id}` : id.startsWith('INT-') ? `/interventions/${id}`
@@ -28,9 +29,19 @@ export function SourceChip({ id }: { id: string }) {
   );
 }
 
-export function AiBriefing() {
+function Field({ label, children, wide = false }: { label: string; children: React.ReactNode; wide?: boolean }) {
+  return (
+    <div className={wide ? 'md:col-span-2' : ''}>
+      <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">{label}</dt>
+      <dd className="mt-1 text-[14px] leading-snug text-ink">{children}</dd>
+    </div>
+  );
+}
+
+export function AiBriefing({ fallback }: { fallback?: PlainBriefProps }) {
   const [env, setEnv] = useState<Envelope | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showSources, setShowSources] = useState(false);
 
   const load = useCallback(async (force: boolean) => {
     setLoading(true);
@@ -39,83 +50,69 @@ export function AiBriefing() {
       setEnv(await r.json());
     } catch {
       setEnv({ status: 'error', message: 'Could not reach the server.' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(false); }, [load]);
 
-  const b = env?.briefing;
+  const b = env?.status === 'ok' ? env.briefing : undefined;
+  const useFallback = !b && !loading && !!fallback;
+  const sources = b ? [...new Set([...(env?.sources ?? []), ...b.priorities.flatMap((p) => p.source_ids)])] : fallback?.sources ?? [];
+  const stamp = env?.status === 'ok' && env.generatedAt
+    ? `AI · ${env.model} · ${new Date(env.generatedAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} IST${env.cached ? ' · cached' : ''}`
+    : useFallback ? 'Computed summary · not AI' : '';
+
   return (
-    <section className="card overflow-hidden" aria-labelledby="ai-brief-title" aria-busy={loading}>
-      <header className="flex items-center justify-between gap-3 border-b border-line bg-gradient-to-r from-brand-light/70 to-white px-4 py-3 sm:px-5">
+    <section className="rounded-xl border border-line bg-white" aria-labelledby="brief-title" aria-busy={loading}>
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-5 py-3">
         <div className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white"><Icon name="sparkles" size={17} /></span>
-          <div>
-            <h2 id="ai-brief-title" className="text-[15px] font-semibold text-ink">AI briefing</h2>
-            <p className="text-[11.5px] text-ink-faint">
-              {env?.status === 'ok' && env.generatedAt
-                ? `Generated ${new Date(env.generatedAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} IST · ${env.model}${env.cached ? ' · cached' : ''}`
-                : 'Narrates the figures on this page. It does not compute them.'}
-            </p>
-          </div>
+          <Icon name="sparkles" size={17} className="text-brand" />
+          <h2 id="brief-title" className="text-[16px] font-semibold tracking-tight text-ink">Karyavahi Intelligence Brief</h2>
+          {stamp ? <span className={`chip ${useFallback ? 'border-line-strong bg-paper-sunk text-ink-soft' : 'border-brand/25 bg-brand-light text-brand'}`}>{stamp}</span> : null}
         </div>
-        {env?.status !== 'unconfigured' ? (
-          <button type="button" onClick={() => load(true)} disabled={loading} className="btn-ghost btn-sm" aria-label="Refresh briefing">
-            <Icon name="refresh" size={15} className={loading ? 'animate-spin' : ''} />
-            <span className="hidden sm:inline">{loading ? 'Working…' : 'Refresh'}</span>
-          </button>
-        ) : null}
+        <div className="flex items-center gap-1">
+          {sources.length ? (
+            <button type="button" onClick={() => setShowSources((v) => !v)} aria-expanded={showSources} className="btn-ghost btn-sm">
+              <Icon name="file" size={14} />{showSources ? 'Hide' : 'View'} supporting evidence
+            </button>
+          ) : null}
+          {env?.status !== 'unconfigured' ? (
+            <button type="button" onClick={() => load(true)} disabled={loading} className="btn-ghost btn-sm" aria-label="Refresh brief">
+              <Icon name="refresh" size={14} className={loading ? 'animate-spin' : ''} />{loading ? 'Working…' : 'Refresh'}
+            </button>
+          ) : null}
+        </div>
       </header>
 
-      <div className="p-4 sm:p-5">
+      <div className="px-5 py-4">
         {loading && !b ? (
-          <div className="space-y-3" aria-label="Generating briefing">
-            <div className="skeleton h-5 w-4/5" /><div className="skeleton h-4 w-full" /><div className="skeleton h-4 w-11/12" /><div className="skeleton h-4 w-2/3" />
-            <p className="pt-1 text-[12px] text-ink-faint">Reading your dashboard summary…</p>
-          </div>
-        ) : env?.status === 'unconfigured' ? (
-          <div className="flex items-start gap-3 rounded-lg border border-warn/30 bg-warn-light px-3.5 py-3 text-[13px] text-ink">
-            <Icon name="info" size={17} className="mt-px text-warn" />
-            <div><p className="font-semibold">AI is not connected</p><p className="mt-0.5 text-ink-soft">{env.message}</p></div>
-          </div>
-        ) : env?.status === 'error' && !b ? (
-          <div className="flex items-start gap-3 rounded-lg border border-crit/30 bg-crit-light px-3.5 py-3 text-[13px]">
-            <Icon name="alert" size={17} className="mt-px text-crit" />
-            <div className="flex-1"><p className="font-semibold text-crit">Briefing unavailable</p><p className="mt-0.5 text-ink-soft">{env.message}</p></div>
-            <button type="button" onClick={() => load(true)} className="btn-quiet btn-sm">Retry</button>
+          <div className="grid gap-4 md:grid-cols-4" aria-label="Preparing brief">
+            {[0, 1, 2, 3].map((i) => <div key={i} className="space-y-2"><div className="skeleton h-3 w-24" /><div className="skeleton h-4 w-full" /><div className="skeleton h-4 w-4/5" /></div>)}
           </div>
         ) : b ? (
-          <div className={`space-y-4 ${loading ? 'opacity-60' : ''}`}>
-            <p className="text-[16px] font-semibold leading-snug text-ink">{b.headline}</p>
-            {b.what_changed.length ? (
-              <ul className="space-y-1.5 text-[13.5px] text-ink-soft">
-                {b.what_changed.map((x, i) => <li key={i} className="flex gap-2"><span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-navy-300" />{x}</li>)}
-              </ul>
-            ) : null}
-            {b.priorities.length ? (
-              <div>
-                <p className="label mb-1.5">Priorities</p>
-                <ol className="space-y-2">
-                  {b.priorities.map((p, i) => (
-                    <li key={i} className="flex gap-2.5 text-[13.5px] text-ink">
-                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-navy text-[11px] font-semibold text-white">{i + 1}</span>
-                      <span>{p.text} {p.source_ids.map((id) => <SourceChip key={id} id={id} />)}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            ) : null}
-            <div className="grid gap-4 sm:grid-cols-2">
-              {b.risks.length ? (
-                <div><p className="label mb-1.5">Risks</p><ul className="space-y-1 text-[13px] text-ink-soft">{b.risks.map((x, i) => <li key={i} className="flex gap-2"><Icon name="alert" size={14} className="mt-0.5 text-warn" />{x}</li>)}</ul></div>
-              ) : null}
-              {b.next_actions.length ? (
-                <div><p className="label mb-1.5">Next actions</p><ul className="space-y-1 text-[13px] text-ink-soft">{b.next_actions.map((x, i) => <li key={i} className="flex gap-2"><Icon name="arrow-right" size={14} className="mt-0.5 text-brand" />{x}</li>)}</ul></div>
-              ) : null}
-            </div>
-            <p className="border-t border-line pt-3 text-[12px] text-ink-faint">{b.caveat} AI-written from computed figures; it carries no authority.</p>
-            {env?.message ? <p className="text-[12px] text-warn">{env.message}</p> : null}
+          <dl className={`grid gap-x-8 gap-y-4 md:grid-cols-2 xl:grid-cols-4 ${loading ? 'opacity-60' : ''}`}>
+            <Field label="Most important finding" wide><span className="text-[15px] font-semibold">{b.headline}</span></Field>
+            <Field label="Geographic impact">{b.geographic_impact ?? '—'}</Field>
+            <Field label="What changed">{b.what_changed[0] ?? '—'}</Field>
+            <Field label="Main operational concern" wide>{b.risks[0] ?? '—'}</Field>
+            <Field label="Recommended next priority" wide><span className="font-medium text-brand">{b.next_actions[0] ?? b.priorities[0]?.text ?? '—'}</span></Field>
+          </dl>
+        ) : useFallback ? (
+          <>
+            <dl className="grid gap-x-8 gap-y-4 md:grid-cols-2 xl:grid-cols-4">
+              <Field label="Most important finding" wide><span className="text-[15px] font-semibold">{fallback!.finding}</span></Field>
+              <Field label="Geographic impact">{fallback!.geography}</Field>
+              <Field label="What changed">{fallback!.changed}</Field>
+              <Field label="Main operational concern" wide>{fallback!.concern}</Field>
+              <Field label="Recommended next priority" wide><span className="font-medium text-brand">{fallback!.next}</span></Field>
+            </dl>
+            <p className="mt-3 text-[12px] text-ink-faint">{env?.status === 'unconfigured' ? 'AI is not connected, so this summary is computed directly from the records.' : `AI brief unavailable${env?.message ? ` (${env.message})` : ''}; showing the computed summary.`}{env?.status === 'error' ? <button type="button" onClick={() => load(true)} className="ml-2 text-brand hover:underline">Retry AI</button> : null}</p>
+          </>
+        ) : (
+          <p className="text-[13.5px] text-ink-soft">{env?.message ?? 'No brief available.'}</p>
+        )}
+        {showSources && sources.length ? (
+          <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-line pt-3 text-[12px] text-ink-faint">
+            <span className="mr-1">Built from:</span>{sources.slice(0, 16).map((id) => <SourceChip key={id} id={id} />)}
           </div>
         ) : null}
       </div>

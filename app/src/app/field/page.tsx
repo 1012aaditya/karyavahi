@@ -1,169 +1,244 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { getLanguage } from '@/lib/session';
 import { pageSession } from '@/lib/page-session';
-import { listTasks, countTasks, listCases, evidenceToCheck } from '@/lib/cases';
+import { listTasks, evidenceToCheck, type Task } from '@/lib/cases';
+import { listComplaints, slaState, STATUS as CSTATUS } from '@/lib/complaints';
+import { listBlockers } from '@/lib/blockers';
 import { lookupsFor } from '@/lib/lookups';
-import { scopeName, visitsBy, schoolsIn, schoolNames } from '@/lib/repo';
-import { countUnread } from '@/lib/feed';
-import { may, grant } from '@/lib/guard';
-import { today, daysAgo } from '@/lib/clock';
+import { scopeName } from '@/lib/repo';
+import { all } from '@/lib/db';
+import { schoolsPred, and, evidencePred } from '@/lib/scope';
+import { may } from '@/lib/guard';
+import { can } from '@/lib/authz';
+import { today, daysBetween } from '@/lib/clock';
 import { pick } from '@/lib/i18n';
-import { Card, CardHead, PageHead, Grid, Stat, Callout, Empty, Mono, fmtDate } from '@/components/ui';
-import { ComplaintsPanel, MapPanel } from '@/components/role-panels';
-import { TaskTable, CaseTable } from '@/components/lists';
-import { Pill, RoleName } from '@/components/labels';
+import { PageHead, fmtDate } from '@/components/ui';
+import { Icon } from '@/components/Icon';
+import { GeoMap } from '@/components/GeoMap';
+import { EvidenceTypeName } from '@/components/labels';
 
 /**
- * The field view, for block and cluster resource coordinators.
+ * Field Operations — "What must I do today, where must I go, and what needs my response?"
  *
- * Coordinators do not approve anything; they do the coaching, run the spot assessments and
- * carry out the independent checks that let a case close. So this page is their own work first,
- * and the cases behind that work second.
+ *   A task metrics · B priority inbox (48%) + live map of my area (52%) · C upcoming visits + evidence
+ *
+ * The inbox merges my own tasks, overdue school tasks in my area that I follow up, and
+ * complaints assigned to me. Rows open the existing task page or the complaint drawer.
  */
 
-export default async function FieldHome() {
+type InboxRow = {
+  id: string; ref: string; title: string; type: 'My task' | 'Follow-up' | 'Complaint'; priority: 'critical' | 'high' | 'medium' | 'low';
+  where: string; due: string | null; dueLabel: string; status: string; overdue: boolean; dueToday: boolean; blocked: boolean; href: string;
+};
+
+const PRI = { critical: { dot: 'bg-crit', w: 'Critical' }, high: { dot: 'bg-amber', w: 'High' }, medium: { dot: 'bg-navy-300', w: 'Medium' }, low: { dot: 'bg-line-strong', w: 'Low' } } as const;
+const TASK_STATUS: Record<string, string> = { assigned: 'Assigned', acknowledged: 'Acknowledged', in_progress: 'In progress', sent_back: 'Proof sent back', submitted: 'Proof submitted', verified: 'Verified' };
+
+export default async function FieldOperations({ searchParams }: { searchParams: Promise<{ inbox?: string }> }) {
   const session = await pageSession();
   const lang = await getLanguage();
-  const role = session.roles.find((r) => ['crc', 'brc'].includes(r.role)) ?? session.roles[0];
+  const sp = await searchParams;
+  const d = today();
+  const role = session.roles.find((r) => ['crc', 'brc'].includes(r.role) && !r.delegated) ?? session.roles[0];
+  const scope = scopeName(role.scope_type, role.scope_id);
 
-  const mine = { ownerUserId: session.user_id };
-  const todo = listTasks(session, { ...mine, status: ['assigned', 'acknowledged', 'in_progress', 'sent_back'], limit: 40 });
-  const overdueCount = countTasks(session, { ...mine, overdue: true });
-  const submitted = countTasks(session, { ...mine, status: ['submitted'] });
-  const verified = countTasks(session, { ...mine, status: ['verified'] });
-  const sentBack = listTasks(session, { ...mine, status: ['sent_back'], limit: 10 });
-  const crossSource = todo.filter((t) => t.cross_source);
-  const cases = listCases(session, { open: true, limit: 20 });
-  const visits = visitsBy(session, session.user_id, 12);
-  const proof = may(session, 'evidence.verify') ? evidenceToCheck(session, { limit: 6 }) : [];
-  const schools = schoolsIn(session, { limit: 500 });
+  const open: Task['status'][] = ['assigned', 'acknowledged', 'in_progress', 'sent_back'];
+  const mine = listTasks(session, { ownerUserId: session.user_id, status: open, limit: 100 });
+  const followUps = listTasks(session, { overdue: true, limit: 100 }).filter((t) => t.owner_user_id !== session.user_id);
+  const complaints = listComplaints(session, { queue: 'mine', limit: 50 });
+  const blockedTasks = new Set(listBlockers(session, { open: true, limit: 500 }).flatMap((b) => b.task_ids));
+  const look = lookupsFor(lang, { users: [...mine, ...followUps].map((t) => t.owner_user_id), schools: [...mine, ...followUps].map((t) => t.school_id ?? '').concat(complaints.map((c) => c.school_id ?? '')) });
 
-  const look = lookupsFor(lang, {
-    users: [...todo.map((t) => t.owner_user_id), ...cases.map((c) => c.owner_user_id), ...proof.map((e) => e.submitted_by)],
-    schools: [...todo.map((t) => t.school_id ?? ''), ...visits.map((v) => v.school_id), ...proof.map((e) => e.school_id ?? '')],
-  });
-  const visitSchools = schoolNames(visits.map((v) => v.school_id));
+  const taskRow = (t: Task, type: InboxRow['type']): InboxRow => {
+    const late = !t.submitted_at && t.due_date < d;
+    const days = daysBetween(d, t.due_date);
+    return {
+      id: t.id, ref: t.id, title: pick(lang, t.title_en, t.title_hi), type,
+      priority: late && -days >= 14 ? 'critical' : late ? 'high' : days <= 2 ? 'medium' : 'low',
+      where: t.school_id ? look.schools.get(t.school_id) ?? t.school_id : scope,
+      due: t.due_date, dueLabel: late ? `${-days}d overdue` : days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : fmtDate(t.due_date),
+      status: TASK_STATUS[t.status] ?? t.status, overdue: late, dueToday: t.due_date === d, blocked: blockedTasks.has(t.id), href: `/tasks/${t.id}`,
+    };
+  };
+  const rows: InboxRow[] = [
+    ...complaints.map((c): InboxRow => {
+      const sla = slaState(c);
+      return {
+        id: c.id, ref: c.id, title: c.title, type: 'Complaint',
+        priority: (c.priority as InboxRow['priority']), where: c.school_id ? look.schools.get(c.school_id) ?? c.school_id : scope,
+        due: ['submitted', 'escalated'].includes(c.status) ? c.ack_due : c.resolve_due, dueLabel: sla.label || '—',
+        status: CSTATUS[c.status]?.label ?? c.status, overdue: sla.tone === 'crit', dueToday: sla.days === 0, blocked: false, href: `/complaints?open=${c.id}`,
+      };
+    }),
+    ...mine.map((t) => taskRow(t, 'My task')),
+    ...followUps.slice(0, 25).map((t) => taskRow(t, 'Follow-up')),
+  ].sort((a, b) => Number(b.overdue) - Number(a.overdue) || ['critical', 'high', 'medium', 'low'].indexOf(a.priority) - ['critical', 'high', 'medium', 'low'].indexOf(b.priority) || (a.due ?? '').localeCompare(b.due ?? ''));
+
+  const tab = ['today', 'overdue', 'blocked'].includes(sp.inbox ?? '') ? sp.inbox! : 'all';
+  const shown = rows.filter((r) => tab === 'all' || (tab === 'today' && r.dueToday) || (tab === 'overdue' && r.overdue) || (tab === 'blocked' && r.blocked));
+  const tabs = [
+    { key: 'all', label: 'All', n: rows.length }, { key: 'today', label: 'Due today', n: rows.filter((r) => r.dueToday).length },
+    { key: 'overdue', label: 'Overdue', n: rows.filter((r) => r.overdue).length }, { key: 'blocked', label: 'Blocked', n: rows.filter((r) => r.blocked).length },
+  ];
+
+  // Section C: visits and evidence.
+  const sp2 = schoolsPred(session, 'sc');
+  const dueVisits = all<{ id: string; name: string; last: string | null }>(
+    `select sc.id, sc.name, (select max(v.visit_date) from visits v where v.school_id = sc.id) last
+       from schools sc where ${sp2.sql} order by last is not null, last asc limit 6`, ...sp2.params,
+  );
+  const visitTasks = listTasks(session, { dueWithinDays: 14, limit: 200 }).filter((t) => t.proof_type === 'visit_log' || t.proof_type === 'spot_check_sheet' || t.proof_type === 'spot_assessment_sheet').slice(0, 6);
+  const ep = and(evidencePred(session, 'e'), { sql: `e.status = 'pending' and e.submitted_by = ?`, params: [session.user_id] });
+  const mySubmitted = all<{ id: string; case_id: string; task_id: string; evidence_type: string; submitted_at: string }>(`select e.id, e.case_id, e.task_id, e.evidence_type, e.submitted_at from evidence e where ${ep.sql} order by e.submitted_at desc limit 5`, ...ep.params);
+  const toCheck = may(session, 'evidence.verify') ? evidenceToCheck(session, { limit: 5 }) : [];
+  const needsProof = mine.filter((t) => t.status === 'sent_back' || t.status === 'in_progress').slice(0, 5);
+
+  const metrics = [
+    { label: 'Assigned to me', value: mine.length + complaints.length, href: '/field?inbox=all' },
+    { label: 'Due today', value: rows.filter((r) => r.dueToday).length, href: '/field?inbox=today', tone: 'text-warn' },
+    { label: 'Overdue', value: rows.filter((r) => r.overdue).length, href: '/field?inbox=overdue', tone: 'text-crit' },
+    { label: 'Evidence pending', value: needsProof.length + mySubmitted.length + toCheck.length, href: '#evidence', tone: 'text-pend' },
+  ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PageHead
-        title={`${pick(lang, 'Field work', 'क्षेत्र कार्य')} — ${scopeName(role.scope_type, role.scope_id)}`}
-        sub={pick(
-          lang,
-          'Your tasks, your visits, and the cases they belong to. Submitting proof is not the end of a task — somebody who did not do the work has to check it.',
-          'आपके काम, आपके भ्रमण, और उनसे जुड़े प्रकरण। सबूत जमा करना अंत नहीं — कोई और उसे जाँचेगा।',
-        )}
+        title={pick(lang, 'Field Operations', 'क्षेत्र संचालन')}
+        sub={pick(lang, 'Your assigned activities, school visits and outstanding actions.', 'आपकी गतिविधियाँ, विद्यालय भ्रमण और लंबित कार्य।')}
+        meta={<><span className="inline-flex items-center gap-1"><Icon name="pin" size={12} />{scope}</span><span>{fmtDate(d)}</span></>}
+        right={can(session, 'create_complaint') ? <Link href="/complaints/new" className="btn-primary"><Icon name="plus" size={15} />Raise an issue</Link> : undefined}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <ComplaintsPanel s={session} mode="respond" />
-        <MapPanel title={pick(lang, 'Your schools on the map', 'आपके विद्यालय मानचित्र पर')} height={300} />
+      {/* A — metrics */}
+      <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-line bg-white lg:grid-cols-4 lg:divide-x lg:divide-line">
+        {metrics.map((m) => (
+          <Link key={m.label} href={m.href} className="border-b border-line px-5 py-3 hover:bg-paper-sunk lg:border-b-0">
+            <p className="text-[12px] font-medium text-ink-soft">{m.label}</p>
+            <p className={`kpi-num mt-1 ${m.value ? m.tone ?? 'text-ink' : 'text-ink'}`}>{m.value}</p>
+          </Link>
+        ))}
       </div>
 
-      <Grid cols={5}>
-        <Stat label={pick(lang, 'To do', 'करना है')} value={todo.length} tone="brand" href="/tasks?filter=todo" />
-        <Stat label={pick(lang, 'Overdue', 'विलंबित')} value={overdueCount} tone={overdueCount > 0 ? 'crit' : 'neutral'} href="/tasks?filter=overdue" />
-        <Stat label={pick(lang, 'Sent back to me', 'मुझे लौटाया')} value={sentBack.length} tone={sentBack.length > 0 ? 'warn' : 'neutral'} href="/tasks?filter=sent_back" />
-        <Stat label={pick(lang, 'Waiting on a checker', 'जाँच प्रतीक्षित')} value={submitted} tone="pend" href="/tasks?filter=submitted" />
-        <Stat label={pick(lang, 'Verified', 'सत्यापित')} value={verified} tone="good" href="/tasks?filter=verified" />
-      </Grid>
+      {/* B — inbox + map */}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,48fr)_minmax(0,52fr)]">
+        <section className="flex min-h-[460px] flex-col rounded-xl border border-line bg-white" aria-labelledby="inbox-title">
+          <header className="flex items-center justify-between border-b border-line px-5 pt-3">
+            <h2 id="inbox-title" className="pb-3 text-[16px] font-semibold tracking-tight text-ink">Priority inbox</h2>
+          </header>
+          <nav className="flex gap-1 border-b border-line px-3" aria-label="Inbox filter">
+            {tabs.map((t) => (
+              <Link key={t.key} href={`/field?inbox=${t.key}`} scroll={false} aria-current={tab === t.key ? 'page' : undefined}
+                className={`-mb-px flex items-center gap-1.5 border-b-2 px-2.5 py-2 text-[13px] ${tab === t.key ? 'border-brand font-semibold text-ink' : 'border-transparent text-ink-soft hover:text-ink'}`}>
+                {t.label}<span className="tnum text-[11.5px] text-ink-faint">{t.n}</span>
+              </Link>
+            ))}
+          </nav>
+          {shown.length === 0 ? (
+            <p className="flex flex-1 items-center justify-center gap-2 px-5 py-10 text-[13.5px] text-ink-soft"><Icon name="check-circle" size={18} className="text-good" />Nothing in this view.</p>
+          ) : (
+            <ul className="flex-1 divide-y divide-line overflow-y-auto" style={{ maxHeight: 520 }}>
+              {shown.slice(0, 40).map((r) => (
+                <li key={`${r.type}-${r.id}`}>
+                  <Link href={r.href} className="grid grid-cols-[auto_1fr_auto] items-start gap-x-3 px-5 py-2.5 hover:bg-paper-sunk">
+                    <span className={`dot mt-[7px] ${PRI[r.priority].dot}`} title={PRI[r.priority].w} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13.5px] font-medium text-ink">{r.title}</span>
+                      <span className="mt-0.5 flex flex-wrap gap-x-2.5 text-[11.5px] text-ink-faint">
+                        <span className="font-mono">{r.ref}</span><span>{r.type}</span>
+                        <span className="sr-only">{PRI[r.priority].w}</span>
+                        <span className="inline-flex items-center gap-1"><Icon name="pin" size={10} />{r.where}</span>
+                        <span>{r.status}</span>{r.blocked ? <span className="text-warn">Blocked</span> : null}
+                      </span>
+                    </span>
+                    <span className={`mt-0.5 whitespace-nowrap text-[12px] ${r.overdue ? 'font-medium text-crit' : r.dueToday ? 'font-medium text-warn' : 'text-ink-soft'}`}>{r.dueLabel}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section className="rounded-xl border border-line bg-white" aria-labelledby="fmap-title">
+          <header className="flex items-center justify-between border-b border-line px-5 py-3">
+            <h2 id="fmap-title" className="text-[16px] font-semibold tracking-tight text-ink">Your area</h2>
+            <Link href="/hotspots" className="text-[13px] font-medium text-brand hover:underline">Full map</Link>
+          </header>
+          <div className="p-3"><Suspense fallback={<div className="skeleton h-[400px] w-full" />}><GeoMap compact height={400} /></Suspense></div>
+        </section>
+      </div>
 
-      {sentBack.length > 0 ? (
-        <Card>
-          <CardHead
-            title={pick(lang, 'Proof that came back', 'लौटाए गए सबूत')}
-            hint={pick(lang, 'Read the reason, then submit again.', 'कारण पढ़ें, फिर दोबारा जमा करें।')}
-          />
-          <TaskTable tasks={sentBack} look={look} lang={lang} today={today()} />
-        </Card>
-      ) : null}
-
-      {crossSource.length > 0 ? (
-        <Card>
-          <CardHead
-            title={pick(lang, 'Independent checks assigned to you', 'आपको सौंपी स्वतंत्र जाँच')}
-            hint={pick(
-              lang,
-              'These are the checks a case cannot close without. They carry weight because you did not deliver the work being checked.',
-              'इनके बिना प्रकरण बंद नहीं हो सकता। इनका महत्व इसलिए है कि यह काम आपने नहीं किया।',
-            )}
-          />
-          <TaskTable tasks={crossSource} look={look} lang={lang} today={today()} />
-        </Card>
-      ) : null}
-
-      <Card>
-        <CardHead
-          title={pick(lang, 'Everything on your plate', 'आपके सभी काम')}
-          right={<Link href="/tasks" className="link text-[13px]">{pick(lang, 'All my tasks', 'सभी काम')}</Link>}
-        />
-        <TaskTable
-          tasks={todo} look={look} lang={lang} today={today()}
-          emptyText={pick(lang, 'Nothing assigned to you right now.', 'अभी आपको कुछ नहीं सौंपा गया।')}
-        />
-      </Card>
-
-      {proof.length > 0 ? (
-        <Card>
-          <CardHead
-            title={pick(lang, 'Proof you can spot-check', 'आप जाँच सकते हैं')}
-            hint={grant(session, 'evidence.verify') === 'spot'
-              ? pick(lang, 'You verify by going and looking, not by reading a form.', 'आप जाकर देखकर सत्यापित करते हैं, फ़ॉर्म पढ़कर नहीं।')
-              : undefined}
-            right={<Link href="/evidence" className="btn-quiet">{pick(lang, 'Open the queue', 'कतार खोलें')}</Link>}
-          />
+      {/* C — visits + evidence */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="rounded-xl border border-line bg-white" aria-labelledby="visits-title">
+          <header className="flex items-center justify-between border-b border-line px-5 py-3">
+            <h2 id="visits-title" className="text-[16px] font-semibold tracking-tight text-ink">Upcoming school visits</h2>
+            <Link href="/visits" className="text-[13px] font-medium text-brand hover:underline">Visit log</Link>
+          </header>
+          {visitTasks.length ? (
+            <>
+              <p className="px-5 pt-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">Scheduled by a plan</p>
+              <ul className="divide-y divide-line">
+                {visitTasks.map((t) => (
+                  <li key={t.id}><Link href={`/tasks/${t.id}`} className="flex items-center justify-between gap-3 px-5 py-2.5 hover:bg-paper-sunk">
+                    <span className="min-w-0"><span className="block truncate text-[13.5px] text-ink">{t.school_id ? look.schools.get(t.school_id) ?? t.school_id : '—'}</span><span className="block truncate text-[11.5px] text-ink-faint">{pick(lang, t.title_en, t.title_hi)}</span></span>
+                    <span className="whitespace-nowrap text-[12px] text-ink-soft">{fmtDate(t.due_date)}</span>
+                  </Link></li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          <p className="px-5 pt-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">Longest without a visit</p>
           <ul className="divide-y divide-line">
-            {proof.map((e) => (
-              <li key={e.id} className="flex flex-wrap items-baseline gap-x-3 px-4 py-2.5 text-[13px] sm:px-5">
-                <Link href={`/cases/${e.case_id}`} className="link"><Mono>{e.case_id}</Mono></Link>
-                <span className="text-ink">{e.evidence_type.replace(/_/g, ' ')}</span>
-                <span className="text-ink-soft">{look.users.get(e.submitted_by) ?? e.submitted_by}</span>
-                {e.school_id ? <span className="text-ink-faint">{look.schools.get(e.school_id)}</span> : null}
-              </li>
+            {dueVisits.map((s) => (
+              <li key={s.id}><Link href={`/schools/${s.id}`} className="flex items-center justify-between gap-3 px-5 py-2.5 hover:bg-paper-sunk">
+                <span className="truncate text-[13.5px] text-ink">{s.name}</span>
+                <span className={`whitespace-nowrap text-[12px] ${!s.last || daysBetween(s.last, d) > 60 ? 'text-crit' : 'text-ink-soft'}`}>{s.last ? `${daysBetween(s.last, d)}d since last visit` : 'never visited'}</span>
+              </Link></li>
             ))}
           </ul>
-        </Card>
-      ) : null}
+        </section>
 
-      <Card>
-        <CardHead
-          title={pick(lang, 'Cases in your area', 'आपके क्षेत्र के प्रकरण')}
-          hint={`${cases.length} ${pick(lang, 'open', 'खुले')} · ${schools.length} ${pick(lang, 'schools', 'विद्यालय')}`}
-        />
-        <CaseTable
-          cases={cases} look={look} lang={lang} showBlock={role.scope_type !== 'cluster'}
-          emptyText={pick(lang, 'No open cases here.', 'यहाँ कोई खुला प्रकरण नहीं।')}
-        />
-      </Card>
-
-      <Card>
-        <CardHead
-          title={pick(lang, 'Your recent visits', 'आपके हाल के भ्रमण')}
-          right={<Link href="/visits" className="link text-[13px]">{pick(lang, 'All visits', 'सभी भ्रमण')}</Link>}
-        />
-        {visits.length === 0 ? <Empty /> : (
-          <ul className="divide-y divide-line">
-            {visits.map((v) => (
-              <li key={v.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5 sm:px-5">
-                <span className="tnum w-24 shrink-0 text-[12.5px] text-ink-faint">{fmtDate(v.visit_date)}</span>
-                <Pill>{v.purpose.replace(/_/g, ' ')}</Pill>
-                <Link href={`/schools/${v.school_id}`} className="link text-[13px]">
-                  {visitSchools.get(v.school_id) ?? v.school_id}
-                </Link>
-                {v.case_id ? <Link href={`/cases/${v.case_id}`} className="text-[12px] text-ink-faint hover:text-ink">{v.case_id}</Link> : null}
-                {v.sync_status === 'pending_sync' ? (
-                  <Pill tone="warn">{pick(lang, 'not yet synced', 'सिंक नहीं हुआ')}</Pill>
-                ) : null}
-                {v.notes ? <span className="basis-full text-[12.5px] text-ink-soft">{v.notes}</span> : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      {todo.length === 0 && overdueCount === 0 ? (
-        <Callout tone="good">{pick(lang, 'Nothing is waiting on you.', 'आपकी प्रतीक्षा में कुछ नहीं।')}</Callout>
-      ) : null}
+        <section id="evidence" className="scroll-mt-24 rounded-xl border border-line bg-white" aria-labelledby="ev-title">
+          <header className="flex items-center justify-between border-b border-line px-5 py-3">
+            <h2 id="ev-title" className="text-[16px] font-semibold tracking-tight text-ink">Evidence</h2>
+            {may(session, 'evidence.verify') ? <Link href="/evidence" className="text-[13px] font-medium text-brand hover:underline">Proof queue</Link> : null}
+          </header>
+          {needsProof.length + mySubmitted.length + toCheck.length === 0 ? <p className="px-5 py-8 text-[13.5px] text-ink-faint">Nothing waiting.</p> : null}
+          {needsProof.length ? (
+            <>
+              <p className="px-5 pt-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">Awaiting your submission</p>
+              <ul className="divide-y divide-line">{needsProof.map((t) => (
+                <li key={t.id}><Link href={`/tasks/${t.id}`} className="flex items-center justify-between gap-3 px-5 py-2.5 hover:bg-paper-sunk">
+                  <span className="min-w-0"><span className="block truncate text-[13.5px] text-ink">{pick(lang, t.title_en, t.title_hi)}</span><span className="text-[11.5px] text-ink-faint">{t.proof_count} × <EvidenceTypeName type={t.proof_type} lang={lang} />{t.status === 'sent_back' ? ' · sent back' : ''}</span></span>
+                  <span className={`whitespace-nowrap text-[12px] ${t.due_date < d ? 'text-crit' : 'text-ink-soft'}`}>{fmtDate(t.due_date)}</span>
+                </Link></li>
+              ))}</ul>
+            </>
+          ) : null}
+          {mySubmitted.length ? (
+            <>
+              <p className="px-5 pt-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">Submitted, awaiting verification</p>
+              <ul className="divide-y divide-line">{mySubmitted.map((e) => (
+                <li key={e.id}><Link href={`/tasks/${e.task_id}`} className="flex items-center justify-between gap-3 px-5 py-2.5 hover:bg-paper-sunk">
+                  <span className="truncate text-[13.5px] text-ink"><span className="font-mono text-[12px] text-ink-faint">{e.id}</span> {e.evidence_type.replace(/_/g, ' ')}</span>
+                  <span className="whitespace-nowrap text-[12px] text-ink-soft">{fmtDate(e.submitted_at)}</span>
+                </Link></li>
+              ))}</ul>
+            </>
+          ) : null}
+          {toCheck.length ? (
+            <>
+              <p className="px-5 pt-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">For you to verify</p>
+              <ul className="divide-y divide-line">{toCheck.map((e) => (
+                <li key={e.id}><Link href={`/cases/${e.case_id}#proof`} className="flex items-center justify-between gap-3 px-5 py-2.5 hover:bg-paper-sunk">
+                  <span className="truncate text-[13.5px] text-ink">{e.evidence_type.replace(/_/g, ' ')} <span className="text-ink-faint">· {e.case_id}</span></span>
+                  <span className="whitespace-nowrap text-[12px] text-ink-soft">{fmtDate(e.submitted_at)}</span>
+                </Link></li>
+              ))}</ul>
+            </>
+          ) : null}
+        </section>
+      </div>
     </div>
   );
 }
