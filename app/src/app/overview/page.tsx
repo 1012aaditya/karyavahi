@@ -3,7 +3,6 @@ import { getLanguage } from '@/lib/session';
 import { pageSession } from '@/lib/page-session';
 import { headline } from '@/lib/dash';
 import { priorityActions, recentActivity, learningTrend, lifecycleCounts, deliveryProgress, systemStatus } from '@/lib/overview';
-import { hotspotUnits } from '@/lib/hotspots';
 import { outcomeMix } from '@/lib/dash';
 import { scopeName } from '@/lib/repo';
 import { aiStatus } from '@/lib/ai/config';
@@ -12,11 +11,13 @@ import { now } from '@/lib/clock';
 import { pick } from '@/lib/i18n';
 import { Stat, fmtDate } from '@/components/ui';
 import { Icon } from '@/components/Icon';
-import { PriorityList, HotspotPreview, ActivityFeed, StackedBar, HBarList } from '@/components/overview';
+import { PriorityList, ActivityFeed, StackedBar, HBarList } from '@/components/overview';
 import { AiBriefing } from '@/components/AiBriefing';
 import { TrendChart } from '@/components/charts';
 import { SERIES } from '@/lib/viz';
 import { ROLE_LABELS } from '@domain/permissions';
+import { ComplaintsPanel, MapPanel, PerformanceTable, EscalationsPanel } from '@/components/role-panels';
+import { can } from '@/lib/authz';
 
 /**
  * The operational overview: "what needs my attention today to improve learning outcomes?"
@@ -24,7 +25,6 @@ import { ROLE_LABELS } from '@domain/permissions';
  * clock, reset, sweep, jobs, outbox) live under Administration → System & demo controls.
  */
 
-const LEVEL_LABEL = { district: 'Districts', block: 'Blocks', cluster: 'Clusters', school: 'Schools' } as const;
 
 export default async function OverviewPage() {
   const session = await pageSession();
@@ -32,7 +32,6 @@ export default async function OverviewPage() {
 
   const h = headline(session);
   const pa = priorityActions(session, 7);
-  const hs = hotspotUnits(session, {});
   const trend = learningTrend(session);
   const stages = lifecycleCounts(session);
   const delivery = deliveryProgress(session);
@@ -92,6 +91,13 @@ export default async function OverviewPage() {
           sub={`${h.reopened} reopened — no gain shown`} tone="good" />
       </section>
 
+      {session.scope_type === 'state' || session.scope_type === 'district' ? (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+          <PerformanceTable s={session} />
+          <EscalationsPanel s={session} />
+        </div>
+      ) : null}
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <div className="space-y-6">
           {/* C — priority actions */}
@@ -110,19 +116,10 @@ export default async function OverviewPage() {
             <PriorityList items={pa.items} empty={pick(lang, 'Nothing is waiting on you right now.', 'अभी आपकी प्रतीक्षा में कुछ नहीं।')} />
           </section>
 
-          {/* D — hotspots */}
-          <section className="card overflow-hidden" aria-labelledby="hs-title">
-            <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3.5 sm:px-5">
-              <div>
-                <h2 id="hs-title" className="text-[16px] font-semibold tracking-tight text-ink">{pick(lang, 'Learning hotspots', 'अधिगम हॉटस्पॉट')}</h2>
-                <p className="text-[12.5px] text-ink-faint">
-                  {hs.pair ? `${hs.pair.prev.code} → ${hs.pair.curr.code}` : ''} · {pick(lang, 'change in % proficient relative to the district', 'ज़िले की तुलना में बदलाव')}
-                </p>
-              </div>
-              <Link href="/hotspots" className="btn-quiet btn-sm">{pick(lang, 'Explore', 'देखें')}<Icon name="arrow-right" size={14} /></Link>
-            </header>
-            <HotspotPreview units={hs.units} levelLabel={LEVEL_LABEL[hs.level]} />
-          </section>
+          {can(session, 'resolve_complaint') ? <ComplaintsPanel s={session} mode="respond" /> : null}
+
+          {/* D — hotspots, on the live map at the user's own scope */}
+          <MapPanel title={pick(lang, 'Learning hotspots', 'अधिगम हॉटस्पॉट')} height={360} />
 
           {/* E — trends */}
           <section className="card overflow-hidden" aria-labelledby="tr-title">

@@ -137,7 +137,7 @@ export function authorize(s: Session | null, p: Permission, res?: Resource): Dec
 }
 
 /** Throwing form for write paths. */
-export function requirePermission(s: Session | null, p: Permission, res?: Resource): asserts s is Session {
+export function requirePermission(s: Session | null, p: Permission, res?: Resource): void {
   const d = authorize(s, p, res);
   if (!d.allowed) throw new Refused(d.reason, 'authz');
 }

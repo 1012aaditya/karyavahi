@@ -9,6 +9,7 @@ import { may, grant } from '@/lib/guard';
 import { today, daysAgo } from '@/lib/clock';
 import { pick } from '@/lib/i18n';
 import { Card, CardHead, PageHead, Grid, Stat, Callout, Empty, Mono, fmtDate } from '@/components/ui';
+import { ComplaintsPanel, MapPanel } from '@/components/role-panels';
 import { TaskTable, CaseTable } from '@/components/lists';
 import { Pill, RoleName } from '@/components/labels';
 
@@ -53,6 +54,11 @@ export default async function FieldHome() {
           'आपके काम, आपके भ्रमण, और उनसे जुड़े प्रकरण। सबूत जमा करना अंत नहीं — कोई और उसे जाँचेगा।',
         )}
       />
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <ComplaintsPanel s={session} mode="respond" />
+        <MapPanel title={pick(lang, 'Your schools on the map', 'आपके विद्यालय मानचित्र पर')} height={300} />
+      </div>
 
       <Grid cols={5}>
         <Stat label={pick(lang, 'To do', 'करना है')} value={todo.length} tone="brand" href="/tasks?filter=todo" />

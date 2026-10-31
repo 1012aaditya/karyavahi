@@ -190,7 +190,7 @@ export function mapData(s: Session, opts: { parentId?: string; hierarchy?: Hiera
       type: 'Feature', id: k.id,
       geometry: JSON.parse(k.boundary!),
       properties: {
-        id: k.id, name: k.name, level: k.level, geometry_source: k.geometry_source,
+        id: k.id, name: k.name, level: k.level, geometry_source: k.geometry_source, lon: k.centroid_lon, lat: k.centroid_lat,
         severity: sev(u), relPp: u?.relPp ?? null, overallRelPp: u?.overallRelPp ?? null, prevPct: u?.focus?.prevPct ?? u?.prevPct ?? null, currPct: u?.focus?.currPct ?? u?.currPct ?? null,
         z: u?.z ?? null, nCurr: u?.nCurr ?? 0, reason: u?.reason ?? 'No assessment data in scope',
         focus: u?.focus ? `Class ${u.focus.grade} ${u.focus.competency_id}` : null, hotChildren: u?.hotChildren ?? 0, schools: u?.schools ?? 0,

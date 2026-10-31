@@ -18,7 +18,7 @@ interface Envelope { status: 'ok' | 'unconfigured' | 'error'; briefing?: Briefin
 
 const href = (id: string) =>
   id.startsWith('CASE-') ? `/cases/${id}` : id.startsWith('TSK-') ? `/tasks/${id}` : id.startsWith('INT-') ? `/interventions/${id}`
-  : id.startsWith('FND-') ? `/findings/${id}` : id.startsWith('SCH-') ? `/schools/${id}` : `/search?q=${id}`;
+  : id.startsWith('FND-') ? `/findings/${id}` : id.startsWith('CMP-') ? `/complaints/${id}` : id.startsWith('SCH-') ? `/schools/${id}` : `/search?q=${id}`;
 
 export function SourceChip({ id }: { id: string }) {
   return (

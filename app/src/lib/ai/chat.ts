@@ -34,7 +34,7 @@ export type ChatEvent =
   | { type: 'error'; message: string; retryable: boolean };
 
 const MAX_TURNS = 8;
-export const ID_RE = /\b(?:CASE-\d{4}|TSK-\d{5}|EVD-\d{6}|FND-\d{5}|PLN-\d{5}|APR-\d{5}|OUT-\d{4}|DGN-\d{5}|CEV-\d{6}|VIS-\d{6}|IMP-\d{4}|INT-\d{2}|BLKR-\d{5}|RPT-\d{5}|SCH-\d{5}|CLU-\d{3}|BLK-\d{2}|DST-\d{2})\b/g;
+export const ID_RE = /\b(?:CASE-\d{4}|TSK-\d{5}|EVD-\d{6}|FND-\d{5}|PLN-\d{5}|APR-\d{5}|OUT-\d{4}|DGN-\d{5}|CEV-\d{6}|VIS-\d{6}|IMP-\d{4}|INT-\d{2}|CMP-\d{4}|BLKR-\d{5}|RPT-\d{5}|SCH-\d{5}|CLU-\d{3}|BLK-\d{2}|DST-\d{2})\b/g;
 
 const TOOL_LABEL: Record<string, string> = {
   get_dashboard_summary: 'Reading your dashboard summary',
@@ -54,6 +54,7 @@ const TOOL_LABEL: Record<string, string> = {
   get_report_data: 'Building report data',
   get_review_meeting_agenda: 'Drafting the review agenda',
   search_records: 'Searching records',
+  get_complaints: 'Reading complaints',
 };
 
 /** Stable instructions — identical for every user and request, so the prefix caches. */

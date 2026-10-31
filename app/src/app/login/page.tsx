@@ -88,6 +88,7 @@ export default async function LoginPage({
           <Link href="/demo" className="btn-quiet h-11 w-full">
             <Icon name="users" size={16} /> Explore with a demo persona
           </Link>
+          <p className="mt-4 text-center text-[13px] text-ink-soft">New to Karyavahi? <Link href="/register" className="link">Request an account</Link> · <Link href="/register/status" className="link">Check a request</Link></p>
         </div>
       </div>
     </AuthFrame>

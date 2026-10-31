@@ -25,13 +25,13 @@ export interface MapUnit {
 const ORDER: Sev[] = ['critical', 'significant', 'moderate', 'stable', 'improving', 'insufficient'];
 const pp = (v: number | null) => (v === null ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)} pp`);
 
-export function HotspotMap({ units, selectedId, levelLabel, childLevel }: { units: MapUnit[]; selectedId: string | null; levelLabel: string; childLevel: string }) {
+export function HotspotMap({ units, selectedId, levelLabel, childLevel, forceList = false }: { units: MapUnit[]; selectedId: string | null; levelLabel: string; childLevel: string; forceList?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
   const [q, setQ] = useState('');
   const [pending, start] = useTransition();
-  const view = sp.get('view') === 'list' ? 'list' : 'map';
+  const view = forceList || sp.get('view') === 'list' ? 'list' : 'map';
   const sevFilter = new Set((sp.get('sev') ?? '').split(',').filter(Boolean));
 
   const set = (patch: Record<string, string | null>) => {
@@ -57,7 +57,7 @@ export function HotspotMap({ units, selectedId, levelLabel, childLevel }: { unit
           <Icon name="search" size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Find a ${childLevel}…`} aria-label={`Find a ${childLevel}`} className="input h-9 w-52 pl-8 text-[13px]" />
         </div>
-        <div className="inline-flex rounded-lg border border-line-strong bg-white p-0.5" role="group" aria-label="View">
+        <div className={`inline-flex rounded-lg border border-line-strong bg-white p-0.5 ${forceList ? 'hidden' : ''}`} role="group" aria-label="View">
           {(['map', 'list'] as const).map((v) => (
             <button key={v} type="button" onClick={() => set({ view: v === 'map' ? null : 'list' })} aria-pressed={view === v}
               className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] ${view === v ? 'bg-navy text-white' : 'text-ink-soft hover:text-ink'}`}>

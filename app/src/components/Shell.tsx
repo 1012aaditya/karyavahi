@@ -15,6 +15,8 @@ import { fmtDate } from './ui';
 import { AssistantDrawer } from './Chat';
 import { may } from '@/lib/guard';
 import { aiStatus } from '@/lib/ai/config';
+import { listComplaints } from '@/lib/complaints';
+import { verificationQueue, canDecide } from '@/lib/onboarding';
 
 /**
  * The application frame: a navy sidebar with the eight sections, and a light header with the
@@ -40,6 +42,8 @@ export default async function Shell({ children }: { children: ReactNode }) {
     evidence: countEvidenceToCheck(session),
     tasks: countTasks(session, { ownerUserId: session.user_id, status: ['assigned', 'acknowledged', 'in_progress', 'sent_back'] }),
     notifications: countUnread(session),
+    complaints: listComplaints(session, { queue: 'mine', limit: 500 }).length,
+    accounts: verificationQueue(session).filter((r) => r.status === 'approval_pending' && canDecide(session, r).allowed).length,
   };
   const sections: ClientNavSection[] = navFor(session).map((s) => ({
     href: s.href, icon: s.icon, label: t(lang, s.key), badge: s.badge ? badges[s.badge] : undefined,
@@ -123,6 +127,9 @@ export default async function Shell({ children }: { children: ReactNode }) {
             <Link href="/notifications" className="flex items-center gap-2 rounded-md px-2.5 py-2 text-[13px] text-ink-soft hover:bg-paper-sunk hover:text-ink">
               <Icon name="bell" size={16} />{t(lang, 'navNotifications')}
               {badges.notifications > 0 ? <span className="tnum ml-auto text-[12px] text-ink-faint">{badges.notifications}</span> : null}
+            </Link>
+            <Link href="/account" className="flex items-center gap-2 rounded-md px-2.5 py-2 text-[13px] text-ink-soft hover:bg-paper-sunk hover:text-ink">
+              <Icon name="user" size={16} />{t(lang, 'navAccount')}
             </Link>
             <div className="sm:hidden"><LanguageToggle current={lang} compact /></div>
             <form action="/api/sign-out" method="post">

@@ -58,6 +58,12 @@ export const T: Dict = {
   navDistrictDesk: { en: 'District desk', hi: 'ज़िला डेस्क' },
   navStateDesk: { en: 'State desk', hi: 'राज्य डेस्क' },
   navSearch: { en: 'Search', hi: 'खोज' },
+  navComplaints: { en: 'Complaints', hi: 'शिकायतें' },
+  navComplaintNew: { en: 'Raise a complaint', hi: 'शिकायत दर्ज करें' },
+  navAccounts: { en: 'Accounts & approvals', hi: 'खाते व स्वीकृति' },
+  navHierarchy: { en: 'Organisation', hi: 'संगठन' },
+  navGeography: { en: 'Geography', hi: 'भूगोल' },
+  navAccount: { en: 'My account', hi: 'मेरा खाता' },
 
   // case anatomy
   theFinding: { en: 'The finding', hi: 'निष्कर्ष' },

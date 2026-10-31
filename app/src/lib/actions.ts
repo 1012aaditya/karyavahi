@@ -263,3 +263,193 @@ export async function generateReportAction(_prev: State, form: FormData): Promis
   if (res.ok) redirect(`/reports/${id}?generated=1`);
   return res;
 }
+
+// ------------------------------------------------------------------ complaints
+export async function createComplaintAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const { createComplaint } = await import('./complaints');
+  let id = '';
+  const res = await attempt(() => {
+    id = createComplaint(s, {
+      category: str(form, 'category'), title: str(form, 'title'), description: str(form, 'description'),
+      priority: str(form, 'priority'), severity: str(form, 'severity') || 'moderate',
+      schoolId: str(form, 'school_id') || null, restricted: form.get('restricted') === '1',
+      accusedUserId: str(form, 'accused_user_id') || null, caseId: str(form, 'case_id') || null,
+    });
+  }, 'Complaint submitted.');
+  revalidatePath('/complaints');
+  if (res.ok) redirect(`/complaints/${id}?submitted=1`);
+  return res;
+}
+
+export async function complaintActionAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const { actOnComplaint, STATUS } = await import('./complaints');
+  const id = str(form, 'complaint_id');
+  let to = '';
+  const res = await attempt(() => { to = actOnComplaint(s, id, str(form, 'action'), str(form, 'note')); }, 'Done.');
+  if (res.ok) res.ok = `Updated: now "${STATUS[to]?.label ?? to}".`;
+  revalidatePath(`/complaints/${id}`);
+  revalidatePath('/complaints');
+  return res;
+}
+
+export async function escalateComplaintAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const { escalateComplaint } = await import('./complaints');
+  const id = str(form, 'complaint_id');
+  let to: string | null = null;
+  const res = await attempt(() => { to = escalateComplaint(s, id, str(form, 'reason'), false); }, 'Escalated.');
+  if (res.ok) res.ok = to ? 'Escalated to the next designated authority.' : 'There is no higher designated authority; the attempt was recorded.';
+  revalidatePath(`/complaints/${id}`);
+  return res;
+}
+
+export async function linkComplaintCaseAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const { linkCase } = await import('./complaints');
+  const id = str(form, 'complaint_id');
+  const res = await attempt(() => linkCase(s, id, str(form, 'case_id').toUpperCase()), 'Case linked.');
+  revalidatePath(`/complaints/${id}`);
+  return res;
+}
+
+export async function complaintSweepAction(_prev: State, _form: FormData): Promise<State> {
+  const s = await requireSession();
+  const { complaintSlaSweep } = await import('./complaints');
+  const { may: canDo } = await import('./guard');
+  if (!canDo(s, 'demo.reset') && !canDo(s, 'settings.configure')) return { error: 'Only the system or demo administrator can run the sweep by hand.' };
+  let r = { ackEscalated: 0, resolutionEscalated: 0 };
+  const res = await attempt(() => { r = complaintSlaSweep(); }, 'Sweep complete.');
+  if (res.ok) res.ok = `Complaint SLA sweep: ${r.ackEscalated} escalated for missed acknowledgement, ${r.resolutionEscalated} for missed resolution.`;
+  revalidatePath('/complaints');
+  return res;
+}
+
+// ------------------------------------------------------------------ onboarding & accounts
+export async function registerAction(_prev: State, form: FormData): Promise<State> {
+  const { createRegistration } = await import('./onboarding');
+  let out = { id: '', code: '' };
+  const res = await attempt(() => {
+    out = createRegistration({
+      fullName: str(form, 'full_name'), email: str(form, 'email'), mobile: str(form, 'mobile') || undefined,
+      organisation: str(form, 'organisation') || undefined, role: str(form, 'role'),
+      scopeType: str(form, 'scope_type'), scopeId: str(form, 'scope_id'), affiliationRef: str(form, 'affiliation_ref') || undefined,
+    });
+  }, 'Request created.');
+  if (res.ok) redirect(`/register/status?id=${out.id}&email=${encodeURIComponent(str(form, 'email'))}&code=${out.code}`);
+  return res;
+}
+
+export async function verifyEmailAction(_prev: State, form: FormData): Promise<State> {
+  const { verifyEmail } = await import('./onboarding');
+  const id = str(form, 'id'); const email = str(form, 'email');
+  const res = await attempt(() => verifyEmail(id, email, str(form, 'code')), 'Email verified.');
+  if (res.ok) redirect(`/register/status?id=${id}&email=${encodeURIComponent(email)}`);
+  return res;
+}
+
+export async function affiliationAction(_prev: State, form: FormData): Promise<State> {
+  const { checkAffiliation } = await import('./onboarding');
+  const id = str(form, 'id'); const email = str(form, 'email');
+  let r = { passed: false, message: '' };
+  try { r = checkAffiliation(id, email, str(form, 'affiliation_ref') || undefined); }
+  catch (e) { return { error: e instanceof Refused ? e.message : (e as Error).message }; }
+  if (!r.passed) return { error: r.message };
+  redirect(`/register/status?id=${id}&email=${encodeURIComponent(email)}`);
+}
+
+export async function respondInfoAction(_prev: State, form: FormData): Promise<State> {
+  const { respondToInfo } = await import('./onboarding');
+  const id = str(form, 'id'); const email = str(form, 'email');
+  const res = await attempt(() => respondToInfo(id, email, str(form, 'response')), 'Sent to the verifier.');
+  if (res.ok) redirect(`/register/status?id=${id}&email=${encodeURIComponent(email)}`);
+  return res;
+}
+
+export async function decideRegistrationAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const { decideRegistration } = await import('./onboarding');
+  const action = str(form, 'action') as 'approve' | 'reject' | 'request_info' | 'reassign';
+  let created: string | null = null;
+  const res = await attempt(() => { created = decideRegistration(s, str(form, 'id'), action, str(form, 'reason'), str(form, 'reassign_to') || undefined); }, 'Done.');
+  if (res.ok) res.ok = action === 'approve' ? `Approved${created ? ` - account ${created} is active.` : '.'}` : action === 'reject' ? 'Rejected; the applicant sees your reason.' : action === 'request_info' ? 'Information requested from the applicant.' : 'Verifier reassigned.';
+  revalidatePath('/admin/accounts');
+  return res;
+}
+
+export async function requestChangeAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const { requestChange } = await import('./onboarding');
+  let id = '';
+  const res = await attempt(() => { id = requestChange(s, str(form, 'role'), str(form, 'scope_type'), str(form, 'scope_id'), str(form, 'reason')); }, 'Requested.');
+  if (res.ok) res.ok = `Change request ${id} sent to your designated verifier. Nothing changes until it is approved.`;
+  revalidatePath('/account');
+  return res;
+}
+
+export async function accountStatusAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const { requirePermission } = await import('./authz');
+  const { setAccountStatus } = await import('./org');
+  const userId = str(form, 'user_id');
+  const to = str(form, 'to') as 'active' | 'suspended' | 'deactivated';
+  const reason = str(form, 'reason');
+  const res = await attempt(() => {
+    requirePermission(s, 'manage_users', { kind: 'user', userId });
+    if (!['active', 'suspended', 'deactivated'].includes(to)) throw new Refused('Unknown status.', 'input');
+    if (reason.length < 5) throw new Refused('A written reason is required.', 'input');
+    setAccountStatus(s, userId, to, reason);
+  }, `Account is now ${to}.`);
+  revalidatePath('/admin/accounts');
+  return res;
+}
+
+export async function setManagerAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const { requirePermission } = await import('./authz');
+  const { setManager, userCard, ROLE_RANK } = await import('./org');
+  const userId = str(form, 'user_id');
+  const managerId = str(form, 'manager_id') || null;
+  const res = await attempt(() => {
+    requirePermission(s, 'manage_hierarchy', { kind: 'user', userId });
+    const u = userCard(userId);
+    const m = managerId ? userCard(managerId) : null;
+    if (managerId && (!m || m.status !== 'active')) throw new Refused('The designated authority must be an active user.', 'input');
+    if (u && m && ROLE_RANK[m.role] <= ROLE_RANK[u.role]) throw new Refused('The designated authority must hold a more senior role.', 'input');
+    if (managerId === userId) throw new Refused('A user cannot report to themselves.', 'input');
+    setManager(s, userId, managerId, str(form, 'reason') || 'Reporting line updated');
+  }, 'Reporting line updated.');
+  revalidatePath('/admin/hierarchy');
+  return res;
+}
+
+export async function delegationAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const { requirePermission } = await import('./authz');
+  const org = await import('./org');
+  const op = str(form, 'op');
+  const res = await attempt(() => {
+    if (op === 'revoke') {
+      const d = org.listDelegations(() => true).find((x) => x.id === str(form, 'id'));
+      if (!d) throw new Refused('Unknown delegation.', 'input');
+      requirePermission(s, 'manage_hierarchy', { kind: 'scope', type: d.scope_type, id: d.scope_id });
+      org.revokeDelegation(s, d.id, str(form, 'reason') || 'Revoked');
+      return;
+    }
+    const from = org.userCard(str(form, 'from_user_id'));
+    const to = org.userCard(str(form, 'to_user_id'));
+    if (!from || !to) throw new Refused('Choose both officers.', 'input');
+    requirePermission(s, 'manage_hierarchy', { kind: 'user', userId: from.id });
+    requirePermission(s, 'manage_hierarchy', { kind: 'user', userId: to.id });
+    if (from.id === to.id) throw new Refused('An officer cannot delegate to themselves.', 'input');
+    if (org.ROLE_RANK[to.role] < org.ROLE_RANK[from.role] - 1) throw new Refused('Acting charge can only go to someone at most one level junior.', 'input');
+    const starts = str(form, 'starts_on'); const ends = str(form, 'ends_on');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(starts) || !/^\d{4}-\d{2}-\d{2}$/.test(ends) || ends < starts) throw new Refused('Give a valid date range.', 'input');
+    const reason = str(form, 'reason');
+    if (reason.length < 8) throw new Refused('Give the reason for the acting arrangement.', 'input');
+    org.createDelegation(s, { from_user_id: from.id, to_user_id: to.id, role: from.role, scope_type: from.scope_type, scope_id: from.scope_id, starts_on: starts, ends_on: ends, reason });
+  }, op === 'revoke' ? 'Delegation revoked.' : 'Acting arrangement created.');
+  revalidatePath('/admin/hierarchy');
+  return res;
+}

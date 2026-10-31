@@ -27,7 +27,7 @@ interface Msg {
 export interface ChatContext { path?: string; caseId?: string; area?: { level: string; id: string }; reportId?: string; label?: string }
 
 const STORE = 'kv_ai_chat_v1';
-const ID_RE = /\b(CASE-\d{4}|TSK-\d{5}|EVD-\d{6}|FND-\d{5}|PLN-\d{5}|APR-\d{5}|OUT-\d{4}|DGN-\d{5}|CEV-\d{6}|VIS-\d{6}|IMP-\d{4}|INT-\d{2}|BLKR-\d{5}|RPT-\d{5}|SCH-\d{5}|CLU-\d{3}|BLK-\d{2}|DST-\d{2})\b/;
+const ID_RE = /\b(CASE-\d{4}|TSK-\d{5}|EVD-\d{6}|FND-\d{5}|PLN-\d{5}|APR-\d{5}|OUT-\d{4}|DGN-\d{5}|CEV-\d{6}|VIS-\d{6}|IMP-\d{4}|INT-\d{2}|CMP-\d{4}|BLKR-\d{5}|RPT-\d{5}|SCH-\d{5}|CLU-\d{3}|BLK-\d{2}|DST-\d{2})\b/;
 
 // ---------------------------------------------------------------- minimal, safe markdown
 function inline(text: string, keyBase: string): ReactNode[] {

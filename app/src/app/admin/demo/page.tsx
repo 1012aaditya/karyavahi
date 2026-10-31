@@ -10,7 +10,7 @@ import { rounds } from '@/lib/repo';
 import { pick } from '@/lib/i18n';
 import { Card, CardHead, PageHead, Grid, Stat, Callout, Mono, fmtDate, fmtInt } from '@/components/ui';
 import { ActionForm, Disclose } from '@/components/ActionForm';
-import { reminderSweepAction, setClockAction, demoResetAction } from '@/lib/actions';
+import { reminderSweepAction, setClockAction, demoResetAction, complaintSweepAction } from '@/lib/actions';
 import { AS_OF_DATE } from '@domain/catalog';
 
 /**
@@ -116,6 +116,10 @@ export default async function AdminHome() {
           </Callout>
           <ActionForm action={reminderSweepAction} hidden={{ as_of: today() }}
             label={pick(lang, 'Run the sweep now', 'अभी चलाएँ')} tone="quiet" />
+          <div className="border-t border-line pt-3">
+            <p className="mb-2 text-[13px] text-ink-soft">Complaints: escalate every complaint past its acknowledgement or resolution deadline to the next designated authority. Each escalation is written to the complaint timeline and the audit chain; running it twice on the same date escalates nothing more.</p>
+            <ActionForm action={complaintSweepAction} label="Run the complaint SLA sweep" tone="quiet" />
+          </div>
         </div>
       </Card>
 

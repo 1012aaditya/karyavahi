@@ -5,6 +5,8 @@ import { may } from '@/lib/guard';
 import { count } from '@/lib/db';
 import { countAudit, listImports, listJobs } from '@/lib/feed';
 import { aiStatus } from '@/lib/ai/config';
+import { can } from '@/lib/authz';
+import { verificationQueue } from '@/lib/onboarding';
 import { pick } from '@/lib/i18n';
 import { PageHead, Callout, fmtInt, fmtDate } from '@/components/ui';
 import { Icon } from '@/components/Icon';
@@ -46,6 +48,25 @@ export default async function AdminHub() {
       href: '/admin/access', icon: 'users', title: pick(lang, 'Roles, permissions & scope', 'भूमिकाएँ व अनुमतियाँ'),
       body: pick(lang, 'Who can do what, at which level. The same matrix the server enforces.', 'कौन क्या कर सकता है — वही तालिका जो सर्वर लागू करता है।'),
       stat: `${fmtInt(count('select count(*) c from users where status = \'active\''))} ${pick(lang, 'active accounts', 'सक्रिय खाते')}`,
+    });
+  }
+  if (can(session, 'approve_accounts') || can(session, 'manage_users')) {
+    tiles.push({
+      href: '/admin/accounts', icon: 'users', title: pick(lang, 'Accounts & approvals', 'खाते व स्वीकृति'),
+      body: pick(lang, 'Registration and change requests routed to you; suspend or reactivate accounts junior to yours.', 'आपको भेजे गए पंजीकरण अनुरोध; खाते निलंबित या सक्रिय करें।'),
+      stat: `${verificationQueue(session).filter((r) => r.status === 'approval_pending').length} ${pick(lang, 'awaiting approval', 'स्वीकृति प्रतीक्षित')}`,
+    });
+  }
+  if (can(session, 'manage_hierarchy') || may(session, 'audit.view')) {
+    tiles.push({
+      href: '/admin/hierarchy', icon: 'layers', title: pick(lang, 'Organisation & reporting lines', 'संगठन'),
+      body: pick(lang, 'Who reports to whom, designated authorities and acting arrangements.', 'कौन किसे रिपोर्ट करता है, कार्यवाहक व्यवस्था।'),
+    });
+  }
+  if (can(session, 'manage_geography') || may(session, 'audit.view')) {
+    tiles.push({
+      href: '/admin/geography', icon: 'map', title: pick(lang, 'Geography', 'भूगोल'),
+      body: pick(lang, 'Hierarchies, levels, geometry provenance and city membership.', 'पदानुक्रम, स्तर और नगर सदस्यता।'),
     });
   }
   if (may(session, 'settings.configure')) {

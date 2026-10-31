@@ -9,6 +9,7 @@ import {
 import { today } from '@/lib/clock';
 import { pick } from '@/lib/i18n';
 import { Card, CardHead, PageHead, Grid, Stat, Callout, Facts, Field, Empty, Mono, fmtDate, fmtPct, fmtInt } from '@/components/ui';
+import { ComplaintsPanel, MapPanel } from '@/components/role-panels';
 import { TaskTable } from '@/components/lists';
 import { Pill } from '@/components/labels';
 import { TrendChart } from '@/components/charts';
@@ -107,7 +108,12 @@ export default async function SchoolHome() {
       ) : null}
 
       <Card>
-        <CardHead
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <ComplaintsPanel s={session} mode="mine" />
+        <MapPanel title={pick(lang, 'Your school', 'आपका विद्यालय')} height={260} />
+      </div>
+
+      <CardHead
           title={pick(lang, 'How your children are doing', 'आपके बच्चों की प्रगति')}
           hint={pick(lang, 'Share reaching the grade benchmark in each round.', 'प्रत्येक दौर में ग्रेड मानक तक पहुँचने वाले बच्चों का प्रतिशत।')}
         />

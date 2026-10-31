@@ -1,6 +1,7 @@
 import type { Session } from './session';
 import { may } from './guard';
 import { ROLE_LABELS } from '@domain/permissions';
+import { can } from './authz';
 
 /**
  * Navigation, derived from the permission matrix rather than hand-listed per role, so a role
@@ -11,7 +12,7 @@ import { ROLE_LABELS } from '@domain/permissions';
  * a section rather than each being a destination of its own.
  */
 
-export type BadgeKey = 'approvals' | 'evidence' | 'tasks' | 'notifications';
+export type BadgeKey = 'approvals' | 'evidence' | 'tasks' | 'notifications' | 'complaints' | 'accounts';
 
 export interface NavItem {
   href: string;
@@ -85,6 +86,12 @@ export function navFor(s: Session): NavSection[] {
     out.push({ ...exec[0], icon: 'clipboard', children: exec.slice(1) });
   }
 
+  // 5b. Complaints & grievances
+  if (can(s, 'view_complaint')) {
+    out.push({ href: '/complaints', key: 'navComplaints', icon: 'inbox', badge: 'complaints',
+      children: can(s, 'create_complaint') ? [{ href: '/complaints/new', key: 'navComplaintNew' }] : [] });
+  }
+
   // 6. Impact & reports
   if (may(s, 'report.export')) {
     out.push({
@@ -104,6 +111,9 @@ export function navFor(s: Session): NavSection[] {
   if (may(s, 'audit.view')) admin.push({ href: '/audit', key: 'navAudit' });
   if (may(s, 'data.import')) admin.push({ href: '/import', key: 'navImport' });
   if (may(s, 'audit.view')) admin.push({ href: '/ai-log', key: 'navAi' });
+  if (can(s, 'approve_accounts') || can(s, 'manage_users')) admin.push({ href: '/admin/accounts', key: 'navAccounts', badge: 'accounts' });
+  if (can(s, 'manage_hierarchy') || may(s, 'audit.view')) admin.push({ href: '/admin/hierarchy', key: 'navHierarchy' });
+  if (can(s, 'manage_geography') || may(s, 'audit.view')) admin.push({ href: '/admin/geography', key: 'navGeography' });
   if (may(s, 'settings.configure')) admin.push({ href: '/settings', key: 'navSettings' });
   if (may(s, 'settings.configure') || may(s, 'demo.reset')) admin.push({ href: '/admin/jobs', key: 'navJobs' });
   if (may(s, 'demo.reset')) {

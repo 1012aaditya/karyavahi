@@ -17,6 +17,7 @@ import { today, daysBetween } from '../clock';
 import { listBlockers } from '../blockers';
 import { buildReport, REPORT_TYPES, type ReportType } from '../reports';
 import { reviewAgenda } from '../agenda';
+import { listComplaints, queueCounts, STATUS as CSTATUS, slaState } from '../complaints';
 import type { CaseStatus, Severity } from '@domain/types';
 
 /**
@@ -286,6 +287,23 @@ const EXEC: Record<string, Exec> = {
     return { data: a, sources: a.items.flatMap((x) => x.sources).slice(0, 50) };
   },
 
+  get_complaints: (s, i) => {
+    const queue = oneOf(i.queue, 'queue', ['mine', 'pending_ack', 'investigating', 'overdue', 'escalated', 'verification', 'resolved', 'submitted_by_me', 'all'] as const) ?? 'all';
+    const rows = listComplaints(s, { queue, limit: int(i.limit, 'limit', 1, 40, 20) });
+    return {
+      data: {
+        note: 'Only complaints this user may see. Restricted complaints show metadata only.',
+        counts: queueCounts(s),
+        complaints: rows.map((c) => ({
+          id: c.id, title: c.title, category: c.category_key, status: CSTATUS[c.status]?.label ?? c.status, priority: c.priority,
+          confidentiality: c.confidentiality, escalation_level: c.escalation_level, assigned_role: c.assigned_role, sla: slaState(c).label || null,
+          description: c.confidentiality === 'restricted' ? '(restricted)' : c.description.slice(0, 300), linked_case: c.case_id,
+        })),
+      },
+      sources: rows.map((c) => c.id),
+    };
+  },
+
   search_records: (s, i) => {
     const q = str(i.query, 'query', 80, true)!;
     const r = search(s, q);
@@ -317,6 +335,7 @@ export const TOOL_DEFS: Anthropic.Beta.BetaTool[] = [
   { name: 'get_data_quality_issues', description: 'Candidate declines blocked by data-quality gates in recent rounds and import batches with rejected rows.', input_schema: obj({}) },
   { name: 'get_report_data', description: 'Deterministic report content built from the case ledger.', input_schema: obj({ report_type: { type: 'string', enum: REPORT_TYPES.map((r) => r.key) } }, ['report_type']) },
   { name: 'get_review_meeting_agenda', description: 'A deterministic agenda for a review meeting: decisions needed, escalations, no-gain outcomes, data issues, upcoming rounds.', input_schema: obj({}) },
+  { name: 'get_complaints', description: 'Complaints and grievances visible to this user (assigned to them, raised by them, routed through them, or in their oversight scope), with SLA state and escalation level. Queues: mine, pending_ack, investigating, overdue, escalated, verification, resolved, submitted_by_me, all.', input_schema: obj({ queue: { type: 'string', enum: ['mine', 'pending_ack', 'investigating', 'overdue', 'escalated', 'verification', 'resolved', 'submitted_by_me', 'all'] }, limit: { type: 'integer', minimum: 1, maximum: 40 } }) },
   { name: 'search_records', description: 'Find cases, schools, interventions, tasks or reports by id or keyword.', input_schema: obj({ query: { type: 'string' } }, ['query']) },
 ].map((t) => ({ ...t, eager_input_streaming: true }));
 

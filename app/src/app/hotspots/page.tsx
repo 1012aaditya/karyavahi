@@ -11,6 +11,10 @@ import { Icon } from '@/components/Icon';
 import { StatusPill, SeverityPill } from '@/components/labels';
 import { HotspotMap, HotspotFilters, type MapUnit } from '@/components/HotspotMap';
 import { SEV_META, type Sev } from '@/lib/sev';
+import { GeoMap } from '@/components/GeoMap';
+import { Suspense } from 'react';
+import { all as dbAll } from '@/lib/db';
+import { complaintsPred, OPEN_STATUSES } from '@/lib/complaints';
 
 /**
  * Learning hotspots. Drill from district to block to cluster to school, with filters for class,
@@ -23,7 +27,7 @@ const LEVELS: Level[] = ['district', 'block', 'cluster', 'school'];
 const PLURAL: Record<Level, string> = { district: 'Districts', block: 'Blocks', cluster: 'Clusters', school: 'Schools' };
 const pp = (v: number | null) => (v === null ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)} pp`);
 
-type SP = { plevel?: string; parent?: string; level?: string; selected?: string; grade?: string; comp?: string; subject?: string; round?: string };
+type SP = { plevel?: string; parent?: string; level?: string; selected?: string; grade?: string; comp?: string; subject?: string; round?: string; view?: string; layer?: string; h?: string };
 
 export default async function HotspotsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const session = await pageSession();
@@ -52,7 +56,14 @@ export default async function HotspotsPage({ searchParams }: { searchParams: Pro
   if (parent && LEVELS.indexOf(parent.level) < LEVELS.indexOf(top) - 1) parent = undefined;
 
   const { level, units, pair } = hotspotUnits(session, filters, parent);
-  const selected = sp.selected ? units.find((u) => u.id === sp.selected) ?? null : null;
+  let selected = sp.selected ? units.find((u) => u.id === sp.selected) ?? null : null;
+  // Selected from the map, search or a city view: resolve it among its own siblings.
+  if (!selected && sp.selected && LEVELS.includes(sp.level as Level) && canSeeUnit(session, sp.level as Level, sp.selected)) {
+    const up = unitPath(sp.level as Level, sp.selected).at(-2);
+    if (up && canSeeUnit(session, up.level, up.id)) selected = hotspotUnits(session, filters, { level: up.level, id: up.id }).units.find((u) => u.id === sp.selected) ?? null;
+    else if (!up || session.scope_id === sp.selected) selected = hotspotUnits(session, filters).units.find((u) => u.id === sp.selected) ?? null;
+  }
+  const view = sp.view === 'list' ? 'list' : 'map';
   // Only levels below the user's own scope appear after the scope root.
   const scopeIdx = LEVELS.indexOf(session.scope_type as Level);
   const crumbs = parent ? unitPath(parent.level, parent.id).filter((c) => LEVELS.indexOf(c.level) > scopeIdx) : [];
@@ -73,6 +84,7 @@ export default async function HotspotsPage({ searchParams }: { searchParams: Pro
     breakdown: ReturnType<typeof unitBreakdown>;
     cases: ReturnType<typeof listCases>;
     blockers: number;
+    complaints: number;
   } = null;
   if (selected) {
     const lv = selected.level;
@@ -80,7 +92,9 @@ export default async function HotspotsPage({ searchParams }: { searchParams: Pro
       ? listCases(session, { open: true, limit: 200 }).filter((c) => c.school_ids.includes(selected.id)).slice(0, 6)
       : listCases(session, { open: true, limit: 6, ...(lv === 'district' ? { districtId: selected.id } : lv === 'block' ? { blockId: selected.id } : { clusterId: selected.id }) });
     const blockers = listBlockers(session, { open: true, limit: 500 }).filter((b) => cases.some((c) => c.id === b.case_id)).length;
-    detail = { breakdown: unitBreakdown(session, lv, selected.id, filters), cases, blockers };
+    const kp = complaintsPred(session, 'k');
+    const complaints = Number(dbAll<{ n: number }>(`select count(*) n from complaints k where (${kp.sql}) and k.status in (${OPEN_STATUSES.map(() => '?').join(',')}) and k.${lv === 'school' ? 'school_id' : `${lv}_id`} = ?`, ...kp.params, ...OPEN_STATUSES, selected.id)[0]?.n ?? 0);
+    detail = { breakdown: unitBreakdown(session, lv, selected.id, filters), cases, blockers, complaints };
   }
 
   const qs = (extra: Record<string, string | undefined>) => {
@@ -101,6 +115,7 @@ export default async function HotspotsPage({ searchParams }: { searchParams: Pro
       />
 
       <div className="card flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+        {view === 'list' ? (
         <nav aria-label="Drill-down path" className="flex flex-wrap items-center gap-1 text-[13px]">
           <Link href={`/hotspots${qs({})}`} className={`rounded-md px-2 py-1 ${crumbs.length === 0 ? 'bg-navy text-white' : 'text-ink-soft hover:bg-paper-sunk hover:text-ink'}`}>
             <Icon name="layers" size={14} className="mr-1 inline" />{scopeName(session.scope_type, session.scope_id)}
@@ -113,6 +128,7 @@ export default async function HotspotsPage({ searchParams }: { searchParams: Pro
           ))}
           <span className="ml-1 text-[12px] text-ink-faint">· showing {PLURAL[level].toLowerCase()}</span>
         </nav>
+        ) : <p className="text-[13px] text-ink-soft"><Icon name="map" size={14} className="mr-1 inline text-ink-faint" />Filters apply to the map and the list.</p>}
         <HotspotFilters competencies={comps.map((c) => ({ id: c.id, label: pick(lang, c.name_en, c.name_hi) }))} rounds={comparableRounds().map((r) => ({ id: r.id, label: `${r.code} · ${r.label}` }))} />
       </div>
 
@@ -122,7 +138,15 @@ export default async function HotspotsPage({ searchParams }: { searchParams: Pro
             <h2 className="text-[15px] font-semibold text-ink">{PLURAL[level]} {parent ? `in ${crumbs.at(-1)?.name ?? ''}` : ''}</h2>
             <p className="text-[12px] text-ink-faint">{pair ? `${pair.prev.code} ${pair.prev.label} → ${pair.curr.code} ${pair.curr.label}` : 'No comparable rounds'}</p>
           </div>
-          <HotspotMap units={mapUnits} selectedId={selected?.id ?? null} levelLabel={PLURAL[level]} childLevel={level} />
+          <div className="mb-3 inline-flex rounded-lg border border-line-strong bg-white p-0.5" role="group" aria-label="View">
+            <Link href={`/hotspots?${new URLSearchParams(Object.entries({ ...sp, view: undefined }).filter(([, v]) => v) as [string, string][])}`} aria-current={view === 'map' ? 'page' : undefined} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] ${view === 'map' ? 'bg-navy text-white' : 'text-ink-soft hover:text-ink'}`}><Icon name="map" size={14} />Map</Link>
+            <Link href={`/hotspots?${new URLSearchParams(Object.entries({ ...sp, view: 'list' }).filter(([, v]) => v) as [string, string][])}`} aria-current={view === 'list' ? 'page' : undefined} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] ${view === 'list' ? 'bg-navy text-white' : 'text-ink-soft hover:text-ink'}`}><Icon name="list" size={14} />List</Link>
+          </div>
+          {view === 'map' ? (
+            <Suspense fallback={<div className="skeleton h-[560px] w-full" />}><GeoMap selectedId={selected?.id ?? sp.selected ?? null} /></Suspense>
+          ) : (
+            <HotspotMap units={mapUnits} selectedId={selected?.id ?? null} levelLabel={PLURAL[level]} childLevel={level} forceList />
+          )}
         </section>
 
         <aside className="space-y-4 xl:sticky xl:top-[96px] xl:self-start">
@@ -193,6 +217,7 @@ export default async function HotspotsPage({ searchParams }: { searchParams: Pro
                   )}
                   {selected.level === 'cluster' ? <Link href={`/schools?cluster=${selected.id}`} className="btn-quiet btn-sm">Schools</Link> : null}
                   <Link href={`/cases?status=open&${selected.level === 'block' ? `block=${selected.id}` : selected.level === 'cluster' ? `cluster=${selected.id}` : selected.level === 'district' ? `district=${selected.id}` : `q=`}`} className="btn-quiet btn-sm">Related cases</Link>
+                  <Link href={`/complaints?queue=all&q=`} className="btn-quiet btn-sm"><Icon name="inbox" size={14} />Complaints ({detail.complaints})</Link>
                   <Link href={`/reports/new?type=block_performance`} className="btn-quiet btn-sm"><Icon name="file" size={14} />Report</Link>
                 </div>
                 <p className="text-[11.5px] text-ink-faint">Ask Karyavahi AI about this area — the assistant knows which one you selected.</p>
