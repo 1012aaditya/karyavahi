@@ -56,11 +56,11 @@ export default async function InterventionPage({ params, searchParams }: { param
   const look = lookupsFor(lang);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="mx-auto max-w-6xl space-y-5">
       <PageHead
         breadcrumb={
           <>
-            <Link href={`/interventions${caseId ? `?case=${caseId}` : ''}`} className="link">{pick(lang, 'Intervention studio', 'हस्तक्षेप स्टूडियो')}</Link>
+            <Link href={`/interventions${caseId ? `?case=${caseId}` : ''}`} className="link">{pick(lang, 'Interventions', 'हस्तक्षेप')}</Link>
             {' › '}<Mono>{i.id}</Mono>
           </>
         }
@@ -112,31 +112,40 @@ export default async function InterventionPage({ params, searchParams }: { param
           title={pick(lang, 'What the evidence says', 'आधार क्या कहता है')}
           right={<EvidenceStrength status={i.evidence.status} lang={lang} />}
         />
-        <div className="card-pad space-y-2.5">
-          <p className="text-[13.5px] leading-relaxed text-ink">{i.evidence.summary}</p>
-          {i.evidence.effect_size_text ? (
-            <Callout tone="warn" title={pick(lang, 'The reported effect, and its spread', 'बताया गया प्रभाव और उसका विस्तार')}>
-              {i.evidence.effect_size_text}
-            </Callout>
-          ) : (
-            <Callout tone="method">
-              {pick(
-                lang,
-                'This card makes no claim about how large an effect to expect. It is a reasonable thing to try for the problem described, and the outcome check is what will say whether it worked here.',
-                'यह कार्ड प्रभाव के आकार का कोई दावा नहीं करता। यह एक उचित प्रयास है, और परिणाम जाँच बताएगी कि यहाँ काम आया या नहीं।',
-              )}
-            </Callout>
-          )}
-          {i.evidence.source_title ? (
-            <p className="text-[12.5px]">
-              <span className="text-ink-faint">{pick(lang, 'Source: ', 'स्रोत: ')}</span>
-              {i.evidence.source_url ? (
-                <a href={i.evidence.source_url} className="link" target="_blank" rel="noreferrer noopener">
-                  {i.evidence.source_title}
-                </a>
-              ) : i.evidence.source_title}
-            </p>
-          ) : null}
+        <div className="grid divide-y divide-line md:grid-cols-2 md:divide-x md:divide-y-0">
+          <div className="space-y-2.5 p-5">
+            <p className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-brand"><Icon name="file" size={13} />{pick(lang, 'Documented evidence', 'प्रलेखित आधार')}</p>
+            {i.evidence.source_title ? (
+              <>
+                <p className="text-[13.5px] leading-relaxed text-ink">{i.evidence.summary}</p>
+                {i.evidence.effect_size_text ? (
+                  <Callout tone="warn" title={pick(lang, 'The reported effect, and its spread', 'बताया गया प्रभाव और उसका विस्तार')}>
+                    {i.evidence.effect_size_text}
+                  </Callout>
+                ) : null}
+                <p className="text-[12.5px]">
+                  <span className="text-ink-faint">{pick(lang, 'Source: ', 'स्रोत: ')}</span>
+                  {i.evidence.source_url ? (
+                    <a href={i.evidence.source_url} className="link" target="_blank" rel="noreferrer noopener">{i.evidence.source_title}</a>
+                  ) : i.evidence.source_title}
+                </p>
+                {i.evidence.status === 'sourced_summary_verify' ? <p className="text-[12px] text-warn">{pick(lang, 'Summary flagged: verify against the source before production use.', 'स्रोत से सत्यापन आवश्यक।')}</p> : null}
+              </>
+            ) : (
+              <p className="text-[13.5px] leading-relaxed text-ink-soft">
+                {pick(lang, 'None. This card cites no published study and makes no claim about how large an effect to expect.', 'कोई नहीं। यह कार्ड किसी अध्ययन का हवाला नहीं देता और प्रभाव का दावा नहीं करता।')}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2.5 bg-paper-sunk/50 p-5">
+            <p className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-warn"><Icon name="info" size={13} />{pick(lang, 'Assumptions — not evidence', 'मान्यताएँ — आधार नहीं')}</p>
+            {!i.evidence.source_title ? <p className="text-[13px] text-ink-soft">{i.evidence.summary}</p> : null}
+            <ul className="list-disc space-y-1 pl-5 text-[13px] text-ink-soft">
+              <li>{pick(lang, 'It will work here only if:', 'यहाँ तभी काम करेगा जब:')} {i.delivery_conditions.join('; ')}.</li>
+              <li>{pick(lang, 'Cost', 'लागत')} {fmtInr(i.cost_basis.amount_inr)} / {i.cost_basis.unit} {pick(lang, 'is an illustrative card figure', 'एक उदाहरणार्थ आँकड़ा है')}{i.cost_basis.note ? ` — ${i.cost_basis.note.replace(/\.$/, '')}` : ''}.</li>
+              <li>{pick(lang, 'Whether it worked here is decided by the next assessment round, not by delivery.', 'यहाँ काम आया या नहीं, यह अगला आकलन तय करेगा।')}</li>
+            </ul>
+          </div>
         </div>
       </Card>
 

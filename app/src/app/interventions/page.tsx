@@ -11,15 +11,15 @@ import { Icon } from '@/components/Icon';
 import type { Intervention } from '@domain/types';
 
 /**
- * Intervention Studio. Without a case it is the catalogue, filterable. Opened from a case
+ * Intervention Studio. Without a case it is the catalogue — searchable rows. Opened from a case
  * (?case=CASE-0184) it ranks the catalogue against that case with transparent, rule-based
- * points and lets the officer pick two or three to compare side by side.
+ * points and lets the officer tick two or three to compare side by side.
  *
  * Three cards cite published evidence (flagged: verify before production); fifteen make no
  * effect-size claim at all. Every cost is illustrative.
  */
 
-type SP = { case?: string; subject?: string; category?: string; lever?: string; evidence?: string };
+type SP = { case?: string; subject?: string; category?: string; lever?: string; evidence?: string; q?: string };
 
 const CATEGORY: Record<string, string> = {
   numeracy: 'Numeracy', literacy: 'Literacy', attendance: 'Attendance', teacher_support: 'Teacher support', staffing: 'Staffing', materials: 'Materials',
@@ -33,6 +33,7 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
   const caseId = sp.case && getCase(session, sp.case.toUpperCase()) ? sp.case.toUpperCase() : undefined;
   const ranked = caseId ? matchForCase(session, caseId) : null;
   const hist = interventionHistory();
+  const q = sp.q?.trim().toLowerCase().slice(0, 60) || '';
   const comps = new Map(competencies().map((c) => [c.id, pick(lang, c.name_en, c.name_hi)]));
 
   const rows: { iv: Intervention; m: InterventionMatch | null }[] = ranked
@@ -42,24 +43,22 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
     (!sp.subject || iv.domains.includes(sp.subject as 'literacy' | 'numeracy')) &&
     (!sp.category || iv.category === sp.category) &&
     (!sp.lever || iv.lever === sp.lever) &&
-    (!sp.evidence || iv.evidence.status === sp.evidence));
+    (!sp.evidence || iv.evidence.status === sp.evidence) &&
+    (!q || `${iv.id} ${iv.name} ${iv.description} ${CATEGORY[iv.category] ?? ''}`.toLowerCase().includes(q)));
 
-  const link = (patch: Partial<SP>) => {
-    const p = new URLSearchParams();
-    for (const [k, v] of Object.entries({ ...sp, ...patch })) if (v) p.set(k, String(v));
-    return `/interventions${p.toString() ? `?${p}` : ''}`;
-  };
-  const chip = (on: boolean) => `rounded-full border px-3 py-1 text-[12.5px] ${on ? 'border-navy bg-navy text-white' : 'border-line-strong bg-white text-ink-soft hover:border-ink-faint hover:text-ink'}`;
+  const sel = 'h-9 rounded-lg border border-line-strong bg-white px-2.5 text-[13px] text-ink';
   const sourced = rows.filter((r) => r.iv.evidence.status === 'sourced_summary_verify').length;
+  const filtered = Boolean(q || sp.subject || sp.category || sp.lever || sp.evidence);
 
   return (
     <div className="space-y-5">
       <PageHead
-        title={pick(lang, 'Intervention studio', 'हस्तक्षेप स्टूडियो')}
+        title={pick(lang, 'Interventions', 'हस्तक्षेप')}
         sub={pick(lang,
-          'Choose what to do about a learning drop: what each option targets, what it needs, what it costs, who can approve it, and what the evidence actually says.',
-          'गिरावट पर क्या करें — लक्ष्य, आवश्यकता, लागत, स्वीकृति अधिकार और आधार।')}
-        right={<Link href={`/interventions/compare${caseId ? `?case=${caseId}` : ''}`} className="btn-quiet"><Icon name="scale" size={15} />{pick(lang, 'Compare options', 'तुलना')}</Link>}
+          'Choose what to do about a learning decline: what each option targets, costs, needs approval from, and what the evidence actually says.',
+          'गिरावट पर क्या करें — लक्ष्य, लागत, स्वीकृति अधिकार और आधार।')}
+        meta={<>{caseId ? `Ranked for ${caseId}` : 'Full catalogue'} · costs are illustrative</>}
+        right={<Link href={`/interventions/compare${caseId ? `?case=${caseId}` : ''}`} className="btn-primary"><Icon name="scale" size={15} />{pick(lang, 'Compare options', 'तुलना')}</Link>}
       />
 
       {ranked && caseId ? (
@@ -76,89 +75,75 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
           </div>
         </section>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-line bg-white px-4 py-3 shadow-card"><p className="label">Cards</p><p className="kpi-num mt-1.5 text-ink">{rows.length}</p></div>
-          <div className="rounded-xl border border-line bg-white px-4 py-3 shadow-card"><p className="label">Cite a published source</p><p className="kpi-num mt-1.5 text-warn">{sourced}</p><p className="mt-1 text-[12px] text-ink-faint">flagged: verify before production</p></div>
-          <div className="rounded-xl border border-line bg-white px-4 py-3 shadow-card"><p className="label">Make no effect claim</p><p className="kpi-num mt-1.5 text-ink">{rows.length - sourced}</p><p className="mt-1 text-[12px] text-ink-faint">plausible, unevidenced here</p></div>
+        <div className="grid divide-y divide-line overflow-hidden rounded-xl border border-line bg-white sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <div className="px-5 py-3.5"><p className="text-[12.5px] text-ink-soft">In the catalogue</p><p className="kpi-num mt-1 text-ink">{rows.length}</p></div>
+          <div className="px-5 py-3.5"><p className="text-[12.5px] text-ink-soft">Cite a published source</p><p className="kpi-num mt-1 text-warn">{sourced}</p><p className="text-[12px] text-ink-faint">flagged: verify before production</p></div>
+          <div className="px-5 py-3.5"><p className="text-[12.5px] text-ink-soft">Make no effect claim</p><p className="kpi-num mt-1 text-ink">{rows.length - sourced}</p><p className="text-[12px] text-ink-faint">plausible, unevidenced here</p></div>
         </div>
       )}
 
-      <div className="card flex flex-wrap items-center gap-x-4 gap-y-2 p-3">
-        <div className="flex flex-wrap items-center gap-1.5"><span className="label mr-1">Subject</span>
-          <Link href={link({ subject: undefined })} className={chip(!sp.subject)}>All</Link>
-          <Link href={link({ subject: 'numeracy' })} className={chip(sp.subject === 'numeracy')}>Numeracy</Link>
-          <Link href={link({ subject: 'literacy' })} className={chip(sp.subject === 'literacy')}>Literacy</Link>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5"><span className="label mr-1">Type</span>
-          <Link href={link({ category: undefined })} className={chip(!sp.category)}>All</Link>
-          {Object.entries(CATEGORY).map(([k, v]) => <Link key={k} href={link({ category: k })} className={chip(sp.category === k)}>{v}</Link>)}
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5"><span className="label mr-1">Authority</span>
-          <Link href={link({ lever: undefined })} className={chip(!sp.lever)}>All</Link>
-          <Link href={link({ lever: 'block' })} className={chip(sp.lever === 'block')}>Block</Link>
-          <Link href={link({ lever: 'district' })} className={chip(sp.lever === 'district')}>District</Link>
-          <Link href={link({ lever: 'pab' })} className={chip(sp.lever === 'pab')}>PAB</Link>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5"><span className="label mr-1">Evidence</span>
-          <Link href={link({ evidence: undefined })} className={chip(!sp.evidence)}>All</Link>
-          <Link href={link({ evidence: 'sourced_summary_verify' })} className={chip(sp.evidence === 'sourced_summary_verify')}>Cites a source</Link>
-          <Link href={link({ evidence: 'illustrative' })} className={chip(sp.evidence === 'illustrative')}>No effect claim</Link>
-        </div>
-      </div>
-
-      <form method="get" action="/interventions/compare">
+      <form method="get" action="/interventions" className="card flex flex-wrap items-center gap-2 p-3">
         {caseId ? <input type="hidden" name="case" value={caseId} /> : null}
-        <div className="sticky top-[88px] z-10 mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-white/95 px-4 py-2.5 shadow-card backdrop-blur">
-          <p className="text-[13px] text-ink-soft">Tick two or three options, then compare them side by side. <span className="text-ink-faint">{shown.length} shown</span></p>
+        <div className="relative min-w-[220px] flex-1">
+          <Icon name="search" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
+          <input type="search" name="q" defaultValue={sp.q ?? ''} placeholder={pick(lang, 'Search interventions…', 'हस्तक्षेप खोजें…')} aria-label="Search interventions" className="input h-9 pl-9 text-[13px]" />
+        </div>
+        <select name="subject" defaultValue={sp.subject ?? ''} className={sel} aria-label="Subject"><option value="">All subjects</option><option value="numeracy">Numeracy</option><option value="literacy">Literacy</option></select>
+        <select name="category" defaultValue={sp.category ?? ''} className={sel} aria-label="Type"><option value="">All types</option>{Object.entries(CATEGORY).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+        <select name="lever" defaultValue={sp.lever ?? ''} className={sel} aria-label="Approval authority"><option value="">Any authority</option><option value="block">Block</option><option value="district">District</option><option value="pab">PAB</option></select>
+        <select name="evidence" defaultValue={sp.evidence ?? ''} className={sel} aria-label="Evidence"><option value="">Any evidence</option><option value="sourced_summary_verify">Cites a source</option><option value="illustrative">No effect claim</option></select>
+        <button type="submit" className="btn-quiet h-9"><Icon name="filter" size={14} />Apply</button>
+        {filtered ? <Link href={caseId ? `/interventions?case=${caseId}` : '/interventions'} className="btn-ghost h-9">Clear</Link> : null}
+      </form>
+
+      <form method="get" action="/interventions/compare" className="card overflow-hidden">
+        {caseId ? <input type="hidden" name="case" value={caseId} /> : null}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5">
+          <p className="text-[13px] text-ink-soft"><span className="font-medium text-ink">{shown.length}</span> {pick(lang, 'interventions', 'हस्तक्षेप')}{ranked ? ' · ranked by fit' : ''} <span className="text-ink-faint">· tick two or three to compare</span></p>
           <button type="submit" className="btn-primary btn-sm"><Icon name="scale" size={14} />Compare selected</button>
         </div>
-
-        {shown.length === 0 ? <p className="card px-6 py-12 text-center text-[13.5px] text-ink-faint">No interventions match these filters.</p> : null}
-
-        <ul className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-          {shown.map(({ iv, m }, idx) => {
-            const h = hist.get(iv.id);
-            const auth = m?.authority ?? authorityFor(session, iv.lever);
-            return (
-              <li key={iv.id} className={`flex flex-col rounded-xl border bg-white shadow-card ${m && !m.eligible ? 'border-line opacity-70' : m?.isCurrentPlan ? 'border-brand ring-1 ring-brand/30' : 'border-line'}`}>
-                <div className="flex-1 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-mono text-[11.5px] text-ink-faint">{iv.id} · {CATEGORY[iv.category]}{m && m.eligible ? ` · #${idx + 1}` : ''}</p>
-                      <Link href={`/interventions/${iv.id}${caseId ? `?case=${caseId}` : ''}`} className="mt-0.5 block text-[15px] font-semibold leading-snug text-ink hover:text-brand">{iv.name}</Link>
-                    </div>
-                    <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-line-strong px-2 py-1 text-[12px] text-ink-soft hover:border-brand">
-                      <input type="checkbox" name="id" value={iv.id} className="h-3.5 w-3.5 accent-[#0f766e]" defaultChecked={Boolean(m?.isCurrentPlan)} />Compare
-                    </label>
-                  </div>
-                  <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-ink-soft">{iv.description}</p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {m?.isCurrentPlan ? <span className="chip border-brand/30 bg-brand-light text-brand">Current plan</span> : null}
-                    <EvidenceStrength status={iv.evidence.status} lang={lang} />
-                    <span className={`chip ${auth.canApprove ? 'border-good/30 bg-good-light text-good' : 'border-line-strong bg-paper-sunk text-ink-soft'}`}>{iv.lever} lever{auth.canApprove ? ' · you can approve' : ''}</span>
-                    <span className="chip border-line-strong bg-white text-ink-soft">Class {iv.grades.join(', ')}</span>
-                  </div>
-                  {m ? (
-                    m.eligible ? (
-                      <div className="mt-3 rounded-lg bg-paper-sunk px-3 py-2">
-                        <p className="flex items-center justify-between text-[12px] font-semibold text-ink">Fit to {caseId}<span className="tnum rounded bg-navy px-1.5 py-0.5 text-[11px] text-white">{m.points} pts</span></p>
-                        <ul className="mt-1 space-y-0.5 text-[12px] text-ink-soft">{m.reasons.slice(0, 3).map((r) => <li key={r.text}>+{r.points} {r.text}</li>)}</ul>
-                        {m.risks.length ? <p className="mt-1 text-[12px] text-warn"><Icon name="alert" size={12} className="mr-1 inline" />{m.risks[0].text}</p> : null}
-                      </div>
-                    ) : <p className="mt-3 text-[12px] text-ink-faint">Not a fit: {m.excludedBecause}</p>
-                  ) : (
-                    <p className="mt-3 text-[12px] text-ink-faint">Targets: {iv.competency_ids.map((c) => comps.get(c) ?? c).join(', ')}</p>
-                  )}
-                </div>
-                <dl className="grid grid-cols-3 divide-x divide-line border-t border-line text-center text-[12px]">
-                  <div className="px-2 py-2"><dt className="text-ink-faint">Cost</dt><dd className="tnum font-medium text-ink" title={`${iv.cost_basis.unit} — illustrative`}>{fmtInr(iv.cost_basis.amount_inr)}<span className="block text-[10.5px] font-normal text-ink-faint">{iv.cost_basis.unit}</span></dd></div>
-                  <div className="px-2 py-2"><dt className="text-ink-faint">Duration</dt><dd className="font-medium text-ink">{iv.duration_weeks ? `${iv.duration_weeks} weeks` : 'PAB cycle'}</dd></div>
-                  <div className="px-2 py-2"><dt className="text-ink-faint">Ledger</dt><dd className="font-medium text-ink">{h && h.evaluated ? `${h.improved}/${h.evaluated} gained` : 'not evaluated'}</dd></div>
-                </dl>
-              </li>
-            );
-          })}
-        </ul>
+        {shown.length === 0 ? <p className="px-6 py-12 text-center text-[13.5px] text-ink-faint">No interventions match these filters.</p> : (
+          <div className="overflow-x-auto">
+            <table className="table min-w-[980px]">
+              <thead>
+                <tr>
+                  <th className="w-10"><span className="sr-only">Compare</span></th>
+                  <th>{pick(lang, 'Intervention', 'हस्तक्षेप')}</th>
+                  {ranked ? <th className="text-right">Fit</th> : null}
+                  <th>{pick(lang, 'Evidence', 'आधार')}</th>
+                  <th>{pick(lang, 'Approval', 'स्वीकृति')}</th>
+                  <th className="text-right">{pick(lang, 'Cost (illustrative)', 'लागत')}</th>
+                  <th>{pick(lang, 'Duration', 'अवधि')}</th>
+                  <th>{pick(lang, 'Track record', 'पिछला परिणाम')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map(({ iv, m }, idx) => {
+                  const h = hist.get(iv.id);
+                  const auth = m?.authority ?? authorityFor(session, iv.lever);
+                  return (
+                    <tr key={iv.id} className={m && !m.eligible ? 'opacity-60' : m?.isCurrentPlan ? 'bg-brand-light/40' : ''}>
+                      <td><input type="checkbox" name="id" value={iv.id} aria-label={`Compare ${iv.name}`} className="h-4 w-4 accent-[#167D78]" defaultChecked={Boolean(m?.isCurrentPlan)} /></td>
+                      <td className="max-w-[440px]">
+                        <Link href={`/interventions/${iv.id}${caseId ? `?case=${caseId}` : ''}`} className="text-[14px] font-medium text-ink hover:text-brand">{iv.name}</Link>
+                        {m?.isCurrentPlan ? <span className="chip ml-2 border-brand/30 bg-brand-light text-brand">Current plan</span> : null}
+                        <p className="mt-0.5 text-[12px] text-ink-faint"><span className="font-mono">{iv.id}</span> · {CATEGORY[iv.category]} · Class {iv.grades.join(', ')} · {iv.competency_ids.map((c) => comps.get(c) ?? c).slice(0, 3).join(', ')}{iv.competency_ids.length > 3 ? '…' : ''}</p>
+                        {m && !m.eligible ? <p className="mt-0.5 text-[12px] text-ink-faint">Not a fit: {m.excludedBecause}</p> : null}
+                        {m && m.eligible && m.risks.length ? <p className="mt-0.5 text-[12px] text-warn"><Icon name="alert" size={12} className="mr-1 inline" />{m.risks[0].text}</p> : null}
+                      </td>
+                      {ranked ? <td className="text-right">{m && m.eligible ? <span className="inline-flex flex-col items-end"><span className="tnum whitespace-nowrap rounded bg-navy px-1.5 py-0.5 text-[11.5px] font-semibold text-white">{m.points} pts</span><span className="mt-0.5 text-[11px] text-ink-faint">#{idx + 1}</span></span> : <span className="text-ink-faint">—</span>}</td> : null}
+                      <td><EvidenceStrength status={iv.evidence.status} lang={lang} /></td>
+                      <td className="text-[13px]">{iv.lever === 'pab' ? 'PAB' : iv.lever === 'block' ? 'Block' : 'District'}{auth.canApprove ? <span className="block text-[11.5px] text-good">you can approve</span> : null}</td>
+                      <td className="tnum text-right text-[13px]">{fmtInr(iv.cost_basis.amount_inr)}<span className="block text-[11px] text-ink-faint">{iv.cost_basis.unit}</span></td>
+                      <td className="whitespace-nowrap text-[13px]">{iv.duration_weeks ? `${iv.duration_weeks} weeks` : 'PAB cycle'}</td>
+                      <td className="text-[13px]">{h && h.evaluated ? <><span className="font-medium text-ink">{h.improved}/{h.evaluated}</span> <span className="text-ink-faint">gained</span></> : <span className="text-ink-faint">not evaluated</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </form>
 
       <p className="text-[12px] text-ink-faint">All costs are illustrative card figures, never PAB unit costs. INT-01–03 quote J-PAL’s TaRL policy insight and are flagged “verify before production”.</p>

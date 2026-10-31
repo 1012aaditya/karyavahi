@@ -51,10 +51,14 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
     </tr>
   );
 
+  const Group = ({ label, tone }: { label: string; tone: 'brand' | 'warn' | 'ink' }) => (
+    <tr><th colSpan={cols.length + 1} className={`border-b border-line bg-white px-3 pb-1.5 pt-4 text-left text-[11px] font-semibold uppercase tracking-[0.08em] ${tone === 'brand' ? 'text-brand' : tone === 'warn' ? 'text-warn' : 'text-ink-faint'}`}>{label}</th></tr>
+  );
+
   return (
     <div className="space-y-5">
       <PageHead
-        breadcrumb={<Link href={`/interventions${caseId ? `?case=${caseId}` : ''}`} className="link">{pick(lang, 'Intervention studio', 'हस्तक्षेप स्टूडियो')}</Link>}
+        breadcrumb={<Link href={`/interventions${caseId ? `?case=${caseId}` : ''}`} className="link">{pick(lang, 'Interventions', 'हस्तक्षेप')}</Link>}
         title={pick(lang, 'Compare options', 'विकल्पों की तुलना')}
         sub={caseId && match ? `For ${caseId}: ${match.caseTitle}` : pick(lang, 'Pick two or three interventions. Open from a case to also see how each fits it.', 'दो या तीन हस्तक्षेप चुनें।')}
       />
@@ -77,7 +81,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
         <div className="card px-6 py-12 text-center">
           <Icon name="scale" size={28} className="mx-auto text-ink-faint" />
           <p className="mt-3 font-medium text-ink">Choose at least two options</p>
-          <p className="mt-1 text-[13px] text-ink-soft">Use the selectors above, or tick cards in the studio.</p>
+          <p className="mt-1 text-[13px] text-ink-soft">Use the selectors above, or tick rows in the catalogue.</p>
         </div>
       ) : (
         <div className="card overflow-x-auto">
@@ -102,15 +106,19 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
                   ) : <span key="r" className="text-crit">Not a fit — {m?.excludedBecause}</span>)}
                 </Row>
               ) : null}
+              <Group label="Fit" tone="ink" />
               <Row label="Targets">{cols.map(({ iv }) => <span key="t">Class {iv.grades.join(', ')} · {iv.competency_ids.map((c) => comps.get(c) ?? c).join(', ')}</span>)}</Row>
+              <Group label="Documented evidence" tone="brand" />
               <Row label="Evidence quality">{cols.map(({ iv }) => <div key="e" className="space-y-1"><EvidenceStrength status={iv.evidence.status} lang={lang} /><p className="text-[12px]">{iv.evidence.summary}</p></div>)}</Row>
               <Row label="Effect estimate" hint="Only where the card cites one">{cols.map(({ iv }) => iv.evidence.effect_size_text ? <span key="x" className="text-ink">{iv.evidence.effect_size_text} <span className="text-warn">(verify before production)</span></span> : <span key="x" className="text-ink-faint">No effect-size claim made</span>)}</Row>
+              <Group label="Assumptions & delivery — not evidence" tone="warn" />
               <Row label="Cost" hint="Illustrative card figure">{cols.map(({ iv, cost }) => <span key="c" className="tnum">{fmtInr(iv.cost_basis.amount_inr)} {iv.cost_basis.unit}{caseId && cost !== null ? <span className="block text-[12px] text-ink-faint">≈ {fmtInr(cost)} for this case’s {caseSchools} school(s)</span> : null}</span>)}</Row>
               <Row label="Duration">{cols.map(({ iv }) => <span key="d">{iv.duration_weeks ? `${iv.duration_weeks} weeks` : 'Next PAB cycle'}</span>)}</Row>
               <Row label="Resources & staff">{cols.map(({ iv }) => <ul key="s" className="list-disc space-y-0.5 pl-4 text-[12.5px]">{iv.resources.slice(0, 5).map((r) => <li key={r}>{r}</li>)}</ul>)}</Row>
               <Row label="Delivery conditions" hint="Must be true for it to work">{cols.map(({ iv }) => <ul key="dc" className="list-disc space-y-0.5 pl-4 text-[12.5px]">{iv.delivery_conditions.map((r) => <li key={r}>{r}</li>)}</ul>)}</Row>
               <Row label="Risks for this case">{cols.map(({ m, iv }) => m ? (m.risks.length ? <ul key="rk" className="space-y-0.5 text-[12.5px] text-warn">{m.risks.map((r) => <li key={r.text}>{r.text}</li>)}</ul> : <span key="rk" className="text-ink-faint">None read from the diagnosis</span>) : <ul key="rk" className="list-disc space-y-0.5 pl-4 text-[12.5px]">{iv.limitations.slice(0, 3).map((l) => <li key={l}>{l}</li>)}</ul>)}</Row>
               <Row label="Ledger outcomes" hint="Aggregate, this fictional ledger">{cols.map(({ h }) => h && h.evaluated ? <span key="h">{h.improved} of {h.evaluated} evaluated showed a gain ({h.confirmed} confirmed){h.inconclusive ? `, ${h.inconclusive} inconclusive` : ''}</span> : <span key="h" className="text-ink-faint">{h?.plans ? `${h.plans} plans, none evaluated yet` : 'Never used'}</span>)}</Row>
+              <Group label="Decision" tone="ink" />
               <Row label="Authority required">{cols.map(({ auth }) => <span key="a" className={auth.canApprove ? 'text-good' : ''}>{auth.who}{auth.canApprove ? ' — you can approve' : ''}</span>)}</Row>
               <Row label="Success metric">{cols.map(({ iv }) => <span key="sm">{iv.success_metric}</span>)}</Row>
               <Row label="Plan it">{cols.map(({ iv }) => <Link key="p" href={`/interventions/${iv.id}?${caseId ? `case=${caseId}&` : ''}schools=${caseSchools}#what-if`} className="btn-quiet btn-sm">What-if planner<Icon name="arrow-right" size={13} /></Link>)}</Row>

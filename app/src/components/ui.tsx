@@ -103,7 +103,7 @@ export function PageHead({
 }: { title: ReactNode; sub?: ReactNode; right?: ReactNode; breadcrumb?: ReactNode; meta?: ReactNode }) {
   return (
     <header className="mb-6">
-      {breadcrumb ? <div className="mb-2 text-[12.5px] text-ink-faint">{breadcrumb}</div> : null}
+      {breadcrumb ? <div className="mb-2 text-[12.5px] text-ink-faint lg:hidden">{breadcrumb}</div> : null}
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">
           <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-ink sm:text-[28px]">{title}</h1>
