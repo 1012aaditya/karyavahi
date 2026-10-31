@@ -1,5 +1,5 @@
 import 'server-only';
-import { all, one, run, tx, nextSeq } from './db';
+import { all, one, run, tx, nextSeq, nextIdFor } from './db';
 import { and, or, inScope, type Pred } from './scope';
 import type { Session } from './session';
 import { nowIso, today, addDays, daysBetween } from './clock';
@@ -206,13 +206,10 @@ export function routeFor(reporterId: string, category: string, priority: string,
 
 // ---------------------------------------------------------------- writes
 function nextComplaintId(): string {
-  const max = one<{ m: string | null }>(`select max(id) m from complaints where id like 'CMP-%'`)?.m;
-  return `CMP-${String((max ? Number(max.slice(4)) : 0) + 1).padStart(4, '0')}`;
+  return nextIdFor('complaint', 'complaints', 'CMP-', 4);
 }
 function addEvent(cid: string, actor: Session | null, kind: string, from: string | null, to: string | null, note: string | null, internal = 0, assignedTo: string | null = null) {
-  const n = nextSeq('complaint_event');
-  const max = one<{ m: string | null }>(`select max(id) m from complaint_events`)?.m;
-  const id = `CEVT-${String(Math.max(n, (max ? Number(max.slice(5)) : 0) + 1)).padStart(5, '0')}`;
+  const id = nextIdFor('complaint_event', 'complaint_events', 'CEVT-', 5);
   run(`insert into complaint_events values (?,?,?,?,?,?,?,?,?,?,?)`, id, cid, nowIso(), actor?.user_id ?? null, actor?.full_name ?? 'system', kind, from, to, note, internal, assignedTo);
 }
 const userName = (id: string | null) => (id ? one<{ full_name: string }>('select full_name from users where id = ?', id)?.full_name ?? id : '—');

@@ -1,5 +1,5 @@
 import 'server-only';
-import { all, one, run, tx, nextSeq } from './db';
+import { all, one, run, tx, nextSeq, nextIdFor } from './db';
 import type { Session } from './session';
 import { nowIso, today } from './clock';
 import { appendAudit, notify } from './write';
@@ -105,8 +105,7 @@ export function listDelegations(scopeFilter: (d: Delegation) => boolean): Delega
 
 export function createDelegation(actor: Session, d: Omit<Delegation, 'id' | 'created_by' | 'created_at' | 'revoked_at'>): string {
   return tx(() => {
-    const max = one<{ m: string | null }>('select max(id) m from delegations')?.m;
-    const id = `DLG-${String((max ? Number(max.slice(4)) : 0) + 1).padStart(4, '0')}`;
+    const id = nextIdFor('delegation', 'delegations', 'DLG-', 4);
     run(`insert into delegations values (?,?,?,?,?,?,?,?,?,?,?,null,null)`,
       id, d.from_user_id, d.to_user_id, d.role, d.scope_type, d.scope_id, d.starts_on, d.ends_on, d.reason, actor.user_id, nowIso());
     appendAudit({ actorUserId: actor.user_id, actorLabel: actor.full_name, actorRole: actor.role, action: 'delegation.create', entityType: 'delegation', entityId: id, after: d, reason: d.reason });

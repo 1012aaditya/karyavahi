@@ -1,13 +1,13 @@
 import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
-import { all, one, run, tx, nextId, nextSeq, j, restorePristine } from './db';
+import { all, one, run, tx, nextId, nextIdFor, nextSeq, j, restorePristine } from './db';
 import { Refused, actingRole, may, moveRefusal, require_, requireDecideLever } from './guard';
 import { casesPred, hasRole } from './scope';
 import type { Session } from './session';
 import { nowIso, today, addDays } from './clock';
 import { canTransition, reasonRequired, closureEligibility, isPlanDecision } from '@domain/lifecycle';
 import { evaluateOutcome, OUTCOME_NOTE } from '@domain/outcome';
-import { settingsAt } from '@domain/catalog';
+import { settingsAt, settingsById } from '@domain/catalog';
 import type { CaseStatus, OutcomeSchoolRow } from '@domain/types';
 
 /**
@@ -48,9 +48,12 @@ export function appendAudit(o: {
   source?: 'web' | 'mobile' | 'whatsapp_sim' | 'ivr_sim' | 'system' | 'import';
   result?: 'success' | 'failure';
 }): string {
-  const prev = one<{ hash: string }>(
-    'select hash from audit_events order by ts desc, id desc limit 1',
-  )?.hash ?? '0'.repeat(64);
+  // The chain's order is its own sequence, not the timestamp: the demo clock can move backwards,
+  // and a row written after that must still follow the row written before it.
+  const last = one<{ hash: string; seq: number }>(
+    'select hash, seq from audit_events order by seq desc limit 1',
+  );
+  const prev = last?.hash ?? '0'.repeat(64);
 
   const id = nextId('audit', 'AUD-', 7);
   const row = {
@@ -74,13 +77,14 @@ export function appendAudit(o: {
   run(
     `insert into audit_events
       (id, ts, actor_user_id, actor_label, actor_role, action, entity_type, entity_id,
-       before, after, reason, correlation_id, source, result, prev_hash, hash, hash_version)
-     values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       before, after, reason, correlation_id, source, result, prev_hash, hash, hash_version, seq)
+     values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     row.id, row.ts, row.actor_user_id, row.actor_label, row.actor_role, row.action,
     row.entity_type, row.entity_id,
     row.before === null ? null : JSON.stringify(row.before),
     row.after === null ? null : JSON.stringify(row.after),
     row.reason, row.correlation_id, row.source, row.result, prev, hash, 'ts-json-v1',
+    (last?.seq ?? 0) + 1,
   );
   return id;
 }
@@ -174,13 +178,11 @@ function openApproval(s: Session, c: CaseCore, planId: string): void {
   const plan = one<{ intervention_id: string; school_ids: string; version: number; drafted_by: string }>(
     'select intervention_id, school_ids, version, drafted_by from case_plans where id = ?', planId,
   );
-  run(`insert or ignore into app_sequences (name, value)
-         select 'approval', coalesce(max(cast(substr(id, 5) as integer)), 0) from approvals`);
   run(
     `insert into approvals (id, case_id, plan_id, required_role, submitted_by, submitted_at, decision,
        decided_by, decided_at, reason, original_plan, edited_plan, ai_drafted)
      values (?,?,?,?,?,?,'pending',null,null,null,?,null,?)`,
-    nextId('approval', 'APR-', 5), c.id, planId, c.lever === 'block' ? 'beo' : 'deo', s.user_id, nowIso(),
+    nextIdFor('approval', 'approvals', 'APR-', 5), c.id, planId, c.lever === 'block' ? 'beo' : 'deo', s.user_id, nowIso(),
     JSON.stringify({ intervention_id: plan?.intervention_id, school_ids: j(plan?.school_ids, []), version: plan?.version }),
     plan?.drafted_by === 'ai_draft' ? 1 : 0,
   );
@@ -294,13 +296,28 @@ export function transitionCase(
   return tx(() => {
     if (to === 'awaiting_approval') openApproval(s, c, c.current_plan_id!);
     const closedAt = to === 'closed' ? nowIso() : null;
-    run(
-      `update cases set status = ?, updated_at = ?,
+    // The summary columns other screens read (the closure mix, the map's improved layer, the ATR)
+    // move with the status: closing records the outcome it closed on, reopening clears it.
+    const closedOn = to === 'closed'
+      ? one<{ category: string }>(
+        `select category from outcome_evaluations where case_id = ? and plan_id = ? and closure_eligible = 1
+          order by evaluated_at desc limit 1`, caseId, c.current_plan_id,
+      )?.category ?? null
+      : null;
+    // Only from the status the checks above were made against: if the case moved in between,
+    // nothing changes and the user is told, instead of a stale move landing on a newer state.
+    const changed = run(
+      `update cases set status = ?, updated_at = ?, version = version + 1,
          closed_at = case when ? = 'closed' then ? else closed_at end,
-         reopen_count = reopen_count + case when ? = 'reopened' then 1 else 0 end
-       where id = ?`,
-      to, nowIso(), to, closedAt, to, caseId,
+         reopen_count = reopen_count + case when ? = 'reopened' then 1 else 0 end,
+         closure_type = case ? when 'closed' then ? when 'reopened' then null else closure_type end,
+         verification_status = case when ? = 'closed' then 'verified' else verification_status end
+       where id = ? and status = ?`,
+      to, nowIso(), to, closedAt, to, to, closedOn, to, caseId, from,
     );
+    if (changed === 0) {
+      throw new Refused('This case changed while you were looking at it. Reload to see where it is now.', 'stale');
+    }
     addCaseEvent({
       caseId, actorUserId: s.user_id, actorLabel: s.user_id, kind: 'status_changed',
       summary: reason?.trim() || `${from} → ${to}`, fromStatus: from, toStatus: to,
@@ -549,7 +566,10 @@ export function submitEvidence(
       s.user_id, actingRole(s), nowIso(), o.gps ?? 'not_captured',
     );
 
-    const count = one<{ c: number }>('select count(*) c from evidence where task_id = ?', o.taskId)?.c ?? 1;
+    // Rejected proof was sent back, so it does not count towards the pieces the task needs.
+    const count = one<{ c: number }>(
+      `select count(*) c from evidence where task_id = ? and status <> 'rejected'`, o.taskId,
+    )?.c ?? 1;
     if (count >= t.proof_count) {
       run(`update tasks set status = 'submitted', submitted_at = ? where id = ?`, nowIso(), o.taskId);
     } else {
@@ -711,7 +731,8 @@ export function recomputeOutcome(
 
     const treatedRows = readRows(treatedIds);
     const comparisonRows = readRows(comparisonIds);
-    const settings = settingsAt(today());
+    // The settings the plan locked at approval, so a later change of rules cannot move a verdict.
+    const settings = settingsById(pre.settings_version_id) ?? settingsAt(today());
     const result = evaluateOutcome(treatedRows, comparisonRows, {
       success_threshold_pp: threshold,
       participation_floor_ratio: floor,
@@ -764,7 +785,7 @@ export function recomputeOutcome(
         ...payload, evaluationId,
       );
     } else {
-      evaluationId = `OUT-${nextSeq('outcome').toString().padStart(5, '0')}L`;
+      evaluationId = nextIdFor('outcome', 'outcome_evaluations', 'OUT-', 4);
       run(
         `insert into outcome_evaluations
           (id, case_id, plan_id, cycle, grade, competency_id, baseline_round_id, followup_round_id,

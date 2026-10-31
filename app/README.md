@@ -150,8 +150,10 @@ is raised, outside the transaction, so the attempt survives the rollback.
 ## The audit chain
 
 Append-only, SHA-256 hash-chained, using the same `ts-json-v1` scheme as the seed generator:
-each row hashes its own fields plus the previous row's hash. The auditor page checks two
-different things, because they catch different tampering:
+each row hashes its own fields plus the previous row's hash. "Previous" means previous in the
+chain's own order, `audit_events.seq`, not by timestamp, so moving the demo clock backwards
+cannot reorder the chain; the auditor page walks every row in that order. The auditor page
+checks two different things, because they catch different tampering:
 
 - **Linkage** — each `prev_hash` matches the previous `hash`. Catches an inserted or deleted row.
 - **Content** — each row's hash is recomputed from its fields. Catches an *edited* row, which
