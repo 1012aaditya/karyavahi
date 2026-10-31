@@ -418,16 +418,11 @@ export async function accountStatusAction(_prev: State, form: FormData): Promise
 export async function setManagerAction(_prev: State, form: FormData): Promise<State> {
   const s = await requireSession();
   const { requirePermission } = await import('./authz');
-  const { setManager, userCard, ROLE_RANK } = await import('./org');
+  const { setManager } = await import('./org');
   const userId = str(form, 'user_id');
   const managerId = str(form, 'manager_id') || null;
   const res = await attempt(() => {
     requirePermission(s, 'manage_hierarchy', { kind: 'user', userId });
-    const u = userCard(userId);
-    const m = managerId ? userCard(managerId) : null;
-    if (managerId && (!m || m.status !== 'active')) throw new Refused('The designated authority must be an active user.', 'input');
-    if (u && m && ROLE_RANK[m.role] <= ROLE_RANK[u.role]) throw new Refused('The designated authority must hold a more senior role.', 'input');
-    if (managerId === userId) throw new Refused('A user cannot report to themselves.', 'input');
     setManager(s, userId, managerId, str(form, 'reason') || 'Reporting line updated');
   }, 'Reporting line updated.');
   revalidatePath('/admin/hierarchy');

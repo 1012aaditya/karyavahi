@@ -3,17 +3,14 @@ import { getLanguage } from '@/lib/session';
 import { pageSession } from '@/lib/page-session';
 import { can, authorize } from '@/lib/authz';
 import { verificationQueue, canDecide, REG_STATUS } from '@/lib/onboarding';
-import { all } from '@/lib/db';
-import { inScope } from '@/lib/scope';
 import { scopeName, userNames } from '@/lib/repo';
-import { managerOf, statusHistory } from '@/lib/org';
+import { managerOf, statusHistory, usersInArea } from '@/lib/org';
 import { pick } from '@/lib/i18n';
 import { PageHead, Callout, fmtDate } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { ActionForm, ReasonBox, Disclose } from '@/components/ActionForm';
 import { decideRegistrationAction, accountStatusAction } from '@/lib/actions';
 import { ROLE_LABELS } from '@domain/permissions';
-import type { RoleCode } from '@domain/types';
 
 /**
  * Accounts: the approval queue for registration and change requests routed to this officer, and
@@ -34,16 +31,9 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const names = userNames([...queue.map((r) => r.verifier_user_id ?? ''), ...queue.map((r) => r.decided_by ?? '')]);
   const isDemoAdmin = session.roles.some((r) => r.role === 'demo_admin');
 
-  const geo = inScope({ ...session, roles: session.roles }, { state: 'sc.state_id', district: 'sc.district_id', block: 'sc.block_id', cluster: 'sc.cluster_id', school: 'sc.id' });
   const q = (sp.q ?? '').trim().slice(0, 60);
-  const users = tab === 'users' ? all<{ id: string; full_name: string; email: string; status: string; role: RoleCode; scope_type: string; scope_id: string }>(
-    `select u.id, u.full_name, u.email, u.status, ur.role, ur.scope_type, ur.scope_id
-       from users u join user_roles ur on ur.user_id = u.id
-      where (${isDemoAdmin ? '1=1' : `exists (select 1 from schools sc where (${geo.sql}) and (sc.id = ur.scope_id or sc.cluster_id = ur.scope_id or sc.block_id = ur.scope_id or sc.district_id = ur.scope_id or sc.state_id = ur.scope_id))`})
-        ${q ? 'and (u.full_name like ? or u.email like ? or u.id like ?)' : ''}
-      order by case u.status when 'suspended' then 0 else 1 end, case ur.role when 'deo' then 1 when 'beo' then 2 when 'brc' then 3 when 'crc' then 4 else 5 end, u.full_name limit 80`,
-    ...(isDemoAdmin ? [] : geo.params), ...(q ? [`%${q}%`, `%${q}%`, `%${q}%`] : []),
-  ).filter((u) => u.id !== session.user_id) : [];
+  // People inside the officer's area only; the officers above them are not theirs to manage.
+  const users = tab === 'users' ? usersInArea(session, q) : [];
 
   return (
     <div className="space-y-5">

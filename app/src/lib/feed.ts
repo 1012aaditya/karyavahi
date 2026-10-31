@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import { all, one, j, bool, type Param } from './db';
-import { and, auditPred, aiPred, reportsPred, importPred, hasRole, type Pred } from './scope';
+import { and, auditPred, aiPred, reportsPred, importBatchPred, rejectedRowPred, hasRole, type Pred } from './scope';
 import type { Session } from './session';
 
 /** Notifications, reports, the audit chain, the AI log, the simulated outbox, imports and jobs. */
@@ -273,8 +273,8 @@ export interface ImportBatchRow {
 }
 
 export function listImports(s: Session, opts: { limit?: number; datasetId?: string } = {}): ImportBatchRow[] {
-  if (importPred(s).sql === '1=0') return [];
-  const parts: Pred[] = [];
+  const parts: Pred[] = [importBatchPred(s, 'b')];
+  if (parts[0].sql === '1=0') return [];
   if (opts.datasetId) parts.push({ sql: 'b.dataset_id = ?', params: [opts.datasetId] });
   const p = and(...parts);
   return all<ImportBatchRow>(
@@ -283,23 +283,26 @@ export function listImports(s: Session, opts: { limit?: number; datasetId?: stri
 }
 
 export function getImport(s: Session, id: string): ImportBatchRow | null {
-  if (importPred(s).sql === '1=0') return null;
-  return one<ImportBatchRow>('select * from import_batches where id = ?', id);
+  const p = importBatchPred(s, 'b');
+  if (p.sql === '1=0') return null;
+  return one<ImportBatchRow>(`select b.* from import_batches b where b.id = ? and (${p.sql})`, id, ...p.params);
 }
 
 export interface RejectedRow { id: string; import_batch_id: string; row_number: number; raw: string; error_code: string; message: string }
 
 export function importRejections(s: Session, batchId: string): (Omit<RejectedRow, 'raw'> & { raw: Record<string, string> })[] {
-  if (importPred(s).sql === '1=0') return [];
+  if (!getImport(s, batchId)) return [];
+  const p = rejectedRowPred(s, 'r');
   return all<RejectedRow>(
-    'select * from import_rejected_rows where import_batch_id = ? order by row_number', batchId,
+    `select r.* from import_rejected_rows r where r.import_batch_id = ? and (${p.sql}) order by r.row_number`, batchId, ...p.params,
   ).map((r) => ({ ...r, raw: j(r.raw, {} as Record<string, string>) }));
 }
 
 export function rejectionCodeCounts(s: Session): { error_code: string; c: number }[] {
-  if (importPred(s).sql === '1=0') return [];
+  const p = rejectedRowPred(s, 'r');
+  if (p.sql === '1=0') return [];
   return all<{ error_code: string; c: number }>(
-    'select error_code, count(*) c from import_rejected_rows group by error_code order by c desc',
+    `select r.error_code, count(*) c from import_rejected_rows r where ${p.sql} group by r.error_code order by c desc`, ...p.params,
   );
 }
 

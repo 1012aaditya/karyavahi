@@ -17,6 +17,7 @@
     "test:session": "tsx --conditions=react-server scripts/session-test.mts",
     "test:authority": "tsx --conditions=react-server scripts/authority-test.mts",
     "test:integrity": "tsx --conditions=react-server scripts/integrity-test.mts",
+    "test:scope": "tsx --conditions=react-server scripts/scope-test.mts",
     "crawl": "node scripts/crawl.mjs",
     "e2e": "node scripts/e2e.cjs",
     "db:init": "node scripts/db-init.mjs",

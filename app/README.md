@@ -128,7 +128,10 @@ Three layers, in this order, on every write:
 
 1. **Scope** — `scope.ts` ports each RLS policy in `sql/schema.sql` to a SQL predicate. A BEO
    sees 14 cases, a CRC 2, a headmaster one school and no staff-movement rows — the same numbers
-   Postgres produces, asserted in `scripts/smoke.ts`.
+   Postgres produces, asserted in `scripts/smoke.ts`. Only the state team, the demo admin and the
+   state auditor read state-wide; a district auditor reads their district. Import batches are
+   shown where their area overlaps yours, and their rejected rows only for schools in your area
+   (`importBatchPred`, `rejectedRowPred`); `npm run test:scope` checks these.
 2. **Role** — the matrix in `src/domain/permissions.ts`. The navigation is built from it, so a
    role never sees a link to something it would be refused. Every case move also has its own
    list of roles (`TRANSITION_ROLES` in `src/domain/lifecycle.ts`; a move not listed is refused
