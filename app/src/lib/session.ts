@@ -17,6 +17,8 @@ export interface RoleAssignment {
   role: RoleCode;
   scope_type: ScopeType;
   scope_id: string;
+  /** Set when this assignment comes from an active acting arrangement (delegations table). */
+  delegated?: { id: string; from_user_id: string; ends_on: string };
 }
 
 export interface Session {
@@ -37,6 +39,7 @@ export const ROLE_PRECEDENCE: RoleCode[] = [
 ];
 
 export function strongestRole(roles: RoleAssignment[]): RoleAssignment | null {
+  roles = roles.filter((r) => !r.delegated);
   if (roles.length === 0) return null;
   return [...roles].sort(
     (a, b) => ROLE_PRECEDENCE.indexOf(a.role) - ROLE_PRECEDENCE.indexOf(b.role),
@@ -54,6 +57,16 @@ export function loadSession(userId: string): Session | null {
   );
   const strongest = strongestRole(roles);
   if (!strongest) return null;
+
+  // Acting arrangements in force on the demo clock's date extend scope; they never become the
+  // user's primary role, and they lapse on their end date without anyone touching them.
+  const clockIso = one<{ value: string }>(`select value from app_state where key = 'demo_clock'`)?.value;
+  const onDate = new Date(new Date(clockIso ?? '2026-10-24T06:30:00.000Z').getTime() + 5.5 * 3600_000).toISOString().slice(0, 10);
+  const acting = all<{ id: string; from_user_id: string; role: RoleCode; scope_type: ScopeType; scope_id: string; ends_on: string }>(
+    `select id, from_user_id, role, scope_type, scope_id, ends_on from delegations
+      where to_user_id = ? and revoked_at is null and starts_on <= ? and ends_on >= ?`, userId, onDate, onDate,
+  );
+  for (const d of acting) roles.push({ role: d.role, scope_type: d.scope_type, scope_id: d.scope_id, delegated: { id: d.id, from_user_id: d.from_user_id, ends_on: d.ends_on } });
 
   return {
     user_id: u.id,

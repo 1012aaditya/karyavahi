@@ -98,7 +98,7 @@ function addCaseEvent(o: {
   );
 }
 
-function notify(o: {
+export function notify(o: {
   userId: string; kind: string; title: string; body: string;
   entityType: string; entityId: string; link: string;
 }): void {

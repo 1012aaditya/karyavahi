@@ -2,6 +2,7 @@ import 'server-only';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import { existsSync, copyFileSync, rmSync } from 'node:fs';
+import { ensureExtensions } from './ext/schema';
 
 /**
  * Local SQLite adapter. Column names match sql/schema.sql exactly, so the same SQL
@@ -29,6 +30,8 @@ export function db(): DatabaseSync {
   const conn = new DatabaseSync(DB_PATH);
   conn.exec('pragma journal_mode = wal');
   conn.exec('pragma foreign_keys = off');
+  // Geography, hierarchy, complaints and onboarding tables live beside the seed's (see ext/schema.ts).
+  ensureExtensions(conn);
   holder.db = conn;
   return conn;
 }
