@@ -81,7 +81,18 @@ export default async function ReportsPage({
       <Card>
         <CardHead title={pick(lang, 'Generated reports', 'निर्मित रिपोर्ट')} hint={`${reports.length} ${pick(lang, 'shown', 'दिखाई')}`} />
         {reports.length === 0 ? <Empty /> : (
-          <div className="overflow-x-auto">
+          <>
+          <ul className="divide-y divide-line md:hidden">
+            {reports.map((r) => (
+              <li key={r.id}>
+                <Link href={`/reports/${r.id}`} className="block px-4 py-3">
+                  <span className="block text-[14px] font-medium text-ink">{r.title}</span>
+                  <span className="mt-0.5 block text-[12px] text-ink-faint"><span className="font-mono">{r.id}</span> · {fmtDate(r.generated_at)} · {r.case_ids.length} cases</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
             <table className="table">
               <thead>
                 <tr>
@@ -123,6 +134,7 @@ export default async function ReportsPage({
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
       </div>

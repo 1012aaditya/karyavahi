@@ -165,7 +165,31 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
             <p className="mt-1 text-[13px] text-ink-soft">{filtersActive ? pick(lang, 'Try clearing a filter.', 'कोई फ़िल्टर हटाएँ।') : pick(lang, 'Nothing in this view right now.', 'इस दृश्य में अभी कुछ नहीं।')}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <ul className="divide-y divide-line md:hidden">
+            {cases.map((c) => {
+              const dueLate = c.due_date && c.due_date < today() && OPEN.includes(c.status);
+              const next = nextAction(c.status);
+              return (
+                <li key={c.id}>
+                  <Link href={`/cases/${c.id}`} className="block px-4 py-3 active:bg-paper-sunk">
+                    <span className="flex items-center gap-2 text-[12px] text-ink-faint">
+                      <span className={`dot ${c.severity === 'critical' ? 'bg-crit' : c.severity === 'high' ? 'bg-amber' : 'bg-ink-faint'}`} />
+                      <span className="font-mono">{c.id}</span>
+                      <span>· {look.clusters.get(c.cluster_id) ?? c.cluster_id}</span>
+                      <span className={`ml-auto tnum ${dueLate ? 'font-medium text-crit' : ''}`}>{fmtDate(c.due_date)}</span>
+                    </span>
+                    <span className="mt-1 block text-[14px] font-medium leading-snug text-ink">{c.title}</span>
+                    <span className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px]">
+                      <StatusPill status={c.status} lang={lang} />
+                      {OPEN.includes(c.status) ? <span className="text-brand">{pick(lang, next.en, next.hi)} →</span> : null}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
             <table className="table min-w-[1080px]">
               <thead>
                 <tr>
@@ -215,6 +239,7 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
               </tbody>
             </table>
           </div>
+          </>
         )}
         {total > perPage ? (
           <nav aria-label="Pagination" className="flex items-center justify-between border-t border-line px-4 py-3 text-[13px] sm:px-5">

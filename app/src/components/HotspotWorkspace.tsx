@@ -119,7 +119,7 @@ export function HotspotWorkspace({ rounds, competencies, latestLabel }: { rounds
       <div className="grid gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(320px,3fr)]">
         <div>
           <div className={view === 'list' ? 'hidden' : ''}>
-            <GeoMap height="max(520px, calc(100vh - 300px))" onData={setData} rounds={rounds} competencies={competencies} />
+            <GeoMap height="max(420px, calc(100vh - 300px))" onData={setData} rounds={rounds} competencies={competencies} />
           </div>
           {view === 'list' ? (
             <div className="overflow-hidden rounded-xl border border-line bg-white">
@@ -153,7 +153,7 @@ export function HotspotWorkspace({ rounds, competencies, latestLabel }: { rounds
         </div>
 
         {/* Context panel */}
-        <aside className="overflow-hidden rounded-xl border border-line bg-white xl:max-h-[max(520px,calc(100vh-300px))] xl:overflow-y-auto" aria-label="Area details">
+        <aside className="overflow-hidden rounded-xl border border-line bg-white xl:max-h-[max(420px,calc(100vh-300px))] xl:overflow-y-auto" aria-label="Area details">
           {!selected && !detail ? (
             <div>
               <div className="border-b border-line px-5 py-4">

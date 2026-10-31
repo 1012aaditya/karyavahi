@@ -103,7 +103,20 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
           <button type="submit" className="btn-primary btn-sm"><Icon name="scale" size={14} />Compare selected</button>
         </div>
         {shown.length === 0 ? <p className="px-6 py-12 text-center text-[13.5px] text-ink-faint">No interventions match these filters.</p> : (
-          <div className="overflow-x-auto">
+          <>
+          <ul className="divide-y divide-line md:hidden">
+            {shown.map(({ iv, m }) => (
+              <li key={iv.id} className={`flex gap-3 px-4 py-3 ${m && !m.eligible ? 'opacity-60' : ''}`}>
+                <input type="checkbox" name="id" value={iv.id} aria-label={`Compare ${iv.name}`} className="mt-1 h-4 w-4 shrink-0 accent-[#167D78]" defaultChecked={Boolean(m?.isCurrentPlan)} />
+                <Link href={`/interventions/${iv.id}${caseId ? `?case=${caseId}` : ''}`} className="min-w-0 flex-1">
+                  <span className="block text-[14px] font-medium leading-snug text-ink">{iv.name}</span>
+                  <span className="mt-0.5 block text-[12px] text-ink-faint"><span className="font-mono">{iv.id}</span> · {CATEGORY[iv.category]} · {fmtInr(iv.cost_basis.amount_inr)} {iv.cost_basis.unit} · {iv.duration_weeks ? `${iv.duration_weeks} wk` : 'PAB'}</span>
+                  <span className="mt-1.5 flex flex-wrap items-center gap-1.5"><EvidenceStrength status={iv.evidence.status} lang={lang} />{m && m.eligible ? <span className="tnum rounded bg-navy px-1.5 py-0.5 text-[11px] font-semibold text-white">{m.points} pts</span> : null}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
             <table className="table min-w-[980px]">
               <thead>
                 <tr>
@@ -143,6 +156,7 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
               </tbody>
             </table>
           </div>
+          </>
         )}
       </form>
 

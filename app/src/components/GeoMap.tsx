@@ -70,7 +70,7 @@ function Popover({ label, icon, children, open, setOpen }: { label: string; icon
   return (
     <div className="relative">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium ${open ? 'bg-navy text-white' : 'text-ink-soft hover:bg-paper-deep hover:text-ink'}`}>
-        <Icon name={icon} size={14} />{label}
+        <Icon name={icon} size={14} /><span className="sr-only sm:not-sr-only">{label}</span>
       </button>
       {open ? <div className="absolute left-0 top-full z-30 mt-1.5 w-64 animate-fade-in rounded-xl border border-line bg-white p-3 shadow-pop">{children}</div> : null}
     </div>
@@ -319,10 +319,10 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
                 {filterKey !== 'grade=&comp=&subject=&round=' ? <button type="button" onClick={() => push({ grade: null, comp: null, subject: null, round: null })} className="text-[12px] font-medium text-brand hover:underline">Clear filters</button> : null}
               </div>
             </Popover>
-            <button type="button" onClick={() => setLegend((v) => !v)} aria-pressed={legend} className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium ${legend ? 'bg-paper-deep text-ink' : 'text-ink-soft hover:bg-paper-deep hover:text-ink'}`}><Icon name="info" size={14} />Legend</button>
-            <button type="button" onClick={() => data?.parent.bbox && mapRef.current?.fitBounds(data.parent.bbox as [number, number, number, number], { padding: 56, duration: 500 })} className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium text-ink-soft hover:bg-paper-deep hover:text-ink"><Icon name="refresh" size={14} />Reset</button>
+            <button type="button" onClick={() => setLegend((v) => !v)} aria-pressed={legend} className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium ${legend ? 'bg-paper-deep text-ink' : 'text-ink-soft hover:bg-paper-deep hover:text-ink'}`}><Icon name="info" size={14} /><span className="sr-only sm:not-sr-only">Legend</span></button>
+            <button type="button" onClick={() => data?.parent.bbox && mapRef.current?.fitBounds(data.parent.bbox as [number, number, number, number], { padding: 56, duration: 500 })} className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium text-ink-soft hover:bg-paper-deep hover:text-ink"><Icon name="refresh" size={14} /><span className="sr-only sm:not-sr-only">Reset</span></button>
             <span className="mx-1 h-5 w-px bg-line" aria-hidden />
-            <button type="button" onClick={() => push({ view: 'list' })} className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium text-ink-soft hover:bg-paper-deep hover:text-ink"><Icon name="list" size={14} />List</button>
+            <button type="button" onClick={() => push({ view: 'list' })} className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium text-ink-soft hover:bg-paper-deep hover:text-ink"><Icon name="list" size={14} /><span className="sr-only sm:not-sr-only">List</span></button>
           </div>
         ) : null}
 
