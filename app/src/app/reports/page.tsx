@@ -10,6 +10,7 @@ import { Pill, AiDrafted } from '@/components/labels';
 import { FilterChips } from '@/components/lists';
 import { Icon } from '@/components/Icon';
 import { REPORT_TYPES } from '@/lib/reports';
+import { ReportsRail } from '@/components/ReportsRail';
 
 /** Generated reports: action-taken reports, review packs, escalations and briefs. */
 
@@ -50,19 +51,15 @@ export default async function ReportsPage({
         title={pick(lang, 'Reports', 'रिपोर्ट')}
         sub={pick(
           lang,
-          'Built from the case ledger, so a report cannot say something the records do not. Every one carries the demo disclaimer.',
+          'Built from the case ledger, so a report cannot say something the records do not.',
           'प्रकरण-पंजी से बनी, अतः रिपोर्ट वह नहीं कह सकती जो रिकॉर्ड में नहीं है।',
         )}
+        meta={<>{scopeName(session.scope_type, session.scope_id)} · {Object.values(counts).reduce((a, b) => a + b, 0)} saved</>}
         right={<div className="flex gap-2"><Link href="/impact" className="btn-quiet"><Icon name="target" size={15} />Outcome verification</Link><Link href="/reports/new" className="btn-primary"><Icon name="plus" size={15} />New report</Link></div>}
       />
-      <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Build a report">
-        {REPORT_TYPES.filter((t) => ['atr', 'learning_impact', 'exceptions', 'review_pack'].includes(t.key)).map((t) => (
-          <Link key={t.key} href={`/reports/new?type=${t.key}`} className="group rounded-xl border border-line bg-white p-4 shadow-card transition-all hover:-translate-y-px hover:shadow-lift">
-            <p className="flex items-center justify-between text-[14px] font-semibold text-ink">{t.label}<Icon name="arrow-right" size={15} className="text-ink-faint transition-transform group-hover:translate-x-0.5" /></p>
-            <p className="mt-1 text-[12.5px] leading-snug text-ink-soft">{t.blurb}</p>
-          </Link>
-        ))}
-      </section>
+      <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+      <ReportsRail session={session} />
+      <div className="min-w-0">
       <Toolbar>
         <form method="get" action="/reports" className="relative">
           {sp.type ? <input type="hidden" name="type" value={sp.type} /> : null}
@@ -101,7 +98,7 @@ export default async function ReportsPage({
                 {reports.map((r) => (
                   <tr key={r.id}>
                     <td className="max-w-sm">
-                      <Link href={`/reports/${r.id}`} className="link font-medium">{r.title}</Link>
+                      <Link href={`/reports/${r.id}`} className="font-medium text-ink hover:text-brand">{r.title}</Link>
                       <p className="text-[11.5px] text-ink-faint">
                         <Mono>{r.id}</Mono>
                         {r.narrative_model ? <> · <AiDrafted lang={lang} model={r.narrative_model} /></> : null}
@@ -115,7 +112,7 @@ export default async function ReportsPage({
                     <td className="tnum text-[13px]">{r.case_ids.length}</td>
                     <td className="text-[12.5px]">
                       <span className="tnum">{fmtDate(r.generated_at)}</span>
-                      <span className="block text-[11.5px] text-ink-faint">{users.get(r.generated_by) ?? r.generated_by}</span>
+                      <span className="block whitespace-nowrap text-[11.5px] text-ink-faint">{users.get(r.generated_by) ?? r.generated_by}</span>
                     </td>
                     <td className="whitespace-nowrap text-right">
                       <a href={`/api/reports/${r.id}/export?format=xlsx`} className="btn-ghost btn-sm" title="Download Excel"><Icon name="download" size={14} />XLSX</a>
@@ -128,6 +125,8 @@ export default async function ReportsPage({
           </div>
         )}
       </Card>
+      </div>
+      </div>
     </div>
   );
 }

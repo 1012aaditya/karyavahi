@@ -9,6 +9,7 @@ import { Card, CardHead, PageHead, Callout, Facts, Field, Mono, fmtDate } from '
 import { Pill, AiDrafted } from '@/components/labels';
 import { DISCLAIMER } from '@domain/catalog';
 import { ReportView } from '@/components/ReportView';
+import { ReportsRail } from '@/components/ReportsRail';
 import { PrintButton } from '@/components/PrintButton';
 import { Icon } from '@/components/Icon';
 import type { BuiltReport } from '@/lib/reports';
@@ -85,15 +86,19 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
   if ((r.content as { builder?: string }).builder === 'v2') {
     const built = r.content as unknown as BuiltReport;
     return (
-      <article className="mx-auto max-w-6xl space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 no-print">
-          <p className="text-[12.5px] text-ink-faint"><Link href="/reports" className="link">{pick(lang, 'Reports', 'रिपोर्ट')}</Link> › <Mono>{r.id}</Mono></p>
-          <ExportBar id={r.id} type={r.report_type} snapshot />
-        </div>
-        {generated ? <Callout tone="good" title="Report generated">Saved as snapshot {r.id} and recorded in the audit trail. It will not change when the records do.</Callout> : null}
-        <Callout tone="method">Snapshot generated {fmtDate(r.generated_at, true)} by {users.get(r.generated_by) ?? r.generated_by}. Figures are frozen as of that moment.</Callout>
-        <ReportView r={built} snapshotId={r.id} />
-      </article>
+      <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <div className="no-print"><ReportsRail session={session} activeReport={r.id} /></div>
+        <article className="min-w-0 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 no-print">
+            <p className="text-[12.5px] text-ink-faint">Snapshot <Mono>{r.id}</Mono> · {fmtDate(r.generated_at, true)} · {users.get(r.generated_by) ?? r.generated_by} · figures frozen at that moment</p>
+            <ExportBar id={r.id} type={r.report_type} snapshot />
+          </div>
+          {generated ? <Callout tone="good" title="Report generated">Saved as snapshot {r.id} and recorded in the audit trail. It will not change when the records do.</Callout> : null}
+          <div className="rounded-xl bg-paper-deep/60 p-3 sm:p-6 print:bg-white print:p-0">
+            <ReportView r={built} snapshotId={r.id} />
+          </div>
+        </article>
+      </div>
     );
   }
 

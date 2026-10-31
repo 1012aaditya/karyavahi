@@ -12,14 +12,14 @@ const caseLink = (v: string) => {
 
 export function ReportView({ r, snapshotId }: { r: BuiltReport; snapshotId?: string }) {
   return (
-    <article className="card overflow-hidden print:border-0 print:shadow-none">
-      <header className="border-b border-line bg-paper-sunk px-6 py-5 print:bg-white">
+    <article className="mx-auto max-w-[960px] overflow-hidden rounded-md border border-line-strong bg-white shadow-lift print:max-w-none print:border-0 print:shadow-none">
+      <header className="border-b-[3px] border-navy px-6 pb-5 pt-6 sm:px-10">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <Logo size={34} />
             <div>
               <p className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-ink-faint">Karyavahi · {snapshotId ? `Snapshot ${snapshotId}` : 'Preview — not saved'}</p>
-              <h2 className="font-display text-[21px] font-semibold leading-tight text-ink">{r.title}</h2>
+              <h2 className="text-[24px] font-semibold leading-tight tracking-tight text-ink">{r.title}</h2>
             </div>
           </div>
           <span className="chip shrink-0 border-warn/30 bg-warn-light text-warn">Fictional demo data</span>
@@ -33,7 +33,7 @@ export function ReportView({ r, snapshotId }: { r: BuiltReport; snapshotId?: str
       </header>
 
       {r.summary.length ? (
-        <section className="border-b border-line px-6 py-4">
+        <section className="border-b border-line px-6 py-5 sm:px-10">
           <h3 className="h-section mb-2">Summary</h3>
           <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             {r.summary.map((s) => (
@@ -47,7 +47,7 @@ export function ReportView({ r, snapshotId }: { r: BuiltReport; snapshotId?: str
       ) : null}
 
       {r.sections.map((sec) => (
-        <section key={sec.title} className="border-b border-line px-6 py-4 print:break-inside-auto">
+        <section key={sec.title} className="border-b border-line px-6 py-5 sm:px-10 print:break-inside-auto">
           <h3 className="text-[15px] font-semibold text-ink">{sec.title} <span className="font-normal text-ink-faint">({sec.rows.length})</span></h3>
           {sec.note ? <p className="mt-0.5 text-[12.5px] text-ink-soft">{sec.note}</p> : null}
           {sec.rows.length === 0 ? <p className="mt-2 text-[13px] text-ink-faint">No records.</p> : (
@@ -66,7 +66,7 @@ export function ReportView({ r, snapshotId }: { r: BuiltReport; snapshotId?: str
         </section>
       ))}
 
-      <footer className="space-y-1.5 px-6 py-4 text-[12px] text-ink-soft">
+      <footer className="space-y-1.5 px-6 py-5 text-[12px] text-ink-soft sm:px-10">
         <p className="font-semibold text-ink">Limitations and caveats</p>
         <ul className="list-disc space-y-0.5 pl-5">{r.caveats.map((c) => <li key={c}>{c}</li>)}</ul>
         <p className="pt-2 font-semibold uppercase tracking-wide text-warn">{r.disclaimer}</p>
