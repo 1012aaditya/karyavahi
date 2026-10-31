@@ -174,10 +174,12 @@ ok('CASE-0184 starts awaiting approval', before.status === 'awaiting_approval', 
 const approval = cs.caseApprovals(beo, 'CASE-0184').find((a) => a.decision === 'pending');
 ok('there is a pending approval row', !!approval);
 const planId = before.current_plan_id!;
-const decided = w.decidePlan(beo, { caseId: 'CASE-0184', planId, decision: 'approved' });
-ok('the BEO approves the block-lever plan', decided.to === 'approved', decided.to);
+refused('the BEO who submitted the plan cannot approve it',
+  () => w.decidePlan(beo, { caseId: 'CASE-0184', planId, decision: 'approved' }), 'own_submission');
+const decided = w.decidePlan(deo, { caseId: 'CASE-0184', planId, decision: 'approved' });
+ok('the DEO approves the block-lever plan', decided.to === 'approved', decided.to);
 ok('the approval row records who decided it',
-  cs.caseApprovals(beo, 'CASE-0184').some((a) => a.decision === 'approved' && a.decided_by === beo.user_id));
+  cs.caseApprovals(beo, 'CASE-0184').some((a) => a.decision === 'approved' && a.decided_by === deo.user_id));
 ok('the plan is now approved',
   cs.planById(beo, planId)?.status === 'approved');
 ok('a case event was written',

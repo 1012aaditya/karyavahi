@@ -1,13 +1,14 @@
 /**
  * Drives the demo story through the real UI: sign in as the Rampur Sadar block officer,
- * read CASE-0184, approve the plan, and check the case actually moved.
+ * read CASE-0184, see that the plan they submitted needs someone else's approval, then approve
+ * it as the district officer and check the case actually moved.
  */
 // playwright if installed, otherwise playwright-core driving the system Chrome.
 let chromium, launchOpts = {};
 try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require('playwright-core')); launchOpts = { channel: 'chrome' }; }
 const SHOTS = process.env.KARYAVAHI_SHOTS ?? '/tmp/karyavahi-shots';
 require('node:fs').mkdirSync(SHOTS, { recursive: true });
-const BASE = 'http://localhost:3000';
+const BASE = process.env.KV_BASE ?? 'http://localhost:3000';
 
 let fails = 0;
 const ok = (label, cond, extra = '') => {
@@ -66,7 +67,19 @@ const ok = (label, cond, extra = '') => {
   // full-page capture of the whole case
   await page.screenshot({ path: `${SHOTS}/05-case-full.png`, fullPage: true });
 
-  // ---- approve the plan ----
+  // ---- the block officer submitted this plan, so they cannot approve it ----
+  ok('the submitter is not offered "Approve the plan"',
+    (await page.getByRole('button', { name: /^Approve the plan$/ }).count()) === 0);
+  ok('the page says who must approve instead', caseText.includes('You submitted this plan, so another officer must approve it'));
+
+  // ---- the district officer approves it ----
+  await ctx.clearCookies();
+  await page.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
+  await page.fill('input[name=email]', 'deo.rmp@demo.karyavahi.test');
+  await page.getByRole('button', { name: /Sign in/ }).first().click();
+  await page.waitForLoadState('networkidle');
+  await ctx.addCookies([{ name: 'kv_lang', value: 'en', url: BASE }]);
+  await page.goto(`${BASE}/cases/CASE-0184`, { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: /^Approve the plan$/ }).first().click();
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(800);
@@ -77,7 +90,7 @@ const ok = (label, cond, extra = '') => {
   await page.reload({ waitUntil: 'networkidle' });
   const reloaded = await page.locator('body').innerText();
   ok('the case status is now "Plan approved"', reloaded.includes('Plan approved'));
-  ok('the approval is recorded against the officer', /Vikas Qureshi/.test(reloaded));
+  ok('the approval is recorded against the district officer', /Simran Shukla/.test(reloaded));
   ok('the audit trail shows the status change', /case\.status_changed/.test(reloaded));
   await page.screenshot({ path: `${SHOTS}/06-case-approved.png`, fullPage: true });
 

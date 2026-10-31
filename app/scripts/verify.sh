@@ -27,6 +27,9 @@ npx tsx --conditions=react-server scripts/smoke.ts 2>&1 | grep -vE 'Experimental
 step 'write layer, lifecycle, refusals and the audit chain'
 npx tsx --conditions=react-server scripts/write-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -12
 
+step 'who may move a case, and who approves a plan'
+npx tsx --conditions=react-server scripts/authority-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
+
 step 'sign-in sessions and request checks'
 npx tsx --conditions=react-server scripts/session-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
 

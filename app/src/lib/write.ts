@@ -1,11 +1,11 @@
 import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import { all, one, run, tx, nextId, nextSeq, j, restorePristine } from './db';
-import { Refused, actingRole, require_, requireDecideLever } from './guard';
+import { Refused, actingRole, may, moveRefusal, require_, requireDecideLever } from './guard';
 import { casesPred, hasRole } from './scope';
 import type { Session } from './session';
 import { nowIso, today, addDays } from './clock';
-import { canTransition, reasonRequired, closureEligibility } from '@domain/lifecycle';
+import { canTransition, reasonRequired, closureEligibility, isPlanDecision } from '@domain/lifecycle';
 import { evaluateOutcome, OUTCOME_NOTE } from '@domain/outcome';
 import { settingsAt } from '@domain/catalog';
 import type { CaseStatus, OutcomeSchoolRow } from '@domain/types';
@@ -142,6 +142,51 @@ function loadCaseForWrite(s: Session, caseId: string): CaseCore {
   );
 }
 
+/** Who submitted the plan now waiting on a decision, or null when nobody recorded it. */
+function pendingSubmitter(caseId: string, planId: string | null): string | null {
+  return one<{ submitted_by: string }>(
+    `select submitted_by from approvals where case_id = ? and decision = 'pending' and (? is null or plan_id = ?)
+      order by submitted_at desc limit 1`, caseId, planId, planId,
+  )?.submitted_by ?? null;
+}
+
+/** Refuses a move the user has no authority for, leaving the attempt in the audit chain. Call it
+ *  outside any transaction, or the audit row is rolled back with the refusal. */
+function checkMoveAuthority(s: Session, c: CaseCore, to: CaseStatus, submittedBy: string | null, corr: string): void {
+  const refusal = moveRefusal(s, c, to, submittedBy);
+  if (!refusal) return;
+  appendAudit({
+    actorUserId: s.user_id, actorRole: actingRole(s),
+    action: refusal.code === 'own_submission' ? 'plan.approve_refused' : 'case.status_change_refused',
+    entityType: 'case', entityId: c.id, before: { status: c.status }, after: { status: to },
+    reason: refusal.message, correlationId: corr, result: 'failure',
+  });
+  throw new Refused(refusal.message, refusal.code);
+}
+
+/** A submission opens one pending approval for the current plan, recording who submitted it,
+ *  so the approver can be checked against the submitter. */
+function openApproval(s: Session, c: CaseCore, planId: string): void {
+  const open = one<{ id: string }>(
+    `select id from approvals where case_id = ? and plan_id = ? and decision = 'pending'`, c.id, planId,
+  );
+  if (open) return;
+  const plan = one<{ intervention_id: string; school_ids: string; version: number; drafted_by: string }>(
+    'select intervention_id, school_ids, version, drafted_by from case_plans where id = ?', planId,
+  );
+  run(`insert or ignore into app_sequences (name, value)
+         select 'approval', coalesce(max(cast(substr(id, 5) as integer)), 0) from approvals`);
+  run(
+    `insert into approvals (id, case_id, plan_id, required_role, submitted_by, submitted_at, decision,
+       decided_by, decided_at, reason, original_plan, edited_plan, ai_drafted)
+     values (?,?,?,?,?,?,'pending',null,null,null,?,null,?)`,
+    nextId('approval', 'APR-', 5), c.id, planId, c.lever === 'block' ? 'beo' : 'deo', s.user_id, nowIso(),
+    JSON.stringify({ intervention_id: plan?.intervention_id, school_ids: j(plan?.school_ids, []), version: plan?.version }),
+    plan?.drafted_by === 'ai_draft' ? 1 : 0,
+  );
+  run(`update case_plans set status = 'submitted' where id = ?`, planId);
+}
+
 // ------------------------------------------------------------------ transition_case
 export interface TransitionResult { caseId: string; from: CaseStatus; to: CaseStatus }
 
@@ -171,10 +216,13 @@ export function transitionCase(
     throw new Refused(`Moving a case from "${from}" to "${to}" needs a written reason.`, 'reason_required');
   }
 
-  // 3. is this role empowered to make this particular move?
-  if (to === 'approved' || to === 'referred_pab' || to === 'revision_requested'
-      || (from === 'awaiting_approval' && to === 'under_investigation')) {
-    requireDecideLever(s, c.lever);
+  // 3. is this role empowered to make this particular move, over this case's area, and (for an
+  //    approval) is it someone other than the person who submitted the plan?
+  checkMoveAuthority(s, c, to, isPlanDecision(from, to) ? pendingSubmitter(caseId, c.current_plan_id) : null, corr);
+  if (to === 'awaiting_approval' && !c.current_plan_id) {
+    throw new Refused('There is no plan on this case to submit for approval.', 'no_plan');
+  }
+  if (isPlanDecision(from, to)) {
     require_(s, to === 'approved' && c.lever === 'block' ? 'plan.approve_block'
       : to === 'approved' ? 'plan.approve_district_or_pab' : 'plan.reject_or_revise');
   }
@@ -244,6 +292,7 @@ export function transitionCase(
 
   // 5. do it
   return tx(() => {
+    if (to === 'awaiting_approval') openApproval(s, c, c.current_plan_id!);
     const closedAt = to === 'closed' ? nowIso() : null;
     run(
       `update cases set status = ?, updated_at = ?,
@@ -292,25 +341,28 @@ export function decidePlan(
   s: Session,
   o: { caseId: string; planId: string; decision: 'approved' | 'approved_with_edits' | 'rejected' | 'revision_requested' | 'approved_for_pab'; reason?: string | null },
 ): TransitionResult {
+  // Every check runs before the transaction opens, so a refused attempt stays in the audit chain
+  // instead of being rolled back with the decision it refused.
+  const c = loadCaseForWrite(s, o.caseId);
+  requireDecideLever(s, c.lever);
+  if (c.status !== 'awaiting_approval') {
+    throw new Refused(`This case is "${c.status}", not waiting for a decision.`, 'wrong_status');
+  }
+  const plan = one<{ id: string; case_id: string }>('select id, case_id from case_plans where id = ?', o.planId);
+  if (!plan || plan.case_id !== o.caseId) throw new Refused('That plan does not belong to this case.', 'mismatch');
+
+  if ((o.decision === 'rejected' || o.decision === 'revision_requested') && !o.reason?.trim()) {
+    throw new Refused('Sending a plan back needs a written reason.', 'reason_required');
+  }
+
+  const to: CaseStatus =
+    o.decision === 'rejected' ? 'under_investigation'
+    : o.decision === 'revision_requested' ? 'revision_requested'
+    : o.decision === 'approved_for_pab' ? 'referred_pab'
+    : 'approved';
+  checkMoveAuthority(s, c, to, pendingSubmitter(o.caseId, o.planId), randomUUID());
+
   return tx(() => {
-    const c = loadCaseForWrite(s, o.caseId);
-    requireDecideLever(s, c.lever);
-    if (c.status !== 'awaiting_approval') {
-      throw new Refused(`This case is "${c.status}", not waiting for a decision.`, 'wrong_status');
-    }
-    const plan = one<{ id: string; case_id: string }>('select id, case_id from case_plans where id = ?', o.planId);
-    if (!plan || plan.case_id !== o.caseId) throw new Refused('That plan does not belong to this case.', 'mismatch');
-
-    if ((o.decision === 'rejected' || o.decision === 'revision_requested') && !o.reason?.trim()) {
-      throw new Refused('Sending a plan back needs a written reason.', 'reason_required');
-    }
-
-    const to: CaseStatus =
-      o.decision === 'rejected' ? 'under_investigation'
-      : o.decision === 'revision_requested' ? 'revision_requested'
-      : o.decision === 'approved_for_pab' ? 'referred_pab'
-      : 'approved';
-
     const pending = one<{ id: string }>(
       `select id from approvals where case_id = ? and plan_id = ? and decision = 'pending' limit 1`,
       o.caseId, o.planId,
@@ -802,8 +854,24 @@ export function setHumanConclusion(s: Session, caseId: string, text: string): vo
 }
 
 // ------------------------------------------------------------------ reminder_sweep
-/** One T-2 reminder and one +7 escalation per task, never twice. Idempotent by design. */
+/**
+ * One T-2 reminder and one +7 escalation per task, never twice. Idempotent by design.
+ * Without a session it is the scheduled job; by hand, only the demo admin may run it, because it
+ * escalates overdue work across the whole state.
+ */
 export function reminderSweep(s: Session | null, dateOverride?: string): { remindersSent: number; escalationsCreated: number } {
+  if (s && !(hasRole(s, 'demo_admin') && may(s, 'demo.reset'))) {
+    appendAudit({
+      actorUserId: s.user_id, actorRole: actingRole(s), action: 'demo.sweep_refused',
+      entityType: 'system', entityId: 'reminder_sweep', reason: 'only the demo admin runs the sweep by hand',
+      result: 'failure',
+    });
+    throw new Refused('Only the demo admin can run the reminder sweep by hand. In production it runs on a schedule.', 'role');
+  }
+  if (dateOverride !== undefined
+      && (!/^\d{4}-\d{2}-\d{2}$/.test(dateOverride) || Number.isNaN(Date.parse(dateOverride)))) {
+    throw new Refused(`"${dateOverride}" is not a date (YYYY-MM-DD).`, 'bad_input');
+  }
   return tx(() => {
     const day = dateOverride ?? today();
     const dueSoon = addDays(day, 2);
@@ -871,7 +939,8 @@ export function demoReset(s: Session): void {
 }
 
 export function setDemoClock(s: Session, iso: string): void {
-  if (!hasRole(s, 'demo_admin', 'state_admin')) throw new Refused('Demo admin only.', 'role');
+  // One clock drives every user's deadlines, SLAs and delegations, so only the demo operator moves it.
+  if (!hasRole(s, 'demo_admin')) throw new Refused('Demo admin only.', 'role');
   const before = nowIso();
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) throw new Refused(`"${iso}" is not a date.`, 'bad_input');

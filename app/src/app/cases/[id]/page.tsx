@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLanguage } from '@/lib/session';
 import { pageSession } from '@/lib/page-session';
-import { may, canDecideLever } from '@/lib/guard';
+import { may, moveRefusal } from '@/lib/guard';
 import { caseBundle, caseExists } from '@/lib/cases';
 import {
   userNames, schoolNames, placeNames, competency, rounds, clusterTrend, intervention, caseVisits,
@@ -118,7 +118,6 @@ export default async function CasePage({
   const blockers = listBlockers(session, { caseId: c.id, limit: 20 });
   const overdueTasks = tasks.filter((t) => !t.submitted_at && t.due_date < today()).length;
   const pendingProof = evidence.filter((e) => e.status === 'pending').length;
-  const decidesLever = canDecideLever(session, c.lever);
   const pendingApproval = approvals.find((a) => a.decision === 'pending');
   const eligibleOutcome = outcomes.find((o) => o.closure_eligible);
   const next = nextAction(c.status);
@@ -131,21 +130,28 @@ export default async function CasePage({
     ...(c.reopen_count ? [pick(lang, `Reopened ${c.reopen_count}× — no learning gain yet`, `${c.reopen_count}× फिर खोला`)] : []),
   ];
 
-  /** Which of the legal next moves this role may actually make, and why not otherwise. */
+  /** Which of the legal next moves this role may actually make, and why not otherwise. The
+   *  authority answer is the server's own (moveRefusal), so a button shown here is not refused. */
   function gate(to: CaseStatus): { allowed: boolean; why: string } {
-    const needsLever = ['approved', 'revision_requested', 'referred_pab'].includes(to)
-      || (c.status === 'awaiting_approval' && to === 'under_investigation');
-    if (needsLever && !decidesLever) {
-      return {
-        allowed: false,
-        why: pick(
+    const refusal = moveRefusal(session, c, to, pendingApproval?.submitted_by ?? null);
+    if (refusal) {
+      const why = {
+        lever: pick(
           lang,
           c.lever === 'block'
             ? 'Only the block officer or the DEO decides a block-lever plan.'
             : 'Only the DEO or the state programme team decides a district or PAB plan.',
           c.lever === 'block' ? 'केवल खंड अधिकारी या DEO निर्णय ले सकते हैं।' : 'केवल DEO या राज्य दल निर्णय ले सकते हैं।',
         ),
-      };
+        role: pick(lang, refusal.message, 'आपकी भूमिका यह कदम नहीं उठा सकती।'),
+        area: pick(lang, refusal.message, 'आपकी भूमिका इस प्रकरण के क्षेत्र पर लागू नहीं होती, इसलिए इस पर अधिकार नहीं देती।'),
+        own_submission: pick(
+          lang,
+          'You submitted this plan, so another officer must approve it. You can still send it back.',
+          'यह योजना आपने प्रस्तुत की है, इसलिए स्वीकृति कोई अन्य अधिकारी देगा। आप इसे अभी भी लौटा सकते हैं।',
+        ),
+      }[refusal.code];
+      return { allowed: false, why };
     }
     if (to === 'closed') {
       if (!may(session, 'case.close')) return { allowed: false, why: pick(lang, 'Your role cannot close cases.', 'आपकी भूमिका प्रकरण बंद नहीं कर सकती।') };
@@ -272,9 +278,9 @@ export default async function CasePage({
             <h3 className="mb-2 text-[13px] font-semibold text-ink">
               {pick(lang, 'Your decision', 'आपका निर्णय')}
             </h3>
-            {!decidesLever ? (
+            {!gate('revision_requested').allowed ? (
               <Callout tone="warn">
-                {gate('approved').why}
+                {gate('revision_requested').why}
                 {pendingApproval ? (
                   <p className="mt-1">
                     {pick(lang, 'Waiting on:', 'प्रतीक्षा:')} {pendingApproval.required_role.toUpperCase()}
@@ -283,17 +289,21 @@ export default async function CasePage({
               </Callout>
             ) : (
               <div className="flex flex-wrap items-start gap-3">
-                <ActionForm
-                  action={decidePlanAction}
-                  hidden={{ case_id: c.id, plan_id: currentPlan.id, decision: 'approved' }}
-                  label={pick(lang, 'Approve the plan', 'योजना स्वीकृत करें')}
-                  tone="good"
-                  confirm={pick(
-                    lang,
-                    'Approving locks the comparison schools and the success threshold, then creates the tasks.',
-                    'स्वीकृति से तुलना विद्यालय और सफलता लक्ष्य तय हो जाते हैं, फिर काम बनते हैं।',
-                  )}
-                />
+                {gate('approved').allowed ? (
+                  <ActionForm
+                    action={decidePlanAction}
+                    hidden={{ case_id: c.id, plan_id: currentPlan.id, decision: 'approved' }}
+                    label={pick(lang, 'Approve the plan', 'योजना स्वीकृत करें')}
+                    tone="good"
+                    confirm={pick(
+                      lang,
+                      'Approving locks the comparison schools and the success threshold, then creates the tasks.',
+                      'स्वीकृति से तुलना विद्यालय और सफलता लक्ष्य तय हो जाते हैं, फिर काम बनते हैं।',
+                    )}
+                  />
+                ) : (
+                  <p className="basis-full text-[13px] text-ink-soft">{gate('approved').why}</p>
+                )}
                 <Disclose label={pick(lang, 'Send back for changes', 'बदलाव के लिए लौटाएँ')}>
                   <ActionForm
                     action={decidePlanAction}
@@ -314,7 +324,7 @@ export default async function CasePage({
                     <ReasonBox required label={pick(lang, 'Why this plan is wrong for this case', 'यह योजना क्यों उपयुक्त नहीं')} />
                   </ActionForm>
                 </Disclose>
-                {c.lever !== 'block' || may(session, 'plan.approve_district_or_pab') ? (
+                {(c.lever !== 'block' || may(session, 'plan.approve_district_or_pab')) && gate('referred_pab').allowed ? (
                   <Disclose label={pick(lang, 'Refer to the PAB', 'PAB को भेजें')}>
                     <ActionForm
                       action={decidePlanAction}

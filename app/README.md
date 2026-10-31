@@ -130,14 +130,21 @@ Three layers, in this order, on every write:
    sees 14 cases, a CRC 2, a headmaster one school and no staff-movement rows — the same numbers
    Postgres produces, asserted in `scripts/smoke.ts`.
 2. **Role** — the matrix in `src/domain/permissions.ts`. The navigation is built from it, so a
-   role never sees a link to something it would be refused.
+   role never sees a link to something it would be refused. Every case move also has its own
+   list of roles (`TRANSITION_ROLES` in `src/domain/lifecycle.ts`; a move not listed is refused
+   for everyone), and the role that holds the move must itself cover the case's area
+   (`moveRefusal` in `src/lib/guard.ts`). Seeing a case — as a headmaster whose school is in it,
+   a task owner or an auditor — gives no authority to move it.
 3. **The rule itself** — `canTransition`, `reasonRequired`, `closureEligibility` from
    `src/domain/lifecycle.ts`, plus the specific guards: only a BEO or DEO closes a case, only
-   on an eligible outcome; nobody verifies evidence they submitted; a block-lever plan is
-   decided by a BEO or DEO and a district or PAB plan by a DEO or the state team.
+   on an eligible outcome; nobody verifies evidence they submitted; nobody approves a plan they
+   submitted (they may still send it back); a block-lever plan is decided by a BEO or DEO and a
+   district or PAB plan by a DEO or the state team. The reminder sweep and the demo clock are the
+   demo admin's alone. `npm run test:authority` checks all of this.
 
-A refusal is shown, with its reason, next to the button that caused it. Illegal transitions and
-self-verification attempts are written to the audit chain as failures **before** the exception
+A refusal is shown, with its reason, next to the button that caused it. Illegal transitions,
+moves without authority, approvals of your own plan, hand-run sweeps and self-verification
+attempts are written to the audit chain as failures **before** the exception
 is raised, outside the transaction, so the attempt survives the rollback.
 
 ## The audit chain
