@@ -31,7 +31,10 @@ function idsFor(a) {
     : a.scope_type === 'block' ? q(`select id from cases where block_id = ? limit 1`, a.scope_id)
     : a.scope_type === 'cluster' ? q(`select id from cases where cluster_id = ? limit 1`, a.scope_id)
     : q(`select case_id as id from tasks where owner_user_id = ? limit 1`, a.id);
+  let complaintId = null;
+  try { complaintId = q(`select id from complaints where reporter_user_id = ? or assigned_user_id = ? limit 1`, a.id, a.id); } catch { /* table created by the app on first run */ }
   return {
+    complaintId,
     caseId: scopeCase,
     taskId: q(`select id from tasks where owner_user_id = ? limit 1`, a.id)
          ?? (scopeCase ? q(`select id from tasks where case_id = ? limit 1`, scopeCase) : null),
@@ -77,6 +80,10 @@ const COMMON = [
   '/impact', '/impact?state=improved_confirmed', '/reports/new', '/reports/new?type=atr', '/reports/new?type=learning_impact',
   '/reports/new?type=exceptions', '/reports/new?type=review_pack', '/reports/new?type=block_performance',
   '/reports/new?type=intervention_effectiveness', '/reports/new?type=data_quality', '/reports/new?type=executive_summary',
+  // geography, complaints, onboarding
+  '/hotspots?layer=complaints', '/hotspots?h=urban', '/api/geo/map', '/api/geo/search?q=ram',
+  '/complaints', '/complaints?queue=all', '/complaints?queue=overdue', '/complaints?queue=escalated', '/complaints/new', '/complaints/new?category=conduct',
+  '/account', '/admin/accounts', '/admin/accounts?tab=users', '/admin/hierarchy', '/admin/geography', '/register', '/register/status',
 ];
 
 // Real failure signatures. Next serialises its own 404 component into every page's payload,
@@ -104,6 +111,7 @@ for (const a of accounts) {
     ids.schoolId ? `/schools/${ids.schoolId}` : null,
     ids.reportId ? `/reports/${ids.reportId}` : null,
     ids.batchId ? `/import/${ids.batchId}` : null,
+    ids.complaintId ? `/complaints/${ids.complaintId}` : null,
   ].filter(Boolean);
 
   const fails = [];
@@ -147,6 +155,8 @@ await expectRefusal('a headmaster cannot verify proof', hm.id, '/evidence', 'doe
 await expectRefusal('a headmaster cannot import data', hm.id, '/import', 'import data');
 await expectRefusal('a CRC cannot open the demo admin controls', crc.id, '/admin', 'Only the demo administrator');
 await expectRefusal('a CRC cannot open the demo controls page', crc.id, '/admin/demo', 'Only the demo administrator');
+await expectRefusal('a BEO cannot pull the district map by changing the parent', IDS.has(accounts.find((a) => a.role === 'beo').id) ? accounts.find((a) => a.role === 'beo').id : crc.id, '/api/geo/map?parent=DST-01', 404);
+await expectRefusal('a CRC cannot open account approvals', crc.id, '/admin/accounts', 'does not approve or manage accounts');
 await expectRefusal('a CRC cannot read the AI log', crc.id, '/ai-log', 'can read this log');
 await expectRefusal('an unknown session is sent to sign in', 'USR-NOPE', '/cases', 'redirect-to-login');
 

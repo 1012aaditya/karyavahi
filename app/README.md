@@ -40,6 +40,20 @@ The product is organised into eight sections, each a real, data-backed workspace
 
 Also: public landing page (`/`), email sign-in (`/login`, honestly passwordless), demo personas (`/demo`), global scoped search (`/search`).
 
+### v3 — geography, hierarchy, grievances, onboarding
+
+| Area | Where | Notes |
+|---|---|---|
+| Interactive map | `src/components/GeoMap.tsx`, `src/lib/geo.ts`, `/api/geo/map` | MapLibre GL JS, **no third-party tiles** (no keys, works offline). Seven layers: learning gaps, critical cases, open complaints, overdue actions, intervention delivery, verified improvement, insufficient data (hatched on every layer). Labels carry the value as text. Opens at the user's own scope; drill-down, breadcrumbs, back, search, Blocks/Cities hierarchy toggle, reset view. |
+| Geography model | `src/lib/ext/schema.ts`, `src/lib/ext/geogen.ts` | `geo_units`, `geo_relationships`, `geo_hierarchies`, `geo_levels`. Two hierarchies (administrative; urban, where a city ≠ a district). All shapes are **illustrative** — the state is fictional — generated as nested hex-grid partitions at 0°,0°. India's outline is deliberately not drawn (open datasets show borders that differ from India's official map). Load a licensed GeoJSON with `geometry_source='verified'` to replace them. |
+| Central permissions | `src/lib/authz.ts` | `authorize(session, permission, resource)` checks account status → role grant (built on the domain matrix) → geographic scope → ownership → organisational seniority → confidentiality. |
+| Hierarchy | `src/lib/org.ts`, `/admin/hierarchy` | `reporting_lines` (designated authority, derived from the seed), `delegations` (time-boxed acting charge, applied in the session and lapsing automatically), audited manager/scope/status changes. |
+| Complaints | `src/lib/complaints.ts`, `/complaints` | Separate from cases (linkable). Routed to the reporter's designated authority unless a category/priority policy says otherwise; conflict-of-interest routing around an accused officer; 14-state workflow with actor checks; SLA escalation sweep (idempotent) and manual escalation with reason; restricted complaints visible only to the route and the state auditor. |
+| Onboarding | `src/lib/onboarding.ts`, `/register`, `/admin/accounts` | Request → email code (shown on screen in demo) → simulated affiliation check → designated verifier approves/rejects/asks/reassigns. No self-approval, no approving equal or senior roles, duplicate detection, change requests, suspension/reactivation with history. |
+| Tests | `scripts/security-test.mts` | 73 checks: scope at every level, delegation and its lapse, map scope and probing, routing, workflow, SLA, confidentiality, onboarding, suspension, self-protection — on a scratch copy of the seed. |
+
+All new tables are created by the app beside the seed's (never altering seed tables) and re-created automatically after a demo reset.
+
 ### AI configuration
 
 Copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY` (server-side only). Model defaults to

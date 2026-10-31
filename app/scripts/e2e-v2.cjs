@@ -138,6 +138,86 @@ function zipEntries(buf) {
   await cp.goto(`${BASE}/admin/demo`, { waitUntil: 'networkidle' });
   ok('refusal: CRC cannot use demo controls', await cp.getByText(/Only the demo administrator|केवल डेमो प्रशासक/).count() > 0);
 
+  // ---- complaints through the UI
+  {
+    const hm = await login(browser, 'hm.sch-00002@demo.karyavahi.test');
+    const hp = await hm.newPage();
+    hp.on('pageerror', (e) => errors.push(`hm: ${e.message}`));
+    await hp.goto(`${BASE}/complaints/new?category=material_shortage`, { waitUntil: 'networkidle' });
+    ok('complaint form previews the routing before submit', await hp.getByText(/Goes to/).count() > 0);
+    const title = `Reading cards missing (e2e ${Date.now() % 100000})`;
+    await hp.fill('input[name=title]', title);
+    await hp.fill('textarea[name=description]', 'No reading cards for Class 2 this term; teachers improvising.');
+    await hp.getByRole('button', { name: /Submit complaint|शिकायत जमा करें/ }).click();
+    await hp.waitForURL(/\/complaints\/CMP-\d+/, { timeout: 30000 });
+    const cmpId = hp.url().match(/CMP-\d+/)[0];
+    ok(`complaint ${cmpId} submitted and acknowledged-by date shown`, await hp.getByText(/Complaint submitted/).count() > 0);
+
+    const crcCtx = await login(browser, 'crc.clu-001@demo.karyavahi.test');
+    const cp2 = await crcCtx.newPage();
+    await cp2.goto(`${BASE}/complaints?queue=mine`, { waitUntil: 'networkidle' });
+    ok('the designated CRC sees it in “waiting on you”', await cp2.getByText(title).count() > 0);
+    await cp2.goto(`${BASE}/complaints/${cmpId}`, { waitUntil: 'networkidle' });
+    await cp2.getByRole('button', { name: /^Acknowledge$/ }).click();
+    await cp2.getByText(/Updated: now "Acknowledged"/).waitFor({ timeout: 20000 }).catch(() => {});
+    ok('the CRC acknowledges it in the UI', await cp2.getByText(/Updated: now "Acknowledged"/).count() > 0);
+    const restricted = await cp2.goto(`${BASE}/complaints/CMP-0005`, { waitUntil: 'networkidle' });
+    ok('the accused CRC gets a 404 on the restricted complaint about them', restricted.status() === 404);
+    const deoCtx = await login(browser, 'deo.rmp@demo.karyavahi.test');
+    const dres = await deoCtx.request.get(`${BASE}/complaints/CMP-0005`);
+    ok('a senior DEO not on its route also gets a 404', dres.status() === 404);
+  }
+
+  // ---- the real map
+  {
+    const mp = await beo.newPage();
+    mp.on('pageerror', (e) => errors.push(`map: ${e.message}`));
+    await mp.goto(`${BASE}/hotspots`, { waitUntil: 'networkidle' });
+    await mp.locator('canvas.maplibregl-canvas').first().waitFor({ timeout: 30000 }).catch(() => {});
+    ok('MapLibre canvas renders', await mp.locator('canvas.maplibregl-canvas').count() > 0);
+    ok('map opens at the officer’s block', await mp.getByRole('navigation', { name: 'Map location' }).getByText('Rampur Sadar').count() > 0);
+    await mp.getByRole('radio', { name: 'Open complaints' }).click();
+    await mp.waitForURL(/layer=complaints/);
+    ok('switching layers updates the legend', await mp.getByText('Open complaints', { exact: true }).count() > 0);
+    const api = await beo.request.get(`${BASE}/api/geo/map?parent=DST-01`);
+    ok('the map API refuses the district to a block officer', api.status() === 404);
+  }
+
+  // ---- registration → verification → approval
+  {
+    const anon = await browser.newContext();
+    const rp = await anon.newPage();
+    const email = `e2e.${Date.now() % 1000000}@demo.karyavahi.test`;
+    await rp.goto(`${BASE}/register`, { waitUntil: 'networkidle' });
+    await rp.fill('input[name=full_name]', 'E2E Applicant');
+    await rp.fill('input[name=email]', email);
+    await rp.selectOption('select[name=role]', 'headmaster');
+    const selects = rp.locator('fieldset select');
+    await selects.nth(1).selectOption({ index: 0 }); // district stays default
+    await selects.nth(2).selectOption({ label: 'Rampur Sadar' });
+    await selects.nth(3).selectOption({ index: 1 });
+    await selects.nth(4).selectOption({ index: 1 });
+    await rp.fill('input[name=affiliation_ref]', 'EMP-EDU-4471');
+    await rp.getByRole('button', { name: 'Submit request' }).click();
+    await rp.waitForURL(/\/register\/status/, { timeout: 30000 });
+    ok('registration shows the demo verification code', await rp.getByText(/Your code is/).count() > 0);
+    await rp.getByRole('button', { name: 'Verify' }).click();
+    await rp.getByRole('button', { name: 'Check affiliation' }).waitFor({ timeout: 20000 });
+    await rp.getByRole('button', { name: 'Check affiliation' }).click();
+    await rp.getByText(/Approval pending/).first().waitFor({ timeout: 20000 }).catch(() => {});
+    ok('after the simulated checks the request waits for approval', await rp.getByText(/Approval pending/).count() > 0);
+    const signInBefore = await anon.request.post(`${BASE}/api/sign-in`, { form: { email }, maxRedirects: 0 });
+    ok('an unapproved applicant cannot sign in', (signInBefore.headers()['location'] ?? '').includes('error='));
+    const ap = await beo.newPage();
+    await ap.goto(`${BASE}/admin/accounts?tab=queue`, { waitUntil: 'networkidle' });
+    const card = ap.locator('li', { hasText: email });
+    await card.getByRole('button', { name: /^Approve$/ }).click();
+    await ap.getByText(/is active/).waitFor({ timeout: 20000 }).catch(() => {});
+    ok('the block officer approves it', await ap.getByText(/is active/).count() > 0);
+    const signInAfter = await anon.request.post(`${BASE}/api/sign-in`, { form: { email }, maxRedirects: 0 });
+    ok('the approved account can now sign in', signInAfter.status() === 303 && !(signInAfter.headers()['location'] ?? '').includes('error='));
+  }
+
   // ---- AI (live model)
   if (WITH_AI) {
     const ask = async (ctx, question, context) => {
