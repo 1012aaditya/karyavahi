@@ -71,17 +71,18 @@ function zipEntries(buf) {
   page.on('pageerror', (e) => errors.push(`${page.url()}: ${e.message}`));
 
   await page.goto(`${BASE}/overview`, { waitUntil: 'networkidle' });
-  ok('overview: priority actions', await page.getByRole('heading', { name: /Priority actions|प्राथमिक कार्य/ }).count() > 0);
+  ok('overview: requires-your-attention list', await page.getByText(/Requires your attention/).count() > 0);
   ok('overview: KPI links to approvals', await page.locator('a[href="/approvals"]').count() > 0);
   ok('overview: no demo-clock controls on the home page', await page.getByText('Reset the demo').count() === 0);
 
-  await page.goto(`${BASE}/hotspots`, { waitUntil: 'networkidle' });
-  await page.getByRole('button', { name: /^Rampur/ }).first().click();
-  await page.waitForURL(/selected=CLU-/);
-  await page.waitForLoadState('networkidle');
+  // Map-first workspace: selection updates the URL in place (no reload) and fills the panel.
+  await page.goto(`${BASE}/hotspots?view=list`, { waitUntil: 'networkidle' });
+  await page.locator('table tbody').getByRole('button', { name: 'Rampur', exact: true }).click();
+  await page.waitForURL(/sel=CLU-/);
+  await page.getByText('Most affected competencies').waitFor({ timeout: 15000 });
   ok('hotspots: selecting a cluster opens its detail', await page.getByText('Most affected competencies').count() > 0);
   ok('hotspots: CASE-0184 listed for Rampur cluster', await page.getByText('CASE-0184').count() > 0);
-  ok('hotspots: schematic disclaimer shown', await page.getByText(/not geographic/).count() > 0);
+  ok('hotspots: illustrative-boundary disclaimer shown', await page.getByText(/illustrative boundaries/).count() > 0);
 
   await page.goto(`${BASE}/cases?tab=approval`, { waitUntil: 'networkidle' });
   ok('cases: pending-approval tab lists CASE-0184', await page.getByText('CASE-0184').count() > 0);
@@ -159,8 +160,10 @@ function zipEntries(buf) {
     ok('the designated CRC sees it in “waiting on you”', await cp2.getByText(title).count() > 0);
     await cp2.goto(`${BASE}/complaints/${cmpId}`, { waitUntil: 'networkidle' });
     await cp2.getByRole('button', { name: /^Acknowledge$/ }).click();
-    await cp2.getByText(/Updated: now "Acknowledged"/).waitFor({ timeout: 20000 }).catch(() => {});
-    ok('the CRC acknowledges it in the UI', await cp2.getByText(/Updated: now "Acknowledged"/).count() > 0);
+    // The Acknowledge button disappears once it is used; the status chip is the confirmation.
+    await cp2.getByRole('button', { name: /^Acknowledge$/ }).waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
+    await cp2.reload({ waitUntil: 'networkidle' });
+    ok('the CRC acknowledges it in the UI', await cp2.getByText('Acknowledged', { exact: true }).count() > 0 && await cp2.getByRole('button', { name: /^Acknowledge$/ }).count() === 0);
     const restricted = await cp2.goto(`${BASE}/complaints/CMP-0005`, { waitUntil: 'networkidle' });
     ok('the accused CRC gets a 404 on the restricted complaint about them', restricted.status() === 404);
     const deoCtx = await login(browser, 'deo.rmp@demo.karyavahi.test');
@@ -175,10 +178,11 @@ function zipEntries(buf) {
     await mp.goto(`${BASE}/hotspots`, { waitUntil: 'networkidle' });
     await mp.locator('canvas.maplibregl-canvas').first().waitFor({ timeout: 30000 }).catch(() => {});
     ok('MapLibre canvas renders', await mp.locator('canvas.maplibregl-canvas').count() > 0);
-    ok('map opens at the officer’s block', await mp.getByRole('navigation', { name: 'Map location' }).getByText('Rampur Sadar').count() > 0);
-    await mp.getByRole('radio', { name: 'Open complaints' }).click();
-    await mp.waitForURL(/layer=complaints/);
-    ok('switching layers updates the legend', await mp.getByText('Open complaints', { exact: true }).count() > 0);
+    ok('map opens at the officer’s block', await mp.getByRole('navigation', { name: 'Geographic breadcrumb' }).getByText('Rampur Sadar').count() > 0);
+    await mp.getByRole('toolbar', { name: 'Map tools' }).getByRole('button', { name: 'Layers' }).click();
+    await mp.getByRole('checkbox', { name: /Open complaints/ }).check();
+    await mp.waitForURL(/layers=[^&]*complaints/);
+    ok('turning on the complaints overlay updates the URL in place', /layers=[^&]*complaints/.test(mp.url()));
     const api = await beo.request.get(`${BASE}/api/geo/map?parent=DST-01`);
     ok('the map API refuses the district to a block officer', api.status() === 404);
   }
@@ -193,7 +197,7 @@ function zipEntries(buf) {
     await rp.fill('input[name=email]', email);
     await rp.selectOption('select[name=role]', 'headmaster');
     const selects = rp.locator('fieldset select');
-    await selects.nth(1).selectOption({ index: 0 }); // district stays default
+    await selects.nth(1).selectOption({ label: 'Rampur' });
     await selects.nth(2).selectOption({ label: 'Rampur Sadar' });
     await selects.nth(3).selectOption({ index: 1 });
     await selects.nth(4).selectOption({ index: 1 });
@@ -212,8 +216,9 @@ function zipEntries(buf) {
     await ap.goto(`${BASE}/admin/accounts?tab=queue`, { waitUntil: 'networkidle' });
     const card = ap.locator('li', { hasText: email });
     await card.getByRole('button', { name: /^Approve$/ }).click();
-    await ap.getByText(/is active/).waitFor({ timeout: 20000 }).catch(() => {});
-    ok('the block officer approves it', await ap.getByText(/is active/).count() > 0);
+    // Once decided, the card stays in the list with its new status and no decision buttons.
+    for (let t = 0; t < 60 && !/account active/i.test(await card.innerText().catch(() => '')); t++) await ap.waitForTimeout(500);
+    ok('the block officer approves it', await card.getByRole('button', { name: /^Approve$/ }).count() === 0 && /account active/i.test(await card.innerText()));
     const signInAfter = await anon.request.post(`${BASE}/api/sign-in`, { form: { email }, maxRedirects: 0 });
     ok('the approved account can now sign in', signInAfter.status() === 303 && !(signInAfter.headers()['location'] ?? '').includes('error='));
   }

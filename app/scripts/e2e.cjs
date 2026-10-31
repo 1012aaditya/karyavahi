@@ -33,14 +33,16 @@ const ok = (label, cond, extra = '') => {
   ok('signing in lands on the overview', page.url().includes('/overview'), page.url());
 
   // The BEO prefers Hindi; switch to English for the walkthrough.
-  const toEnglish = page.getByRole('button', { name: /English/ });
-  if (await toEnglish.count()) { await toEnglish.first().click(); await page.waitForLoadState('networkidle'); }
+  // The language switch lives in the account menu.
+  await page.getByRole('button', { name: 'Account menu' }).click();
+  const toEnglish = page.getByRole('button', { name: 'Switch to English' });
+  if (await toEnglish.count()) { await toEnglish.first().click(); await page.waitForLoadState('networkidle'); await page.waitForTimeout(500); }
 
   await page.screenshot({ path: `${SHOTS}/02-beo-dashboard.png`, fullPage: true });
   const bodyText = await page.locator('body').innerText();
   ok('the demo banner is on the page', bodyText.includes('DEMO MODE'));
   ok('the dashboard leads with what is waiting on the officer',
-    /needs your attention|Priority actions/i.test(bodyText));
+    /needs your attention|Requires your attention|Priority actions/i.test(bodyText));
 
   // ---- the hero case ----
   await page.goto(`${BASE}/cases/CASE-0184`, { waitUntil: 'networkidle' });
@@ -117,8 +119,9 @@ const ok = (label, cond, extra = '') => {
   await page.goto(`${BASE}/login/headmaster`, { waitUntil: 'networkidle' });
   await page.locator('li').first().getByRole('button', { name: /Sign in/ }).click();
   await page.waitForLoadState('networkidle');
-  const en2 = page.getByRole('button', { name: /English/ });
-  if (await en2.count()) { await en2.first().click(); await page.waitForLoadState('networkidle'); }
+  await page.getByRole('button', { name: 'Account menu' }).click();
+  const en2 = page.getByRole('button', { name: 'Switch to English' });
+  if (await en2.count()) { await en2.first().click(); await page.waitForLoadState('networkidle'); await page.waitForTimeout(500); }
   const hmText = await page.locator('body').innerText();
   ok('the headmaster lands on their own school', page.url().includes('/school'), page.url());
   ok('the headmaster is told what they cannot see',

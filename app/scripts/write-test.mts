@@ -248,7 +248,9 @@ w.setDemoClock(admin, '2026-11-20T06:30:00.000Z');
 ok('the demo admin can move the clock',
   one<{ value: string }>(`select value from app_state where key = 'demo_clock'`)?.value.startsWith('2026-11-20') === true);
 
-// restore whatever the demo looked like before the test
+// restore whatever the demo looked like before the test. Close our handle first: an open
+// connection keeps its -wal alive on Windows and checkpoints it into the restored file on exit.
+{ const { db: dbf } = await import('../src/lib/db'); try { dbf().close(); } catch { /* already closed */ } }
 swap(BACKUP, LIVE);
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

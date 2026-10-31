@@ -14,11 +14,13 @@ import { RegisterForm } from '@/components/RegisterForm';
 export default async function RegisterPage() {
   const s = await getSession();
   if (s) redirect(homeFor(s));
-  const state = one<{ id: string; name: string }>('select id, name from states limit 1')!;
-  const districts = all<{ id: string; name: string }>('select id, name from districts order by name');
-  const blocks = all<{ id: string; name: string; parent: string }>('select id, name, district_id parent from blocks order by name');
-  const clusters = all<{ id: string; name: string; parent: string }>('select id, name, block_id parent from clusters order by name');
-  const schools = all<{ id: string; name: string; parent: string }>('select id, name, cluster_id parent from schools order by name');
+  // node:sqlite rows have a null prototype, which React refuses to pass to a client component.
+  const plain = <T extends object>(rows: T[]): T[] => rows.map((r) => ({ ...r }));
+  const state = { ...one<{ id: string; name: string }>('select id, name from states limit 1')! };
+  const districts = plain(all<{ id: string; name: string }>('select id, name from districts order by name'));
+  const blocks = plain(all<{ id: string; name: string; parent: string }>('select id, name, district_id parent from blocks order by name'));
+  const clusters = plain(all<{ id: string; name: string; parent: string }>('select id, name, block_id parent from clusters order by name'));
+  const schools = plain(all<{ id: string; name: string; parent: string }>('select id, name, cluster_id parent from schools order by name'));
 
   return (
     <AuthFrame right={<><Link href="/register/status" className="btn-ghost">Check a request</Link><Link href="/login" className="btn-quiet">Sign in</Link></>}>
