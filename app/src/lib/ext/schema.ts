@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { generateGeography, unionUnit, toMultiPolygon, type GenUnit } from './geogen';
 
 /**
- * Extension schema: geography, organisational hierarchy, complaints and onboarding.
+ * Extension schema: geography, organisational hierarchy, complaints, onboarding and sign-in sessions.
  *
  * The seed's own tables are never altered. These tables are created next to them in the app's
  * SQLite copy, idempotently, every time a connection opens — so a demo reset (which restores
@@ -76,6 +76,15 @@ create table if not exists account_status_history (
   id text primary key, user_id text not null, from_status text, to_status text not null,
   actor_user_id text, reason text, ts text not null
 );
+-- Sign-in sessions. The cookie carries a random token; only its SHA-256 lives here, so a copy of
+-- the database cannot be replayed as a cookie. Created on every open, so a demo reset signs
+-- everyone out.
+create table if not exists sessions (
+  id text primary key, user_id text not null, created_at text not null, expires_at text not null,
+  revoked_at text, user_agent text
+);
+create index if not exists sessions_user on sessions(user_id);
+
 create table if not exists ext_meta (key text primary key, value text not null);
 `;
 

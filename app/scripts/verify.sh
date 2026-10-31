@@ -27,6 +27,9 @@ npx tsx --conditions=react-server scripts/smoke.ts 2>&1 | grep -vE 'Experimental
 step 'write layer, lifecycle, refusals and the audit chain'
 npx tsx --conditions=react-server scripts/write-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -12
 
+step 'sign-in sessions and request checks'
+npx tsx --conditions=react-server scripts/session-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
+
 if [ "$FULL" = "--full" ]; then
   step 'production build'
   npm run build 2>&1 | tail -4
@@ -36,6 +39,9 @@ if [ "$FULL" = "--full" ]; then
 
   step 'every route, every role, both languages'
   node scripts/crawl.mjs 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -14
+
+  step 'sign-in sessions over HTTP'
+  npx tsx --conditions=react-server scripts/session-test.mts http://localhost:3000 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
 
   step 'the demo story through the browser'
   node scripts/e2e.cjs 2>&1 | tail -6

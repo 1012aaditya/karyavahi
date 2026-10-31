@@ -19,7 +19,7 @@ npm run dev          # http://localhost:3000
 Then sign in as `beo.blk-01@demo.karyavahi.test` — no password; every account is fictional.
 
 ```bash
-npm run verify       # typecheck, read-layer scoping, write-layer rules, the audit chain
+npm run verify       # typecheck, read-layer scoping, write-layer rules, the audit chain, sessions
 npm run verify:full  # the above, plus a build, a crawl of every route, and the UI walkthrough
 ```
 
@@ -215,6 +215,10 @@ Hindi, which is why that account opens in Devanagari.
   of reimplementing them.
 - **Demo sign-in has no password**, because there is nothing real to protect. Authority still
   comes from the role rows, so a signed-in BEO cannot read another block whatever the cookie says.
+  The cookie is a random session token, not the user id: only its SHA-256 is kept in `sessions`,
+  it lasts 12 hours, and signing out revokes it on the server. Sign-in, sign-out and the language
+  switch refuse forms posted from another site (`src/lib/http.ts`); `npm run test:session` checks
+  all of it, and `npm run test:session -- http://localhost:3000` adds the same checks over HTTP.
 - Do not replace `.data/karyavahi.db` while the server is running. It is held open in WAL mode,
   and the running process will checkpoint its own pages back over the copy. `scripts/restart.sh
   --reset` does it in the right order.

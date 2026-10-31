@@ -1,8 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { requireSession } from './session';
+import { SESSION_COOKIE, createSession, requireSession, sessionCookieOptions } from './session';
+import { isHttps, localPath } from './http';
 import { Refused } from './guard';
 import * as w from './write';
 import type { CaseStatus } from '@domain/types';
@@ -176,7 +178,7 @@ export async function markReadAction(form: FormData): Promise<void> {
   else if (id) w.markNotificationRead(s, id);
   revalidatePath('/notifications');
   const to = String(form.get('then') ?? '');
-  if (to) redirect(to);
+  if (to) redirect(localPath(to));
 }
 
 // ------------------------------------------------------------------ demo controls
@@ -214,6 +216,12 @@ export async function demoResetAction(_prev: State, _form: FormData): Promise<St
     () => { w.demoReset(s); },
     'The demo has been restored to the canonical seed, and the reset itself is in the audit log.',
   );
+  // The reset replaced the database, sessions table included, which signed everyone out.
+  // Keep the admin who pressed the button signed in.
+  if (res.ok) {
+    const h = await headers();
+    (await cookies()).set(SESSION_COOKIE, createSession(s.user_id, h.get('user-agent')), sessionCookieOptions(isHttps(h)));
+  }
   revalidatePath('/', 'layout');
   return res;
 }
