@@ -5,40 +5,30 @@ import type { SimilarCase } from '@/lib/memory';
 import type { Blocker } from '@/lib/blockers';
 import { blockerMeta } from '@/lib/blockers';
 import { Icon } from './Icon';
+import { STAGES, stageIndex } from '@/lib/case-stage';
 
 /** Case workspace furniture: lifecycle stepper, section nav, and the right-rail cards. */
 
-const STAGES: { key: string; label: string; statuses: CaseStatus[] }[] = [
-  { key: 'flag', label: 'Flagged', statuses: ['detected'] },
-  { key: 'diagnose', label: 'Diagnosed', statuses: ['under_investigation'] },
-  { key: 'approve', label: 'Approval', statuses: ['awaiting_approval', 'revision_requested'] },
-  { key: 'assign', label: 'Assigned', statuses: ['approved', 'assigned'] },
-  { key: 'track', label: 'Delivery', statuses: ['in_progress', 'reopened'] },
-  { key: 'verify', label: 'Proof verified', statuses: ['awaiting_verification'] },
-  { key: 'outcome', label: 'Outcome check', statuses: ['outcome_pending'] },
-  { key: 'closed', label: 'Closed on gain', statuses: ['closed'] },
-];
-
 export function LifecycleStepper({ status, reopenCount }: { status: CaseStatus; reopenCount: number }) {
-  const idx = STAGES.findIndex((s) => s.statuses.includes(status));
+  const idx = stageIndex(status);
+  const closed = status === 'closed';
   const terminal = status === 'dismissed' ? 'Dismissed' : status === 'referred_pab' ? 'Referred to PAB' : null;
   return (
     <div>
-      <ol className="flex items-center gap-1 overflow-x-auto pb-1" aria-label="Case lifecycle">
+      <ol className="flex items-start overflow-x-auto pb-1" aria-label="Case lifecycle">
         {STAGES.map((s, i) => {
-          const done = idx > i || status === 'closed';
-          const current = idx === i && status !== 'closed';
+          const done = idx > i || closed;
+          const current = idx === i && !closed;
           return (
-            <li key={s.key} className="flex min-w-0 flex-1 items-center gap-1" aria-current={current ? 'step' : undefined}>
-              <span className={`flex min-w-[92px] flex-1 items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11.5px] font-medium ${
-                current ? 'border-brand bg-brand text-white shadow-sm' : done ? 'border-good/30 bg-good-light text-good' : 'border-line bg-white text-ink-faint'
+            <li key={s.key} className="relative flex min-w-[96px] flex-1 flex-col items-center text-center" aria-current={current ? 'step' : undefined}>
+              {i > 0 ? <span className={`absolute right-1/2 top-[11px] h-0.5 w-full ${done || current ? 'bg-brand' : 'bg-line-strong'}`} aria-hidden /> : null}
+              <span className={`relative z-[1] grid h-6 w-6 place-items-center rounded-full border-2 text-[11px] font-semibold ${
+                current ? 'border-brand bg-white text-brand ring-4 ring-brand/15' : done ? 'border-brand bg-brand text-white' : 'border-line-strong bg-white text-ink-faint'
               }`}>
-                <span className={`grid h-4 w-4 shrink-0 place-items-center rounded-full text-[9px] ${current ? 'bg-white text-brand' : done ? 'bg-good text-white' : 'bg-paper-deep text-ink-faint'}`}>
-                  {done ? <Icon name="check" size={10} strokeWidth={3} /> : i + 1}
-                </span>
-                <span className="truncate">{s.label}</span>
-                <span className="sr-only">{done ? '(done)' : current ? '(current)' : ''}</span>
+                {done ? <Icon name="check" size={12} strokeWidth={3} /> : i + 1}
               </span>
+              <span className={`mt-1.5 text-[12px] ${current ? 'font-semibold text-ink' : done ? 'text-ink-soft' : 'text-ink-faint'}`}>{s.en}</span>
+              <span className="sr-only">{done ? '(done)' : current ? '(current)' : ''}</span>
             </li>
           );
         })}

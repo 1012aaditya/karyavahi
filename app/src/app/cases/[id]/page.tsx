@@ -31,6 +31,7 @@ import { similarCases, lessonsFrom } from '@/lib/memory';
 import { listBlockers } from '@/lib/blockers';
 import { LifecycleStepper, SectionNav, RecommendationsCard, SimilarCasesCard, CaseBlockersCard, RailCard } from '@/components/case-workspace';
 import { Icon } from '@/components/Icon';
+import { STAGES, stageIndex, nextAction } from '@/lib/case-stage';
 
 /**
  * One case, end to end.
@@ -120,6 +121,15 @@ export default async function CasePage({
   const decidesLever = canDecideLever(session, c.lever);
   const pendingApproval = approvals.find((a) => a.decision === 'pending');
   const eligibleOutcome = outcomes.find((o) => o.closure_eligible);
+  const next = nextAction(c.status);
+  const lastDecided = approvals.filter((a) => a.decision !== 'pending' && a.decided_at).sort((a, b) => String(b.decided_at).localeCompare(String(a.decided_at)))[0];
+  const openBlockers = blockers.filter((b) => !b.resolved_at).length;
+  const warnings = [
+    ...(overdueTasks ? [pick(lang, `${overdueTasks} task${overdueTasks > 1 ? 's' : ''} past due`, `${overdueTasks} काम विलंबित`)] : []),
+    ...(pendingProof ? [pick(lang, `${pendingProof} proof item${pendingProof > 1 ? 's' : ''} awaiting verification`, `${pendingProof} सबूत सत्यापन प्रतीक्षित`)] : []),
+    ...(openBlockers ? [pick(lang, `${openBlockers} open blocker${openBlockers > 1 ? 's' : ''}`, `${openBlockers} खुली बाधाएँ`)] : []),
+    ...(c.reopen_count ? [pick(lang, `Reopened ${c.reopen_count}× — no learning gain yet`, `${c.reopen_count}× फिर खोला`)] : []),
+  ];
 
   /** Which of the legal next moves this role may actually make, and why not otherwise. */
   function gate(to: CaseStatus): { allowed: boolean; why: string } {
@@ -174,11 +184,6 @@ export default async function CasePage({
   return (
     <article className="space-y-5">
       <header className="card p-5 sm:p-6">
-        <div className="mb-3 flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink-faint">
-          <Link href="/cases" className="hover:text-ink">{pick(lang, 'Cases', 'प्रकरण')}</Link>
-          <Icon name="chevron-right" size={13} />
-          <Mono>{c.id}</Mono>
-        </div>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 max-w-3xl">
             <h1 className="font-display text-[24px] font-semibold leading-tight tracking-tight text-ink sm:text-[26px]">{c.title}</h1>
@@ -196,11 +201,8 @@ export default async function CasePage({
           </div>
         </div>
         <div className="mt-5"><LifecycleStepper status={c.status} reopenCount={c.reopen_count} /></div>
-        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line pt-4 text-[13px] sm:grid-cols-3 lg:grid-cols-6">
-          <div><dt className="label">{pick(lang, 'Accountable officer', 'उत्तरदायी अधिकारी')}</dt><dd className="mt-0.5 font-medium text-ink">{names.users.get(c.owner_user_id) ?? c.owner_user_id}</dd></div>
-          <div><dt className="label">{pick(lang, 'Authority', 'अधिकार')}</dt><dd className="mt-0.5 font-medium text-ink">{c.lever === 'block' ? pick(lang, 'Block lever · BEO/DEO', 'खंड स्तर') : c.lever === 'district' ? pick(lang, 'District lever · DEO/State', 'ज़िला स्तर') : 'PAB · DEO/State'}</dd></div>
+        <dl className="mt-5 flex flex-wrap gap-x-10 gap-y-3 border-t border-line pt-4 text-[13px]">
           <div><dt className="label">{pick(lang, 'Opened', 'खोला गया')}</dt><dd className="mt-0.5 font-medium text-ink">{fmtDate(c.created_at)} <span className="font-normal text-ink-faint">· {c.origin === 'detected' ? pick(lang, 'detector', 'पहचान-तंत्र') : pick(lang, 'officer', 'अधिकारी')}</span></dd></div>
-          <div><dt className="label">{pick(lang, 'Due', 'नियत तिथि')}</dt><dd className={`mt-0.5 font-medium ${c.due_date && c.due_date < today() && !c.closed_at ? 'text-crit' : 'text-ink'}`}>{fmtDate(c.due_date)}</dd></div>
           <div><dt className="label">{pick(lang, 'Tasks', 'काम')}</dt><dd className="mt-0.5 font-medium text-ink">{tasks.filter((t) => t.status === 'verified').length}/{tasks.length} {pick(lang, 'verified', 'सत्यापित')}{overdueTasks ? <span className="ml-1 text-crit">· {overdueTasks} late</span> : null}</dd></div>
           <div><dt className="label">{pick(lang, 'Proof', 'सबूत')}</dt><dd className="mt-0.5 font-medium text-ink">{evidence.filter((e) => e.status === 'verified').length}/{evidence.length} {pick(lang, 'verified', 'सत्यापित')}{pendingProof ? <span className="ml-1 text-warn">· {pendingProof} pending</span> : null}</dd></div>
         </dl>
@@ -216,7 +218,7 @@ export default async function CasePage({
         { id: 'history', label: pick(lang, 'History', 'इतिहास') },
       ]} />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,68fr)_minmax(320px,32fr)]">
       <div className="min-w-0 space-y-5">
 
       {done ? (
@@ -444,6 +446,30 @@ export default async function CasePage({
       </div>
 
       <aside className="space-y-5 xl:sticky xl:top-[148px] xl:max-h-[calc(100vh-160px)] xl:self-start xl:overflow-y-auto xl:pb-4">
+      {/* ---- at a glance ---- */}
+      <section className="card overflow-hidden" aria-label={pick(lang, 'Case summary', 'प्रकरण सारांश')}>
+        <div className="border-b border-line bg-paper-sunk/60 px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">{pick(lang, 'Next action', 'अगला कदम')}</p>
+          <p className="mt-0.5 text-[16px] font-semibold text-ink">{pick(lang, next.en, next.hi)}</p>
+          <p className="mt-0.5 text-[12.5px] text-ink-soft">{pick(lang, 'Stage', 'चरण')} {stageIndex(c.status) + 1}/7 · {pick(lang, STAGES[stageIndex(c.status)].en, STAGES[stageIndex(c.status)].hi)}</p>
+        </div>
+        <dl className="divide-y divide-line text-[13px]">
+          <div className="flex items-baseline justify-between gap-3 px-5 py-2.5"><dt className="text-ink-faint">{pick(lang, 'Owner', 'उत्तरदायी')}</dt><dd className="text-right font-medium text-ink">{names.users.get(c.owner_user_id) ?? c.owner_user_id}</dd></div>
+          <div className="flex items-baseline justify-between gap-3 px-5 py-2.5"><dt className="text-ink-faint">{pick(lang, 'Deadline', 'समय-सीमा')}</dt><dd className={`tnum text-right font-medium ${c.due_date && c.due_date < today() && !c.closed_at ? 'text-crit' : 'text-ink'}`}>{fmtDate(c.due_date)}{c.due_date && c.due_date < today() && !c.closed_at ? <span className="block text-[11.5px] font-normal">{pick(lang, 'past due', 'समय-सीमा पार')}</span> : null}</dd></div>
+          <div className="flex items-baseline justify-between gap-3 px-5 py-2.5"><dt className="text-ink-faint">{pick(lang, 'Approval', 'स्वीकृति')}</dt><dd className="text-right font-medium text-ink">{
+            pendingApproval ? <>{pick(lang, 'Waiting on', 'प्रतीक्षा')} {pendingApproval.required_role.toUpperCase()}<span className="block text-[11.5px] font-normal text-ink-faint">{pick(lang, 'since', 'से')} {fmtDate(pendingApproval.submitted_at)}</span></>
+            : lastDecided ? <>{lastDecided.decision.replace(/_/g, ' ')}<span className="block text-[11.5px] font-normal text-ink-faint">{names.users.get(lastDecided.decided_by ?? '') ?? lastDecided.decided_by} · {fmtDate(lastDecided.decided_at)}</span></>
+            : <span className="font-normal text-ink-faint">{pick(lang, 'No plan submitted yet', 'अभी योजना नहीं भेजी')}</span>
+          }</dd></div>
+          <div className="flex items-baseline justify-between gap-3 px-5 py-2.5"><dt className="text-ink-faint">{pick(lang, 'Authority', 'अधिकार')}</dt><dd className="text-right font-medium text-ink">{c.lever === 'block' ? pick(lang, 'Block · BEO/DEO', 'खंड') : c.lever === 'district' ? pick(lang, 'District · DEO/State', 'ज़िला') : 'PAB · DEO/State'}</dd></div>
+        </dl>
+        {warnings.length ? (
+          <ul className="space-y-1.5 border-t border-line px-5 py-3">
+            {warnings.map((w) => <li key={w} className="flex items-start gap-1.5 text-[12.5px] text-crit"><Icon name="alert" size={13} className="mt-0.5 shrink-0" />{w}</li>)}
+          </ul>
+        ) : null}
+      </section>
+
       {/* ---- what can happen next ---- */}
       <Card>
         <CardHead
@@ -515,7 +541,7 @@ export default async function CasePage({
         <RailCard title={pick(lang, 'Ask about this case', 'इस प्रकरण के बारे में पूछें')} icon="sparkles">
           <div className="space-y-2 p-4 text-[13px] text-ink-soft">
             <p>{pick(lang, 'Karyavahi AI can explain the finding, what blocks closure, or how similar cases went — citing the records.', 'AI निष्कर्ष, बंद होने की बाधाएँ या समान प्रकरण समझा सकता है।')}</p>
-            <p className="text-[12px] text-ink-faint">{pick(lang, 'Use the “Ask Karyavahi AI” button — it already knows you are on', '“Ask Karyavahi AI” बटन उपयोग करें —')} {c.id}.</p>
+            <p className="text-[12px] text-ink-faint">{pick(lang, 'Use “Ask AI” in the header — it already knows you are on', 'हेडर में “Ask AI” उपयोग करें —')} {c.id}.</p>
           </div>
         </RailCard>
         {match ? <RecommendationsCard caseId={c.id} matches={match.matches} /> : null}

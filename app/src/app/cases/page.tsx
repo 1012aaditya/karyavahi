@@ -9,7 +9,8 @@ import { tasksPred, and } from '@/lib/scope';
 import { today, daysBetween } from '@/lib/clock';
 import { pick } from '@/lib/i18n';
 import { PageHead, Mono, fmtDate } from '@/components/ui';
-import { StatusPill, SeverityPill, OutcomePill } from '@/components/labels';
+import { StatusPill, OutcomePill } from '@/components/labels';
+import { nextAction } from '@/lib/case-stage';
 import { Icon } from '@/components/Icon';
 import type { CaseStatus, Severity } from '@domain/types';
 
@@ -19,6 +20,7 @@ import type { CaseStatus, Severity } from '@domain/types';
  * reopened, closed), with filters, search, sort and pagination — all in the URL.
  */
 
+const SEV_WORD: Record<Severity, { en: string; hi: string }> = { critical: { en: 'Critical', hi: 'अति गंभीर' }, high: { en: 'High', hi: 'उच्च' }, medium: { en: 'Medium', hi: 'मध्यम' } };
 const OPEN: CaseStatus[] = ['detected', 'under_investigation', 'awaiting_approval', 'revision_requested', 'approved', 'assigned', 'in_progress', 'awaiting_verification', 'outcome_pending', 'reopened'];
 
 type SP = { tab?: string; status?: string; severity?: string; q?: string; order?: string; page?: string; block?: string; cluster?: string; district?: string; comp?: string; grade?: string };
@@ -92,12 +94,13 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
   return (
     <div className="space-y-5">
       <PageHead
-        title={pick(lang, 'Cases & action plans', 'प्रकरण व कार्य योजना')}
-        sub={pick(lang, `Each case is one learning drop, followed from detection to a verified outcome. Scope: ${scopeName(session.scope_type, session.scope_id)}.`, `प्रत्येक प्रकरण एक गिरावट है, पहचान से सत्यापित परिणाम तक। दायरा: ${scopeName(session.scope_type, session.scope_id)}।`)}
+        title={pick(lang, 'Cases', 'प्रकरण')}
+        sub={pick(lang, 'Each case is one learning decline, followed from detection to a verified outcome.', 'प्रत्येक प्रकरण एक गिरावट है, पहचान से सत्यापित परिणाम तक।')}
+        meta={<>{scopeName(session.scope_type, session.scope_id)} · {tabCounts.open} {pick(lang, 'open', 'खुले')} · {tabCounts.approval} {pick(lang, 'awaiting approval', 'स्वीकृति लंबित')}</>}
         right={
           <div className="flex gap-2">
-            <Link href="/hotspots" className="btn-quiet"><Icon name="map" size={15} />{pick(lang, 'Map view', 'मानचित्र')}</Link>
-            <Link href="/approvals" className="btn-quiet"><Icon name="shield" size={15} />{pick(lang, 'Approvals', 'स्वीकृतियाँ')}</Link>
+            <Link href="/hotspots" className="btn-quiet"><Icon name="map" size={15} />{pick(lang, 'Map', 'मानचित्र')}</Link>
+            <Link href="/approvals" className="btn-primary"><Icon name="shield" size={15} />{pick(lang, 'Review approvals', 'स्वीकृतियाँ देखें')}</Link>
           </div>
         }
       />
@@ -163,41 +166,49 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="table min-w-[860px]">
+            <table className="table min-w-[1080px]">
               <thead>
                 <tr>
-                  <th scope="col">{pick(lang, 'Learning issue', 'अधिगम समस्या')}</th>
-                  <th scope="col">{pick(lang, 'Where', 'कहाँ')}</th>
+                  <th scope="col">{pick(lang, 'Case', 'प्रकरण')}</th>
+                  <th scope="col">{pick(lang, 'Finding', 'निष्कर्ष')}</th>
+                  <th scope="col">{pick(lang, 'Area', 'क्षेत्र')}</th>
                   <th scope="col">{pick(lang, 'Severity', 'गंभीरता')}</th>
-                  <th scope="col">{pick(lang, 'Stage', 'चरण')}</th>
-                  <th scope="col">{pick(lang, 'Responsible', 'उत्तरदायी')}</th>
-                  <th scope="col">{pick(lang, 'Due', 'नियत')}</th>
-                  <th scope="col">{pick(lang, 'Updated', 'अद्यतन')}</th>
+                  <th scope="col">{pick(lang, 'Owner', 'उत्तरदायी')}</th>
+                  <th scope="col">{pick(lang, 'Deadline', 'समय-सीमा')}</th>
+                  <th scope="col">{pick(lang, 'Status', 'स्थिति')}</th>
+                  <th scope="col">{pick(lang, 'Next action', 'अगला कदम')}</th>
                 </tr>
               </thead>
               <tbody>
                 {cases.map((c) => {
                   const overdue = late.get(c.id) ?? 0;
                   const dueLate = c.due_date && c.due_date < today() && OPEN.includes(c.status);
+                  const next = nextAction(c.status);
                   return (
-                    <tr key={c.id}>
-                      <td className="max-w-md">
-                        <Link href={`/cases/${c.id}`} className="font-medium text-ink hover:text-brand">{c.title}</Link>
-                        <p className="mt-0.5 text-[11.5px] text-ink-faint">
-                          <Mono>{c.id}</Mono> · {pick(lang, 'Class', 'कक्षा')} {c.grade} · {look.competencies.get(c.competency_id) ?? c.competency_id}
-                          {c.reopen_count > 0 ? <span className="text-warn"> · {pick(lang, 'reopened', 'फिर खोला')} ×{c.reopen_count}</span> : null}
-                          {overdue ? <span className="text-crit"> · {overdue} {pick(lang, 'late task', 'विलंबित काम')}{overdue > 1 ? 's' : ''}</span> : null}
-                        </p>
+                    <tr key={c.id} className="group">
+                      <td className="whitespace-nowrap">
+                        <Link href={`/cases/${c.id}`} className="font-mono text-[12.5px] font-medium text-ink hover:text-brand">{c.id}</Link>
+                        {c.reopen_count > 0 ? <span className="block text-[11.5px] text-warn">{pick(lang, 'reopened', 'फिर खोला')} ×{c.reopen_count}</span> : null}
+                      </td>
+                      <td className="max-w-[340px]">
+                        <Link href={`/cases/${c.id}`} className="line-clamp-2 text-[13.5px] font-medium leading-snug text-ink hover:text-brand">{c.title}</Link>
+                        <p className="mt-0.5 truncate text-[11.5px] text-ink-faint">{pick(lang, 'Class', 'कक्षा')} {c.grade} · {look.competencies.get(c.competency_id) ?? c.competency_id}</p>
                       </td>
                       <td className="text-[13px]">
                         {look.clusters.get(c.cluster_id) ?? c.cluster_id}
                         {showBlock ? <span className="block text-[11.5px] text-ink-faint">{look.blocks.get(c.block_id) ?? c.block_id}</span> : null}
                       </td>
-                      <td><SeverityPill severity={c.severity} lang={lang} /></td>
+                      <td className="whitespace-nowrap text-[13px]"><span className="inline-flex items-center gap-1.5"><span className={`dot ${c.severity === 'critical' ? 'bg-crit' : c.severity === 'high' ? 'bg-amber' : 'bg-ink-faint'}`} />{pick(lang, SEV_WORD[c.severity].en, SEV_WORD[c.severity].hi)}</span></td>
+                      <td className="text-[13px]">{look.users.get(c.owner_user_id) ?? c.owner_user_id}</td>
+                      <td className={`tnum whitespace-nowrap text-[13px] ${dueLate ? 'font-medium text-crit' : ''}`}>
+                        {fmtDate(c.due_date)}
+                        {overdue ? <span className="block text-[11.5px] font-normal text-crit">{overdue} {pick(lang, 'late task', 'विलंबित काम')}{overdue > 1 ? 's' : ''}</span> : null}
+                      </td>
                       <td className="space-y-1"><StatusPill status={c.status} lang={lang} />{c.closure_type ? <OutcomePill category={c.closure_type} lang={lang} /> : null}</td>
-                      <td className="text-[13px]">{look.users.get(c.owner_user_id) ?? c.owner_user_id}<span className="block text-[11.5px] text-ink-faint">{c.lever} lever</span></td>
-                      <td className={`tnum whitespace-nowrap text-[13px] ${dueLate ? 'font-medium text-crit' : ''}`}>{fmtDate(c.due_date)}</td>
-                      <td className="tnum whitespace-nowrap text-[12.5px] text-ink-faint">{daysBetween(c.updated_at.slice(0, 10), today())}d ago</td>
+                      <td className="text-[13px]">
+                        <Link href={`/cases/${c.id}`} className={`${OPEN.includes(c.status) ? 'font-medium text-brand hover:text-brand-dark' : 'text-ink-faint'}`}>{pick(lang, next.en, next.hi)}{OPEN.includes(c.status) ? <Icon name="arrow-right" size={13} className="ml-1 inline" /> : null}</Link>
+                        <span className="block text-[11.5px] text-ink-faint">{pick(lang, 'updated', 'अद्यतन')} {daysBetween(c.updated_at.slice(0, 10), today())}d ago</span>
+                      </td>
                     </tr>
                   );
                 })}

@@ -302,6 +302,7 @@ export async function escalateComplaintAction(_prev: State, form: FormData): Pro
   const res = await attempt(() => { to = escalateComplaint(s, id, str(form, 'reason'), false); }, 'Escalated.');
   if (res.ok) res.ok = to ? 'Escalated to the next designated authority.' : 'There is no higher designated authority; the attempt was recorded.';
   revalidatePath(`/complaints/${id}`);
+  revalidatePath('/complaints');
   return res;
 }
 
@@ -311,6 +312,7 @@ export async function linkComplaintCaseAction(_prev: State, form: FormData): Pro
   const id = str(form, 'complaint_id');
   const res = await attempt(() => linkCase(s, id, str(form, 'case_id').toUpperCase()), 'Case linked.');
   revalidatePath(`/complaints/${id}`);
+  revalidatePath('/complaints');
   return res;
 }
 
