@@ -167,13 +167,25 @@ function Popover({ label, icon, children, open, setOpen }: { label: string; icon
   );
 }
 
-export function GeoMap({ height = 560, compact = false, selectedId: selectedProp = null, basePath = '/hotspots', onData, rounds = [], competencies = [], lang = 'en' }: {
+export function GeoMap({ height = 560, compact = false, selectedId: selectedProp = null, basePath = '/hotspots', onData, rounds = [], competencies = [], lang = 'en', basemap = 'plain', bare = false, reserve }: {
   height?: number | string; compact?: boolean; selectedId?: string | null; basePath?: string;
   onData?: (d: MapPayload | null) => void; rounds?: { id: string; label: string }[]; competencies?: { id: string; label: string }[];
   /** The compact map's own words (legend, loading, footnote) follow this; the full workspace is English for now. */
   lang?: 'en' | 'hi';
+  /** 'auto' draws a compact map on Google Maps too, when a key is set (the home page does). */
+  basemap?: 'auto' | 'plain';
+  /** Leave out the legend row under a compact map; the page shows its own. */
+  bare?: boolean;
+  /** Room taken by cards floating over the map, so fitting the area keeps it in the clear part.
+   *  `right` only applies when the map is wide (the cards move below it on small screens). */
+  reserve?: { top?: number; right?: number };
 }) {
   const L = (en: string, hi: string) => (lang === 'hi' ? hi : en);
+  const fitPadding = () => {
+    const base = compact ? 24 : 56;
+    const wide = (box.current?.clientWidth ?? 0) >= 900;
+    return { top: base + (reserve?.top ?? 0), bottom: base, left: base, right: base + (wide ? reserve?.right ?? 0 : 0) };
+  };
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -196,7 +208,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
   const googleKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
   // If Google refuses the key, the page falls back to the plain map and says why.
   const [googleRefused, setGoogleRefused] = useState(false);
-  const useGoogle = workspace && googleKey.length > 0 && !googleRefused;
+  const useGoogle = (workspace || basemap === 'auto') && googleKey.length > 0 && !googleRefused;
   const gview = useRef<GoogleMapView | null>(null);
   const byParam = sp.get('by');
   const by: ColourBy = workspace && COLOUR_BY.some((c) => c.key === byParam) ? (byParam as ColourBy) : 'learning';
@@ -325,7 +337,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
     if (!map || !ready || !data) return;
     (map.getSource('units') as import('maplibre-gl').GeoJSONSource).setData(data.features);
     (map.getSource('outline') as import('maplibre-gl').GeoJSONSource).setData({ type: 'FeatureCollection', features: data.outline ? [data.outline] : [] });
-    if (data.parent.bbox) map.fitBounds(data.parent.bbox as [number, number, number, number], { padding: compact ? 24 : 56, duration: 600 });
+    if (data.parent.bbox) map.fitBounds(data.parent.bbox as [number, number, number, number], { padding: fitPadding(), duration: 600 });
   }, [data, ready, compact]);
 
   // ---- the container can be hidden (list view) and shown again: resize and refit when it reappears
@@ -385,7 +397,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
         onHover: (p, x, y) => setHover(p ? { x, y, p } : null),
         onClick: (p) => handlers.current.pick(p),
         onDblClick: (p) => handlers.current.drill(p),
-      });
+      }, { controlsAt: reserve?.right ? 'top-center' : 'top-right' });
       setReady(true);
     }).catch((e: Error) => { if (!cancelled && !e.message.includes('refused')) setMapError(e.message); });
     return () => { cancelled = true; stop(); gview.current?.destroy(); gview.current = null; };
@@ -404,7 +416,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
   }, [useGoogle, ready, data, layersKey, by, selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (useGoogle && ready && data?.parent.bbox) gview.current?.fit(data.parent.bbox);
+    if (useGoogle && ready && data?.parent.bbox) gview.current?.fit(data.parent.bbox, fitPadding());
   }, [useGoogle, ready, data]);
 
   const toggleLayer = (k: string) => {
@@ -416,8 +428,8 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
   const sel = 'h-8 w-full rounded-md border border-line-strong bg-white px-2 text-sm text-ink';
 
   return (
-    <div className={compact ? 'space-y-2' : ''}>
-      <div className="relative overflow-hidden rounded-xl border border-line bg-map" style={{ height }}>
+    <div className={bare ? 'h-full' : compact ? 'space-y-2' : ''}>
+      <div className={`relative overflow-hidden bg-map ${bare ? '' : 'rounded-xl border border-line'}`} style={{ height }}>
         {/* MapLibre forces position:relative on its container, so the sizing lives on a wrapper. */}
         <div className="absolute inset-0"><div ref={box} className="h-full w-full" role="application" aria-label={`Map of ${data?.parent.name ?? 'your area'}`} /></div>
 
@@ -457,13 +469,13 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
               </div>
             </Popover>
             <button type="button" onClick={() => setLegend((v) => !v)} aria-pressed={legend} className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium ${legend ? 'bg-paper-deep text-ink' : 'text-ink-soft hover:bg-paper-deep hover:text-ink'}`}><Icon name="info" size={14} /><span className="sr-only sm:not-sr-only">Legend</span></button>
-            <button type="button" onClick={() => { if (!data?.parent.bbox) return; if (gview.current) gview.current.fit(data.parent.bbox); else mapRef.current?.fitBounds(data.parent.bbox as [number, number, number, number], { padding: 56, duration: 500 }); }} className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-ink-soft hover:bg-paper-deep hover:text-ink"><Icon name="refresh" size={14} /><span className="sr-only sm:not-sr-only">Reset</span></button>
+            <button type="button" onClick={() => { if (!data?.parent.bbox) return; if (gview.current) gview.current.fit(data.parent.bbox, fitPadding()); else mapRef.current?.fitBounds(data.parent.bbox as [number, number, number, number], { padding: 56, duration: 500 }); }} className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-ink-soft hover:bg-paper-deep hover:text-ink"><Icon name="refresh" size={14} /><span className="sr-only sm:not-sr-only">Reset</span></button>
             <span className="mx-1 h-5 w-px bg-line" aria-hidden />
             <button type="button" onClick={() => push({ view: 'list' })} className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-ink-soft hover:bg-paper-deep hover:text-ink"><Icon name="list" size={14} /><span className="sr-only sm:not-sr-only">List</span></button>
           </div>
         ) : null}
 
-        {loading ? <div className={`absolute z-10 flex items-center gap-2 rounded-md bg-white/95 px-2.5 py-1.5 text-xs text-ink-soft shadow ${workspace ? 'bottom-3 right-3' : 'left-3 top-3'}`}><span className="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" />{L('Loading map…', 'नक्शा लोड हो रहा है…')}</div> : null}
+        {loading ? <div className={`absolute z-10 flex items-center gap-2 rounded-md bg-white/95 px-2.5 py-1.5 text-xs text-ink-soft shadow ${workspace ? 'bottom-3 right-3' : bare ? 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2' : 'left-3 top-3'}`}><span className="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" />{L('Loading map…', 'नक्शा लोड हो रहा है…')}</div> : null}
         {error || mapError ? (
           <div className="absolute inset-0 z-10 grid place-items-center bg-ivory/90 p-6 text-center">
             <div>
@@ -512,7 +524,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
             Google Maps refused the API key, so this is the plain map. Check NEXT_PUBLIC_GOOGLE_MAPS_API_KEY and that the key allows this site.
           </div>
         ) : null}
-        {workspace && data?.sources.geometry === 'osm' ? (
+        {(workspace || bare) && data?.sources.geometry === 'osm' ? (
           <div className="pointer-events-none absolute bottom-1 right-14 z-10 rounded bg-white/80 px-1.5 text-2xs text-ink-soft">Boundaries © OpenStreetMap contributors</div>
         ) : null}
         {workspace && legend ? (
@@ -535,7 +547,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
           </div>
         ) : null}
       </div>
-      {compact ? (
+      {compact && !bare ? (
         <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft" aria-label={L('Legend', 'संकेत')}>
           {STATUS_LAYERS.map((l) => <li key={l.key} className="flex items-center gap-1.5"><span className="h-2.5 w-3.5 rounded-sm border border-line" style={{ background: l.color }} />{L(l.label, l.hi)}</li>)}
           <li className="flex items-center gap-1.5"><span className="h-2.5 w-3.5 rounded-sm border border-line bg-[repeating-linear-gradient(45deg,rgba(69,82,106,.6)_0_2px,theme(colors.sev.insufficient)_2px_6px)]" />{L('Insufficient data', 'अपर्याप्त डेटा')}</li>

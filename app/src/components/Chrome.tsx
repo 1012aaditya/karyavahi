@@ -1,168 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { Language } from '@domain/types';
 import { Icon } from './Icon';
-import { Logo } from './Brand';
-import { Sheet, SheetClose, SheetContent, SheetTrigger } from './primitives/sheet';
 import { Menu, MenuContent, MenuItem, MenuTrigger, menuItemClass } from './primitives/menu';
 
 /**
- * Client-side chrome: the grouped, collapsible sidebar; header breadcrumbs; the mobile drawer;
- * the user menu; the language switch. Everything here receives already-translated,
+ * Client-side chrome: the account menu and the language switch, plus the navigation types the
+ * command palette and dock share. Everything here receives already-translated,
  * already-authorised data from the server-rendered Shell.
  */
 
 export interface ClientNavItem { href: string; label: string; badge?: number }
 export interface ClientNavSection extends ClientNavItem { icon: string; children: ClientNavItem[] }
 export interface ClientNavGroup { key: string; label: string; sections: ClientNavSection[] }
-
-const matches = (path: string, href: string) => path === href || path.startsWith(`${href}/`);
-
-function activeHref(path: string, groups: ClientNavGroup[]): string | null {
-  let best: string | null = null;
-  for (const g of groups) for (const s of g.sections) {
-    for (const h of [s.href, ...s.children.map((c) => c.href)]) {
-      if (matches(path, h) && (!best || h.length > best.length)) best = h;
-    }
-  }
-  return best;
-}
-
-function Count({ n, onDark = true }: { n?: number; onDark?: boolean }) {
-  if (!n || n <= 0) return null;
-  return <span className={`tnum ml-auto shrink-0 rounded-full px-1.5 text-2xs font-semibold leading-[18px] ${onDark ? 'bg-white/10 text-navy-100' : 'bg-paper-deep text-ink-soft'}`}>{n > 99 ? '99+' : n}</span>;
-}
-
-function NavBody({ groups, collapsed }: { groups: ClientNavGroup[]; collapsed: boolean }) {
-  const path = usePathname();
-  const active = activeHref(path, groups);
-  return (
-    <nav aria-label="Main" className="space-y-5">
-      {groups.map((g) => (
-        <div key={g.key}>
-          {collapsed ? <div className="mx-3 mb-2 h-px bg-white/10" aria-hidden /> : <p className="mb-1.5 px-3 text-2xs font-semibold uppercase tracking-[0.1em] text-navy-300">{g.label}</p>}
-          <ul className="space-y-0.5">
-            {g.sections.map((s) => {
-              const inSection = active === s.href || s.children.some((c) => c.href === active);
-              const total = (s.badge ?? 0) + s.children.reduce((n, c) => n + (c.badge ?? 0), 0);
-              return (
-                <li key={s.href}>
-                  <Link
-                    href={s.href} aria-current={active === s.href ? 'page' : undefined} title={collapsed ? s.label : undefined}
-                    className={`group relative flex items-center gap-3 rounded-lg py-2 text-sm transition-colors ${collapsed ? 'justify-center px-0' : 'px-3'} ${
-                      inSection ? 'bg-white/[0.07] font-medium text-white' : 'text-navy-200 hover:bg-white/[0.05] hover:text-white'}`}
-                  >
-                    {inSection ? <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r bg-brand-soft" aria-hidden /> : null}
-                    <Icon name={s.icon} size={17} className={inSection ? 'text-white' : 'text-navy-300 group-hover:text-navy-100'} />
-                    {collapsed ? (total > 0 ? <span className="absolute right-2 top-1.5 h-2 w-2 rounded-full bg-amber" aria-label={`${total} pending`} /> : null) : (
-                      <>
-                        <span className="truncate">{s.label}</span>
-                        <Count n={total} />
-                      </>
-                    )}
-                  </Link>
-                  {inSection && !collapsed && s.children.length > 0 ? (
-                    <ul className="mb-1 ml-[22px] mt-0.5 space-y-px border-l border-white/10 pl-3">
-                      {s.children.map((c) => (
-                        <li key={c.href}>
-                          <Link href={c.href} aria-current={active === c.href ? 'page' : undefined}
-                            className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm ${active === c.href ? 'font-medium text-white' : 'text-navy-300 hover:text-white'}`}>
-                            <span className="truncate">{c.label}</span><Count n={c.badge} />
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
-    </nav>
-  );
-}
-
-/** Desktop sidebar: 240px expanded, 72px collapsed; the choice is remembered on this device. */
-export interface SidebarLabels { home: string; tagline: string; collapse: string; collapseSidebar: string; expandSidebar: string }
-
-export function Sidebar({ groups, homeHref, footer, scope, labels }: { groups: ClientNavGroup[]; homeHref: string; footer: ReactNode; scope: { name: string; role: string }; labels: SidebarLabels }) {
-  const [collapsed, setCollapsed] = useState(false);
-  useEffect(() => { setCollapsed(localStorage.getItem('kv_sidebar') === 'collapsed'); }, []);
-  const toggle = () => setCollapsed((c) => { localStorage.setItem('kv_sidebar', c ? 'open' : 'collapsed'); return !c; });
-  return (
-    <aside className={`sticky top-0 hidden h-screen shrink-0 flex-col bg-navy transition-[width] duration-200 lg:flex no-print ${collapsed ? 'w-[72px]' : 'w-[240px]'}`}>
-      <div className={`flex h-16 shrink-0 items-center ${collapsed ? 'justify-center' : 'gap-2.5 px-4'}`}>
-        <Link href={homeHref} className="flex min-w-0 items-center gap-2.5" aria-label={labels.home}>
-          <Logo size={30} />
-          {!collapsed ? (
-            <span className="min-w-0 leading-tight">
-              <span className="block text-md font-semibold tracking-tight text-white">Karyavahi</span>
-              <span className="block truncate text-2xs text-navy-300">{labels.tagline}</span>
-            </span>
-          ) : null}
-        </Link>
-      </div>
-      {!collapsed ? (
-        <div className="mx-3 mb-3 rounded-lg bg-white/[0.04] px-3 py-2">
-          <p className="truncate text-sm font-medium text-white" title={scope.name}>{scope.name}</p>
-          <p className="truncate text-2xs text-navy-300">{scope.role}</p>
-        </div>
-      ) : null}
-      <div className={`min-h-0 flex-1 overflow-y-auto pb-4 ${collapsed ? 'px-2' : 'px-2.5'}`}><NavBody groups={groups} collapsed={collapsed} /></div>
-      <div className={`shrink-0 border-t border-white/10 ${collapsed ? 'px-2 py-3' : 'px-4 py-3'}`}>
-        {!collapsed ? footer : null}
-        <button type="button" onClick={toggle} aria-label={collapsed ? labels.expandSidebar : labels.collapseSidebar} aria-expanded={!collapsed}
-          className={`mt-2 flex w-full items-center gap-2 rounded-md py-1.5 text-xs text-navy-300 hover:bg-white/[0.05] hover:text-white ${collapsed ? 'justify-center' : 'px-2'}`}>
-          <Icon name={collapsed ? 'chevron-right' : 'chevron-left'} size={15} />{collapsed ? null : labels.collapse}
-        </button>
-      </div>
-    </aside>
-  );
-}
-
-/** Header breadcrumb: Section › Page, taken from the navigation so it matches the sidebar. */
-export function HeaderTitle({ groups }: { groups: ClientNavGroup[] }) {
-  const path = usePathname();
-  const active = activeHref(path, groups);
-  const sec = groups.flatMap((g) => g.sections).find((s) => s.href === active || s.children.some((c) => c.href === active));
-  const child = sec?.children.find((c) => c.href === active);
-  const deeper = active && path !== active ? path.slice(active.length + 1).split('/')[0] : null;
-  if (!sec) return null;
-  return (
-    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm">
-      <Link href={sec.href} className={`truncate ${child || deeper ? 'text-ink-faint hover:text-ink' : 'font-semibold text-ink'}`}>{sec.label}</Link>
-      {child ? (<><Icon name="chevron-right" size={13} className="text-ink-faint" /><Link href={child.href} className={`truncate ${deeper ? 'text-ink-faint hover:text-ink' : 'font-semibold text-ink'}`}>{child.label}</Link></>) : null}
-      {deeper ? (<><Icon name="chevron-right" size={13} className="text-ink-faint" /><span className="truncate font-semibold text-ink">{decodeURIComponent(deeper)}</span></>) : null}
-    </nav>
-  );
-}
-
-export function MobileDrawer({ groups, label, footer }: { groups: ClientNavGroup[]; label: string; footer?: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const path = usePathname();
-  useEffect(() => { setOpen(false); }, [path]);
-  return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <button type="button" className="btn-ghost -ml-2 px-2 lg:hidden">
-          <Icon name="menu" size={20} label={label} />
-        </button>
-      </SheetTrigger>
-      <SheetContent side="left" label="Karyavahi navigation" className="w-[280px] max-w-[85vw] overflow-y-auto bg-navy px-3 py-4 lg:hidden">
-        <div className="mb-4 flex items-center justify-between px-1">
-          <span className="flex items-center gap-2"><Logo size={28} /><span className="text-md font-semibold text-white">Karyavahi</span></span>
-          <SheetClose className="rounded-md p-1.5 text-navy-200 hover:bg-white/10 hover:text-white"><Icon name="x" size={20} label="Close menu" /></SheetClose>
-        </div>
-        <NavBody groups={groups} collapsed={false} />
-        {footer ? <div className="mt-auto border-t border-white/10 px-2 pt-3">{footer}</div> : null}
-      </SheetContent>
-    </Sheet>
-  );
-}
 
 export function UserMenu({ name, role, scope, email, children }: { name: string; role: string; scope: string; email: string; children?: ReactNode }) {
   const initials = name.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
@@ -227,32 +79,5 @@ export function Expand({ summary, children, count }: { summary: string; children
       </summary>
       <div className="border-t border-line">{children}</div>
     </details>
-  );
-}
-
-/**
- * The phone tab bar for field roles: the four places they go most, within reach of a thumb.
- * Hidden on wide screens, where the sidebar does the same job.
- */
-export function BottomTabs({ tabs, label }: { tabs: (ClientNavItem & { icon: string })[]; label: string }) {
-  const path = usePathname();
-  return (
-    <nav aria-label={label} className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden no-print">
-      <ul className="mx-auto flex max-w-lg">
-        {tabs.map((t) => {
-          const on = matches(path, t.href);
-          return (
-            <li key={t.href} className="flex-1">
-              <Link href={t.href} aria-current={on ? 'page' : undefined}
-                className={`relative flex min-h-14 flex-col items-center justify-center gap-0.5 text-2xs font-medium ${on ? 'text-brand' : 'text-ink-soft'}`}>
-                <Icon name={t.icon} size={20} />
-                <span>{t.label}</span>
-                {t.badge ? <span className="tnum absolute right-[calc(50%-22px)] top-1.5 min-w-[18px] rounded-full bg-crit px-1 text-center text-2xs font-semibold leading-[18px] text-white">{t.badge > 99 ? '99+' : t.badge}</span> : null}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
   );
 }

@@ -1,14 +1,16 @@
 import Link from 'next/link';
 import { Suspense, type ReactNode } from 'react';
 import { getLanguage, getSession } from '@/lib/session';
-import { navGroups, homeFor, GROUP_LABEL, GROUP_LABEL_HI, type BadgeKey } from '@/lib/nav';
+import { navGroups, navFor, homeFor, GROUP_LABEL, GROUP_LABEL_HI, type BadgeKey, type NavSection } from '@/lib/nav';
 import { t, pick } from '@/lib/i18n';
-import { nowIso, today } from '@/lib/clock';
+import { today } from '@/lib/clock';
 import { countUnread } from '@/lib/feed';
 import { countEvidenceToCheck, countTasks, approvalQueue } from '@/lib/cases';
 import { scopeName } from '@/lib/repo';
 import { ROLE_LABELS } from '@domain/permissions';
-import { Sidebar, HeaderTitle, MobileDrawer, UserMenu, UserMenuLink, UserMenuForm, LanguageToggle, BottomTabs, type ClientNavGroup } from './Chrome';
+import { UserMenu, UserMenuLink, UserMenuForm, LanguageToggle, type ClientNavGroup } from './Chrome';
+import { CommandPalette, CommandTrigger, Dock, type DockItem } from './Command';
+import { Logo } from './Brand';
 import { Icon } from './Icon';
 import { fmtDate } from './ui';
 import { AssistantDrawer } from './Chat';
@@ -19,12 +21,22 @@ import { listComplaints } from '@/lib/complaints';
 import { verificationQueue, canDecide } from '@/lib/onboarding';
 
 /**
- * The application frame: a deep-navy, grouped, collapsible sidebar and a quiet 64px header
- * (breadcrumb · scope · search · AI · notifications · account). Content gets 32px side padding.
+ * The application frame, built around the content rather than a menu:
  *
- * The demo disclosure stays impossible to miss — a thin strip above the header — and the demo
- * date sits in the sidebar footer, because most queues are measured from it.
+ *   a thin demo strip · a quiet top bar (home, your place, one search box that is also the menu,
+ *   AI, notifications, account) · the page · a floating dock of the four or five places your
+ *   role uses most, which becomes the tab bar on a phone.
+ *
+ * Every other page is one keystroke away in the command palette (⌘K or /), which lists exactly
+ * the pages this role may open: the same list the permission matrix builds on the server.
  */
+
+/** The places that go in the dock, in order, after the role's home, with the short labels a
+ *  dock has room for. */
+const DOCK_KEYS = ['navHotspots', 'navCases', 'navExecution', 'navReports'];
+const DOCK_LABEL: Record<string, [string, string]> = {
+  navHotspots: ['Hotspots', 'हॉटस्पॉट'], navCases: ['Cases', 'प्रकरण'], navExecution: ['Field work', 'क्षेत्र कार्य'], navReports: ['Reports', 'रिपोर्ट'],
+};
 
 export default async function Shell({ children }: { children: ReactNode }) {
   const session = await getSession();
@@ -34,6 +46,7 @@ export default async function Shell({ children }: { children: ReactNode }) {
   const role = ROLE_LABELS[session.role];
   const roleLabel = pick(lang, role?.en ?? session.role, role?.hi ?? session.role);
   const scope = scopeName(session.scope_type, session.scope_id);
+  const home = homeFor(session);
   const badges: Record<BadgeKey, number> = {
     approvals: approvalQueue(session, { limit: 200 }).length,
     evidence: countEvidenceToCheck(session),
@@ -50,8 +63,10 @@ export default async function Shell({ children }: { children: ReactNode }) {
     })),
   }));
 
-  // Field roles get a thumb-reach tab bar on phones.
-  const fieldTabs = homeFor(session) === '/today' ? [
+  // The dock: field roles get their four phone tabs; everyone else their home and main places.
+  const sectionBadge = (s: NavSection) => (s.badge ? badges[s.badge] : 0) + s.children.reduce((n, c) => n + (c.badge ? badges[c.badge] : 0), 0);
+  const sections = navFor(session);
+  const dock: DockItem[] = home === '/today' ? [
     { href: '/today', icon: 'home', label: t(lang, 'navToday') },
     session.roles.some((r) => r.role === 'headmaster')
       ? { href: '/school', icon: 'school', label: t(lang, 'navMySchool') }
@@ -60,46 +75,32 @@ export default async function Shell({ children }: { children: ReactNode }) {
     can(session, 'create_complaint')
       ? { href: '/complaints/new', icon: 'plus', label: pick(lang, 'Raise', 'दर्ज करें') }
       : { href: '/notifications', icon: 'bell', label: t(lang, 'navNotifications'), badge: badges.notifications },
-  ] : null;
-
-  const footer = (
-    <div className="space-y-1 text-xs text-navy-300">
-      <p className="flex items-center gap-1.5" title={`Demo clock: ${nowIso()}`}>
-        <Icon name="calendar" size={13} />{t(lang, 'demoClock')}: <span className="tnum font-medium text-white">{fmtDate(today(), false, lang)}</span>
-      </p>
-      <p className="flex items-center gap-1.5"><Icon name="info" size={13} />{pick(lang, 'Fictional demo data', 'काल्पनिक डेमो डेटा')}</p>
-    </div>
-  );
+  ] : [
+    { href: home, icon: 'home', label: pick(lang, 'Home', 'होम'), badge: sections[0] ? sectionBadge(sections[0]) || undefined : undefined },
+    ...DOCK_KEYS.map((k) => sections.find((s) => s.key === k)).filter((s): s is NavSection => !!s && s.href !== home)
+      .map((s) => ({ href: s.href, icon: s.icon, label: DOCK_LABEL[s.key] ? pick(lang, ...DOCK_LABEL[s.key]) : t(lang, s.key), badge: sectionBadge(s) || undefined })),
+  ].slice(0, 5);
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar groups={groups} homeHref={homeFor(session)} footer={footer} scope={{ name: scope, role: roleLabel }} labels={{
-        home: pick(lang, 'Karyavahi home', 'कार्यवाही मुखपृष्ठ'),
-        tagline: pick(lang, 'Education accountability', 'शिक्षा जवाबदेही'),
-        collapse: pick(lang, 'Collapse', 'छोटा करें'),
-        collapseSidebar: pick(lang, 'Collapse sidebar', 'साइडबार छोटा करें'),
-        expandSidebar: pick(lang, 'Expand sidebar', 'साइडबार बड़ा करें'),
-      }} />
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="bg-amber-light px-4 py-1 text-center text-2xs font-semibold uppercase tracking-[0.1em] text-warn no-print" role="note">
-          {t(lang, 'demoBanner')}
-        </div>
-        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b border-line bg-ivory/95 px-4 backdrop-blur sm:px-6 lg:px-8 no-print">
-          <MobileDrawer groups={groups} label={pick(lang, 'Open navigation', 'नेविगेशन खोलें')} footer={footer} />
-          <div className="min-w-0 flex-1">
-            <HeaderTitle groups={groups} />
-          </div>
-          <span className="hidden items-center gap-1.5 rounded-full border border-line bg-white px-2.5 py-1 text-xs text-ink-soft xl:inline-flex" title={roleLabel}>
-            <Icon name="pin" size={13} className="text-ink-faint" />{scope}
+    <div className="flex min-h-screen flex-col">
+      <div className="flex items-center justify-center gap-2 bg-amber-light px-4 py-1 text-center text-2xs font-semibold uppercase tracking-[0.1em] text-warn no-print" role="note">
+        <span>{t(lang, 'demoBanner')}</span>
+        <span className="hidden normal-case tracking-normal sm:inline">· {t(lang, 'demoClock')} {fmtDate(today(), false, lang)}</span>
+      </div>
+      <header className="sticky top-0 z-30 border-b border-line/70 bg-ivory/90 backdrop-blur no-print">
+        <div className="mx-auto flex h-16 max-w-[1480px] items-center gap-3 px-4 sm:px-6 lg:px-8">
+          <Link href={home} className="flex shrink-0 items-center gap-2.5" aria-label={pick(lang, 'Karyavahi home', 'कार्यवाही मुखपृष्ठ')}>
+            <Logo size={30} />
+            <span className="hidden font-display text-md font-semibold tracking-tight text-ink lg:inline">Karyavahi</span>
+          </Link>
+          <span className="hidden min-w-0 items-center gap-1.5 rounded-full border border-line bg-white/70 px-3 py-1 text-xs text-ink-soft md:inline-flex" title={roleLabel}>
+            <Icon name="pin" size={13} className="shrink-0 text-ink-faint" />
+            <span className="truncate font-medium text-ink">{scope}</span>
+            <span className="hidden truncate text-ink-faint xl:inline">· {roleLabel}</span>
           </span>
-          <form action="/search" method="get" role="search" className="relative hidden md:block">
-            <Icon name="search" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
-            <input type="search" name="q" aria-label={pick(lang, 'Search cases, schools, interventions', 'खोजें')}
-              placeholder={pick(lang, 'Search…', 'खोजें…')}
-              className="h-9 w-52 rounded-lg border border-line bg-white pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15 xl:w-64" />
-          </form>
-          <Link href="/search" className="btn-ghost px-2 md:hidden"><Icon name="search" size={19} label={t(lang, 'navSearch')} /></Link>
+          <div className="flex min-w-0 flex-1 justify-center px-1">
+            <CommandTrigger label={pick(lang, 'Search or jump to…', 'खोजें या सीधे जाएँ…')} />
+          </div>
           {may(session, 'ai.assistant') ? <Suspense fallback={null}><AssistantDrawer configured={aiStatus().configured} userKey={session.user_id} label={pick(lang, 'Ask AI', 'AI से पूछें')} hint={pick(lang, 'Ask Karyavahi AI about this page', 'इस पृष्ठ के बारे में कार्यवाही AI से पूछें')} /></Suspense> : null}
           <Link href="/notifications" className="btn-ghost relative px-2" title={t(lang, 'navNotifications')}>
             <Icon name="bell" size={19} label={t(lang, 'navNotifications')} />
@@ -114,11 +115,22 @@ export default async function Shell({ children }: { children: ReactNode }) {
             <LanguageToggle current={lang} compact />
             <UserMenuForm action="/api/sign-out" danger><Icon name="logout" size={16} />{t(lang, 'signOut')}</UserMenuForm>
           </UserMenu>
-        </header>
+        </div>
+      </header>
 
-        <main id="main-content" className={`mx-auto w-full max-w-[1480px] flex-1 px-4 pt-6 sm:px-6 lg:px-8 lg:pb-16 print-full ${fieldTabs ? 'pb-28' : 'pb-16'}`}>{children}</main>
-        {fieldTabs ? <BottomTabs tabs={fieldTabs} label={pick(lang, 'Main sections', 'मुख्य भाग')} /> : null}
-      </div>
+      <main id="main-content" className="mx-auto w-full max-w-[1480px] flex-1 px-4 pb-32 pt-6 sm:px-6 lg:px-8 print-full">{children}</main>
+
+      <Dock items={dock} labels={{ more: pick(lang, 'More', 'और'), dock: pick(lang, 'Main places', 'मुख्य स्थान') }} />
+      <CommandPalette groups={groups} labels={{
+        trigger: pick(lang, 'Search or jump to…', 'खोजें या सीधे जाएँ…'),
+        placeholder: pick(lang, 'Type a page, a place, or an id like CASE-0184', 'पृष्ठ, स्थान या CASE-0184 जैसी पहचान लिखें'),
+        searchAll: pick(lang, 'Search everything for', 'सब में खोजें:'),
+        open: pick(lang, 'Open', 'खोलें'),
+        empty: pick(lang, 'No page matches. Press Enter to search everything.', 'कोई पृष्ठ नहीं मिला।'),
+        more: pick(lang, 'More', 'और'),
+        dock: pick(lang, 'Main places', 'मुख्य स्थान'),
+        jump: pick(lang, 'Search or jump to a page', 'खोजें या पृष्ठ पर जाएँ'),
+      }} />
     </div>
   );
 }

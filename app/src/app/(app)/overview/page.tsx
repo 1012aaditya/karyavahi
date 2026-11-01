@@ -4,132 +4,206 @@ import { getLanguage } from '@/lib/session';
 import { pageSession } from '@/lib/page-session';
 import { headline } from '@/lib/dash';
 import { priorityActions, recentProgress, learningTrend, systemStatus, plainBrief } from '@/lib/overview';
+import { topHotspots, stageStrip } from '@/lib/home';
+import { countEvidenceToCheck } from '@/lib/cases';
 import { scopeName } from '@/lib/repo';
 import { may } from '@/lib/guard';
-import { can } from '@/lib/authz';
 import { now } from '@/lib/clock';
 import { pick } from '@/lib/i18n';
 import { fmtDate } from '@/components/ui';
 import { Icon } from '@/components/Icon';
-import { AttentionList, MetricStrip, ProgressTimeline } from '@/components/overview';
-import { AiBriefing } from '@/components/AiBriefing';
+import { ProgressTimeline } from '@/components/overview';
 import { TrendChart } from '@/components/charts';
 import { GeoMap } from '@/components/GeoMap';
 import { SERIES } from '@/lib/viz';
+import { SEVERITY_COLORS } from '@/lib/maplayers';
 
 /**
- * Dashboard — "What is happening, what needs my attention, and what should I do next?"
+ * The command centre: the officer's home.
  *
- *   A introduction · B intelligence brief · C metric strip · D attention (42%) + live map (58%)
- *   E learning performance · F recent operational progress
- *
- * Technical controls (clock, reset, jobs, outbox) live under Administration.
+ * The map of their own area fills the screen, coloured by where learning is falling, with a few
+ * cards floating beside it, each one picture and one action: what needs them now, the worst
+ * hotspots, where their cases stand, and how learning is moving. Clicking the map opens that
+ * area in the hotspot explorer. The longer views (the trend over time, recent progress) sit
+ * below the map for whoever scrolls.
  */
 
-export default async function DashboardPage() {
+/** One-word stage names that fit under a bar; the full name is the title. */
+const STAGE_SHORT: Record<string, [string, string]> = {
+  detected: ['Found', 'पहचान'], investigation: ['Look', 'जाँच'], approval: ['Approve', 'स्वीकृति'], assignment: ['Assign', 'आवंटन'],
+  execution: ['Do', 'काम'], verification: ['Check', 'सत्यापन'], closure: ['Done', 'पूर्ण'],
+};
+
+const HOT_TONE = { critical: SEVERITY_COLORS.critical, high: SEVERITY_COLORS.significant, medium: SEVERITY_COLORS.moderate } as const;
+
+function Tile({ href, icon, n, label, tone }: { href: string; icon: string; n: number; label: string; tone: 'crit' | 'warn' | 'pend' | 'brand' }) {
+  const ring = { crit: 'bg-crit-light text-crit', warn: 'bg-warn-light text-warn', pend: 'bg-pend-light text-pend', brand: 'bg-brand-light text-brand' }[tone];
+  return (
+    <Link href={href} className="group flex items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5 transition-colors hover:border-line-strong">
+      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${n ? ring : 'bg-paper-sunk text-ink-faint'}`}><Icon name={icon} size={17} /></span>
+      <span className="min-w-0">
+        <span className={`tnum block text-xl font-semibold leading-none ${n ? 'text-ink' : 'text-ink-faint'}`}>{n}</span>
+        <span className="mt-1 block text-xs leading-tight text-ink-soft">{label}</span>
+      </span>
+    </Link>
+  );
+}
+
+function Panel({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-line bg-white/95 p-4 shadow-lift backdrop-blur">
+      <header className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-semibold text-ink">{title}</h2>
+        {action}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+export default async function CommandCentre() {
   const session = await pageSession();
   const lang = await getLanguage();
   const h = headline(session);
   const pa = priorityActions(session, 5);
   const trend = learningTrend(session);
-  const progress = recentProgress(session, 8);
+  const progress = recentProgress(session, 6);
   const sys = systemStatus();
+  const brief = plainBrief(session);
+  const hot = topHotspots(session, 4);
+  const stages = stageStrip(session);
+  const proof = may(session, 'evidence.verify') ? countEvidenceToCheck(session) : 0;
   const scope = scopeName(session.scope_type, session.scope_id);
 
   const hour = Number(new Intl.DateTimeFormat('en-IN', { hour: 'numeric', hour12: false, timeZone: 'Asia/Kolkata' }).format(now()));
-  const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const greet = pick(lang, hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening', 'नमस्ते');
   const approver = may(session, 'plan.approve_block') || may(session, 'plan.approve_district_or_pab');
-  const primary = approver && pa.counts.approval
-    ? { href: '/approvals', label: `Review ${pa.counts.approval} approval${pa.counts.approval === 1 ? '' : 's'}` }
-    : pa.counts.complaint ? { href: '/complaints?queue=mine', label: `Respond to ${pa.counts.complaint} complaint${pa.counts.complaint === 1 ? '' : 's'}` }
-    : { href: '/hotspots', label: 'Explore learning hotspots' };
-
   const last = trend.scope.length - 1;
   const lfl = last >= 2 && trend.scope[last] !== null && trend.scope[last - 2] !== null ? trend.scope[last]! - trend.scope[last - 2]! : null;
-  const vsState = trend.scope[last] !== null && trend.state[last] !== null ? trend.scope[last]! - trend.state[last]! : null;
+  const stageMax = Math.max(1, ...stages.map((s) => s.n));
+  const worstRel = Math.max(1, ...hot.map((x) => Math.abs(x.relPp)));
+
+  const cards = (
+    <>
+      <Panel title={pick(lang, 'Needs you now', 'अभी आपके ध्यान में')}>
+        <div className="grid grid-cols-2 gap-2">
+          <Tile href={approver ? '/approvals' : '/cases?tab=approval'} icon="check-circle" n={approver ? pa.counts.approval : h.awaiting_approval} label={pick(lang, approver ? 'Plans to decide' : 'Awaiting a decision', 'निर्णय हेतु योजनाएँ')} tone="warn" />
+          <Tile href="/execution?tab=overdue" icon="clock" n={h.overdue_tasks} label={pick(lang, 'Overdue tasks', 'विलंबित काम')} tone="crit" />
+          <Tile href="/complaints?queue=mine" icon="inbox" n={pa.counts.complaint} label={pick(lang, 'Complaints on you', 'आप पर शिकायतें')} tone="pend" />
+          <Tile href="/evidence" icon="file" n={proof} label={pick(lang, 'Proof to check', 'जाँचने योग्य सबूत')} tone="brand" />
+        </div>
+      </Panel>
+
+      <Panel title={pick(lang, 'Worst hotspots', 'सबसे गंभीर हॉटस्पॉट')} action={<Link href="/findings" className="text-xs font-medium text-brand hover:underline">{pick(lang, 'All findings', 'सभी निष्कर्ष')}</Link>}>
+        {hot.length === 0 ? <p className="text-sm text-ink-faint">{pick(lang, 'No hotspot in the latest round.', 'नवीनतम दौर में कोई हॉटस्पॉट नहीं।')}</p> : (
+          <ul className="space-y-2.5">
+            {hot.map((x) => (
+              <li key={x.id}>
+                <Link href={x.caseId ? `/cases/${x.caseId}` : `/findings/${x.id}`} className="group block">
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-sm font-medium text-ink group-hover:text-brand">{x.cluster}<span className="font-normal text-ink-faint"> · {x.block}</span></span>
+                    <span className="tnum shrink-0 text-sm font-semibold text-crit">{x.relPp > 0 ? '+' : '−'}{Math.abs(x.relPp).toFixed(1)} pp</span>
+                  </span>
+                  <span className="mt-1 flex items-center gap-2">
+                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-paper-sunk">
+                      <span className="block h-full rounded-full" style={{ width: `${Math.round((100 * Math.abs(x.relPp)) / worstRel)}%`, background: HOT_TONE[x.severity] }} />
+                    </span>
+                    <span className="shrink-0 text-2xs text-ink-faint">{pick(lang, 'Class', 'कक्षा')} {x.grade} · {x.competency}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+
+      <Panel title={pick(lang, 'Where your cases are', 'आपके प्रकरण कहाँ हैं')} action={<Link href="/cases" className="text-xs font-medium text-brand hover:underline">{pick(lang, 'All cases', 'सभी प्रकरण')}</Link>}>
+        <div className="flex h-20 items-end gap-1.5" role="img" aria-label={stages.map((s) => `${s.en}: ${s.n}`).join(', ')}>
+          {stages.map((s, i) => (
+            <div key={s.key} className="flex flex-1 flex-col items-center gap-1">
+              <span className="tnum text-2xs font-semibold text-ink-soft">{s.n}</span>
+              <span className={`w-full rounded-t-md ${i === stages.length - 1 ? 'bg-good/70' : i >= 4 ? 'bg-brand/70' : i >= 2 ? 'bg-amber/80' : 'bg-crit/70'}`} style={{ height: `${Math.max(4, Math.round((52 * s.n) / stageMax))}px` }} />
+            </div>
+          ))}
+        </div>
+        <div className="mt-1.5 grid grid-cols-7 gap-1.5 text-center text-[10px] leading-tight text-ink-faint">
+          {stages.map((s) => <span key={s.key} className="truncate" title={pick(lang, s.en, s.hi)}>{pick(lang, ...STAGE_SHORT[s.key])}</span>)}
+        </div>
+      </Panel>
+
+      <Panel title={pick(lang, 'Learning', 'अधिगम')}>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="tnum text-3xl font-semibold leading-none text-ink">{trend.scope[last] ?? '—'}<span className="text-lg text-ink-faint">%</span></p>
+            <p className="mt-1 text-xs text-ink-soft">{pick(lang, 'at grade level', 'ग्रेड स्तर पर')} · {trend.labels[last]}</p>
+          </div>
+          <p className={`tnum text-right text-sm font-semibold ${lfl === null ? 'text-ink-faint' : lfl >= 0 ? 'text-good' : 'text-crit'}`}>
+            {lfl === null ? '—' : `${lfl >= 0 ? '+' : '−'}${Math.abs(lfl).toFixed(1)} pp`}
+            <span className="block text-2xs font-normal text-ink-faint">{pick(lang, 'on the same round last year', 'पिछले वर्ष के इसी दौर से')}</span>
+          </p>
+        </div>
+      </Panel>
+    </>
+  );
 
   return (
     <div className="space-y-6">
-      {/* A — introduction */}
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-sm text-ink-faint">{pick(lang, `${greet}, ${session.full_name.split(' ')[0]}`, `नमस्ते, ${session.full_name.split(' ')[0]}`)}</p>
-          <h1 className="mt-0.5 text-2xl font-semibold leading-tight tracking-tight text-ink">{pick(lang, 'Education performance overview', 'शिक्षा प्रदर्शन अवलोकन')}</h1>
-          <p className="mt-1 text-sm text-ink-soft">{scope} · {sys.latestRound ?? 'no completed round'} · {fmtDate(sys.demoDate)}</p>
+      {/* The command centre: the map, with the day's story beside it. */}
+      <div className="relative -mt-2 overflow-hidden rounded-3xl border border-line bg-map" style={{ height: 'max(560px, calc(100vh - 190px))' }}>
+        <Suspense fallback={<div className="skeleton h-full w-full" />}>
+          <GeoMap compact bare basemap="auto" height="100%" lang={lang} reserve={{ top: 120, right: 360 }} />
+        </Suspense>
+
+        <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start sm:inset-x-4 sm:top-4">
+          <div className="pointer-events-auto max-w-md rounded-2xl border border-line bg-white/95 px-4 py-3.5 shadow-lift backdrop-blur">
+            <p className="text-xs text-ink-faint">{greet}, {session.full_name.split(' ')[0]} · {fmtDate(sys.demoDate, false, lang)}</p>
+            <h1 className="mt-0.5 font-display text-xl font-semibold tracking-tight text-ink">{scope}</h1>
+            <p className="mt-1.5 text-sm leading-snug text-ink-soft">{brief.concern} {brief.geography}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Link href={approver && pa.counts.approval ? '/approvals' : '/hotspots'} className="btn-primary btn-sm">
+                {approver && pa.counts.approval ? pick(lang, `Decide ${pa.counts.approval} plan${pa.counts.approval === 1 ? '' : 's'}`, `${pa.counts.approval} योजनाओं पर निर्णय`) : pick(lang, 'Explore the map', 'नक्शा देखें')}
+                <Icon name="arrow-right" size={14} />
+              </Link>
+              <span className="text-xs text-ink-faint">{h.open_cases} {pick(lang, 'open cases', 'खुले प्रकरण')} · {h.critical} {pick(lang, 'critical', 'गंभीर')}</span>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-4">
-          <dl className="hidden gap-5 text-xs sm:flex">
-            <div><dt className="text-ink-faint">Data refreshed</dt><dd className="font-medium text-ink">{sys.lastImport ? fmtDate(sys.lastImport) : '—'}</dd></div>
-            <div><dt className="text-ink-faint">Assessment period</dt><dd className="font-medium text-ink">{sys.latestRound?.split(' · ')[0] ?? '—'}</dd></div>
-          </dl>
-          <Link href={primary.href} className="btn-primary">{primary.label}<Icon name="arrow-right" size={15} /></Link>
-        </div>
-      </header>
 
-      {/* B — intelligence brief */}
-      {may(session, 'ai.assistant') ? <AiBriefing fallback={plainBrief(session)} /> : null}
+        <aside className="absolute bottom-4 right-4 top-4 hidden w-[340px] space-y-3 overflow-y-auto pr-1 lg:block" aria-label={pick(lang, 'Today', 'आज')}>
+          {cards}
+        </aside>
 
-      {/* C — operational indicators */}
-      <MetricStrip metrics={[
-        { label: 'Open cases', value: h.open_cases, note: h.critical ? `${h.critical} critical` : 'none critical', href: '/cases?tab=open', tone: h.critical ? 'crit' : undefined },
-        { label: 'Pending approvals', value: approver ? pa.counts.approval : h.awaiting_approval, note: approver ? 'waiting on you' : 'awaiting a decision', href: approver ? '/approvals' : '/cases?tab=approval', tone: (approver ? pa.counts.approval : h.awaiting_approval) ? 'warn' : undefined },
-        { label: 'Overdue actions', value: h.overdue_tasks, note: `${h.escalated_tasks} escalated`, href: '/execution?tab=overdue', tone: h.overdue_tasks ? 'crit' : undefined },
-        { label: 'Awaiting verification', value: h.outcome_pending, note: 'next round decides', href: '/cases?tab=verification', tone: 'pend' },
-        { label: 'Verified outcomes', value: h.closed_verified, note: `${h.reopened} reopened`, href: '/impact', tone: 'good' },
-      ]} />
-
-      {/* D — attention + geography */}
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,42fr)_minmax(0,58fr)]">
-        <section className="flex flex-col rounded-xl border border-line bg-white" aria-labelledby="att-title">
-          <header className="flex items-center justify-between border-b border-line px-5 py-3">
-            <h2 id="att-title" className="text-md font-semibold tracking-tight text-ink">Requires your attention</h2>
-            <span className="text-xs text-ink-faint">{Object.values(pa.counts).reduce((a, b) => a + b, 0)} open items</span>
-          </header>
-          <div className="flex-1"><AttentionList items={pa.items} empty="Nothing needs your action right now." /></div>
-          <footer className="border-t border-line px-5 py-2.5 text-right">
-            <Link href={can(session, 'resolve_complaint') ? '/complaints?queue=mine' : '/cases?tab=open'} className="text-sm font-medium text-brand hover:underline">View all</Link>
-          </footer>
-        </section>
-        <section className="rounded-xl border border-line bg-white" aria-labelledby="geo-title">
-          <header className="flex items-center justify-between border-b border-line px-5 py-3">
-            <h2 id="geo-title" className="text-md font-semibold tracking-tight text-ink">Geographic overview</h2>
-            <Link href="/hotspots" className="text-sm font-medium text-brand hover:underline">Open hotspot workspace</Link>
-          </header>
-          <div className="p-3"><Suspense fallback={<div className="skeleton h-[380px] w-full" />}><GeoMap compact height={380} /></Suspense></div>
-        </section>
+        <ul className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap gap-x-3 gap-y-1 rounded-xl border border-line bg-white/90 px-3 py-2 text-2xs text-ink-soft shadow-lift sm:bottom-4 sm:left-4" aria-label={pick(lang, 'Legend', 'संकेत')}>
+          {([['critical', pick(lang, 'Critical', 'गंभीर')], ['significant', pick(lang, 'Falling', 'गिरावट')], ['moderate', pick(lang, 'Watch', 'ध्यान दें')], ['stable', pick(lang, 'Stable', 'स्थिर')]] as const).map(([k, t]) => (
+            <li key={k} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SEVERITY_COLORS[k] }} />{t}</li>
+          ))}
+        </ul>
       </div>
 
-      {/* E — learning performance */}
-      <section className="rounded-xl border border-line bg-white" aria-labelledby="lp-title">
-        <header className="border-b border-line px-5 py-3">
-          <h2 id="lp-title" className="text-md font-semibold tracking-tight text-ink">Learning performance</h2>
-        </header>
-        <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_260px]">
+      {/* On a phone and a small screen, the cards follow the map. */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:hidden">{cards}</div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <section className="rounded-2xl border border-line bg-white p-5" aria-labelledby="lp-title">
+          <h2 id="lp-title" className="mb-3 text-md font-semibold tracking-tight text-ink">{pick(lang, 'Learning over time', 'समय के साथ अधिगम')}</h2>
           <TrendChart
-            xLabels={trend.labels}
+            xLabels={trend.labels} lang={lang}
             series={[
               { key: 'scope', label: trend.scopeLabel, color: SERIES.one, points: trend.scope },
-              ...(session.scope_type !== 'state' ? [{ key: 'state', label: 'Whole state', color: SERIES.two, points: trend.state, dashed: true }] : []),
+              ...(session.scope_type !== 'state' ? [{ key: 'state', label: pick(lang, 'Whole state', 'पूरा राज्य'), color: SERIES.two, points: trend.state, dashed: true }] : []),
             ]}
-            yMax={70} height={230} caption={`Percent of assessed students at grade benchmark, ${trend.scopeLabel}`}
+            yMax={70} height={220} caption={`Percent of assessed students at grade benchmark, ${trend.scopeLabel}`}
           />
-          <dl className="space-y-4 border-line lg:border-l lg:pl-6">
-            <div><dt className="text-xs text-ink-faint">Latest round</dt><dd className="kpi-num mt-0.5 text-ink">{trend.scope[last] ?? '—'}%</dd><dd className="text-xs text-ink-faint">{trend.labels[last]}</dd></div>
-            <div><dt className="text-xs text-ink-faint">Same round last year</dt><dd className={`text-lg font-semibold tnum ${lfl === null ? 'text-ink' : lfl >= 0 ? 'text-good' : 'text-crit'}`}>{lfl === null ? '—' : `${lfl >= 0 ? '+' : '−'}${Math.abs(lfl).toFixed(1)} pp`}</dd></div>
-            {vsState !== null && session.scope_type !== 'state' ? <div><dt className="text-xs text-ink-faint">Versus the state</dt><dd className={`text-lg font-semibold tnum ${vsState >= 0 ? 'text-good' : 'text-crit'}`}>{vsState >= 0 ? '+' : '−'}{Math.abs(vsState).toFixed(1)} pp</dd></div> : null}
-            <p className="text-xs leading-snug text-ink-faint">Endline rounds run higher than baselines each year, so compare a round with the same round a year earlier.</p>
-          </dl>
-        </div>
-      </section>
-
-      {/* F — recent operational progress */}
-      <section className="rounded-xl border border-line bg-white" aria-labelledby="pr-title">
-        <header className="flex items-center justify-between border-b border-line px-5 py-3">
-          <h2 id="pr-title" className="text-md font-semibold tracking-tight text-ink">Recent operational progress</h2>
-          {may(session, 'audit.view') ? <Link href="/audit" className="text-sm font-medium text-brand hover:underline">Full audit history</Link> : null}
-        </header>
-        <ProgressTimeline items={progress} />
-      </section>
+          <p className="mt-2 text-xs text-ink-faint">{pick(lang, 'Endline rounds run higher than baselines each year, so compare a round with the same round a year earlier.', 'हर वर्ष अंतिम दौर आधार से ऊँचे रहते हैं, इसलिए किसी दौर की तुलना पिछले वर्ष के उसी दौर से करें।')}</p>
+        </section>
+        <section className="rounded-2xl border border-line bg-white" aria-labelledby="pr-title">
+          <header className="flex items-center justify-between border-b border-line px-5 py-3">
+            <h2 id="pr-title" className="text-md font-semibold tracking-tight text-ink">{pick(lang, 'What moved recently', 'हाल में क्या हुआ')}</h2>
+            {may(session, 'audit.view') ? <Link href="/audit" className="text-sm font-medium text-brand hover:underline">{pick(lang, 'Full history', 'पूरा इतिहास')}</Link> : null}
+          </header>
+          <ProgressTimeline items={progress} />
+        </section>
+      </div>
     </div>
   );
 }

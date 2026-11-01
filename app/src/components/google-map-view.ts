@@ -75,15 +75,17 @@ export class GoogleMapView {
   private el: HTMLElement;
   private h: Handlers;
 
-  constructor(maps: G, el: HTMLElement, h: Handlers) {
+  constructor(maps: G, el: HTMLElement, h: Handlers, o: { controlsAt?: 'top-right' | 'top-center' } = {}) {
     this.maps = maps; this.el = el; this.h = h;
     this.map = new maps.Map(el, {
+      // Fit an area snugly rather than to the nearest whole zoom step.
+      isFractionalZoomEnabled: true,
       // Google's own map id for development; advanced markers need one.
       mapId: 'DEMO_MAP_ID',
       center: { lat: 26.85, lng: 80.95 }, zoom: 6,
       disableDoubleClickZoom: true, clickableIcons: false, streetViewControl: false,
       fullscreenControl: false, mapTypeControl: true, gestureHandling: 'greedy',
-      mapTypeControlOptions: { position: maps.ControlPosition.TOP_RIGHT },
+      mapTypeControlOptions: { position: o.controlsAt === 'top-center' ? maps.ControlPosition.TOP_CENTER : maps.ControlPosition.TOP_RIGHT },
     });
   }
 
@@ -146,9 +148,9 @@ export class GoogleMapView {
     }
   }
 
-  fit(bbox: number[] | null): void {
+  fit(bbox: number[] | null, padding: number | { top: number; right: number; bottom: number; left: number } = 40): void {
     if (!bbox) return;
-    this.map.fitBounds({ west: bbox[0], south: bbox[1], east: bbox[2], north: bbox[3] }, 40);
+    this.map.fitBounds({ west: bbox[0], south: bbox[1], east: bbox[2], north: bbox[3] }, padding);
   }
 
   destroy(): void { this.clear(); }
