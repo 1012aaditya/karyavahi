@@ -517,17 +517,39 @@ from the footer of the signed-out pages.
 | Class 1–2 learning results | simulated, not calibrated (no published district figure) | — |
 | Intervention unit costs (9 of 18 cards) and plan cost estimates | **real** where a line exists, with the page | UP Samagra Shiksha PAB minutes 2025-26 |
 | District context (reading, subtraction, enrolment, out of school; women's schooling, stunting, electricity) | **real**, shown as "context, not cause" | ASER 2024 (rural); NFHS-5 2019-21 |
+| District PGI-D grade, overall and six categories (Outcomes, …), 2022-23 to 2025-26 | **real**, district context | PGI-D, Ministry of Education (DoSEL) open data |
+| Population, literacy, female literacy, SC/ST and rural shares | **real**, district context | Census 2011 PCA via India Data Portal |
+| NITI aspirational block in the district (Rampur: Saidnagar) and its 11 education indicators, March 2026 | **real**, district context (not on a demo block) | UP Planning Department, Aspirational Blocks Programme (NITI Aayog data) |
+| "PM SHRI" badge on 37 demo schools; PM SHRI count per district | **real** (yes/no only; no code or name) | PM SHRI school list, Ministry of Education |
 | District and block codes for joins | real | LGD via India Data Portal, ODC-BY |
 | People, cases, plans, tasks, proof, visits, attendance, staff movements, complaints; block and cluster names | fictional | — |
 
 ### How it is wired
 
 - `npm run data:fetch` (`scripts/fetch-real-data.mjs`) downloads the sources into
-  `app/.data/sources/<source>/` (git-ignored, about 14.9 MB): UDISE+ through the portal's CKAN
+  `app/.data/sources/<source>/` (git-ignored, about 15.7 MB): UDISE+ through the portal's CKAN
   datastore API, one 1,000-row page every 4 s, resumable page by page, backing off on HTTP 429;
-  the PDFs and CSVs whole. Every download is checked (content type, `%PDF` or the expected CSV
-  header, CKAN `success`) and written to a `.part` file first, so an error page never replaces a
-  good file. Nothing is executed from the download folders.
+  the PDFs and CSVs whole. Every download is checked (content type, `%PDF`, `PK` for an .xlsx,
+  the expected CSV header, CKAN `success`, the expected JSON shape) and written to a `.part` file
+  first, so an error page never replaces a good file. Nothing is executed from the download
+  folders. The later four sources (`--only aspirational|pgid|census|pmshri`, about 1.3 MB):
+  - **aspirational**: the three .xlsx files whose addresses are read off
+    `epariyojana.up.gov.in/TABP/OrderGOs.aspx` (the latest NITI quarterly file
+    `UP_68AB_NITI_Mar2026.xlsx`, 334 KB; the state ABP+ list of 108 blocks, 81 KB; NITI's
+    metadata for the 40 indicators, 99 KB). That server sends a header Node's HTTP parser
+    refuses, so those requests go through `curl` (https only; the response is only read).
+    `scripts/xlsx-rows.py` reads .xlsx with the Python standard library (`python3 -I`).
+  - **pgid**: the PGI-D open JSON, 4 years × 7 categories (28 files of ~14 KB, one every 2 s).
+    Category 0 is "Overall" and 1–6 the domains (1 = Outcomes), as the portal's own drop-down
+    labels them; the grade bands come from its legend.
+  - **census**: four `datastore_search` queries on the India Data Portal's Census 2011 PCA
+    (`census-pca-demography`), one per district (`district_code` is the LGD code) and one for UP,
+    ~90 KB each — not the 18–216 MB full files.
+  - **pmshri**: the public PM SHRI search (`pmshri.education.gov.in/state`) has no export and its
+    API answers are encrypted for its own page, so the page is rendered in headless Chrome
+    (`playwright-core`, `channel: 'chrome'`), state → district → 50 a page, one page at a time;
+    the step stops if a captcha, login or bot check appears (none did). Only the UDISE code, the
+    category and a Kendriya/Navodaya flag are saved (`.data/sources/pmshri/`, never committed).
 - `npm run data:build` (`scripts/build-real-data.mjs`) turns them into two small committed files:
   `data/real/schools.json` (309 KB: per demo school id, the real school's moved position,
   management, category, rural/urban, enrolment Classes 1–8, teachers, classrooms — **no name, no
@@ -535,7 +557,11 @@ from the footer of the signed-out pages.
   card mapping, each with its page). The PRS and PAB figures were read off the PDFs by position
   (pypdf with text coordinates; the PRS text layer lists the two overall charts in the opposite
   order to the page) and the build re-reads every cited page with `scripts/pdf-page-text.py`
-  (`python3 -I`, pypdf) and refuses to write if a figure is not on it — 126 checks.
+  (`python3 -I`, pypdf) and refuses to write if a figure is not on it — 126 checks. It also
+  refuses to write if the PGI-D 2025-26 grades are not Rampur and Lucknow Prachesta-2 and
+  Varanasi Prachesta-1, if a district's Census population is not the published total, if the
+  NITI file does not hold UP's 68 blocks with Saidnagar (LGD 1487, checked against the LGD block
+  list) as the only one in the three districts, or if a PM SHRI file is inconsistent.
 - When the database opens, `ensureRealData()` (`src/lib/ext/realdata.ts`) applies the files once
   (marker `realdata` in `ext_meta`, a fingerprint of both files; a demo reset applies them again):
   it updates the schools, calibrates Class 3, re-measures the findings and outcome checks that
@@ -661,14 +687,60 @@ four NFHS-5 indicators:
 
 (The portal's NFHS file also has "2023-24" rows whose round it does not document; they are not used.)
 
+### More district context: PGI-D, Census 2011, the aspirational block, PM SHRI
+
+The same card (and `/sources`, table `#more-context`) now also shows, still labelled "context, not
+cause":
+
+| | Rampur | Lucknow | Varanasi | UP |
+|---|---|---|---|---|
+| PGI-D 2022-23 / 2023-24 / 2024-25 / 2025-26, overall | Prachesta-3 / 3 / 2 / 2 | Prachesta-3 / 2 / 2 / 2 | Prachesta-2 / 2 / 1 / 1 | 2025-26: 67 districts Prachesta-2, 8 Prachesta-1 |
+| PGI-D 2025-26, Outcomes category | Prachesta-2 | Prachesta-2 | Prachesta-1 | |
+| Census 2011 population | 2,335,819 | 4,589,838 | 3,676,841 | 199,795,792 * |
+| Census 2011 literacy rate (age 7+) | 53.34% | 77.29% | 75.60% | 67.68% |
+| Census 2011 female literacy rate | 44.44% | 71.54% | 66.69% | 57.18% |
+| Census 2011 SC / ST share | 13.18% / 0.02% | 20.66% / 0.16% | 13.24% / 0.78% | 20.70% / 0.57% |
+| Census 2011 rural share | 74.80% | 33.79% | 56.56% | 77.73% |
+| PM SHRI schools (Kendriya, Navodaya) | 20 (1, 1) | 27 (8, 1) | 24 (2, 1) | |
+| …of them now demo schools (badge) | 7 | 14 | 16 | |
+| NITI aspirational block | Saidnagar | none | none | 68 NITI blocks; 108 on UP's ABP+ list |
+
+PGI-D grades are bands of the total score (Utkarsh 91–100% … Prachesta-1 51–60%, Prachesta-2
+41–50% … Akanshi-3 up to 10%); the portal publishes grades, not scores, so the optional 3 MB report
+PDF was not downloaded. \* The portal's UP rows add up to 16,549 fewer people than the published
+199,812,341 (0.008%); the district totals match exactly, and literacy rates equal the published
+ones (53.34 / 77.29 / 75.60 / 67.68).
+
+**Saidnagar (Rampur), March 2026**, NITI education indicators 2.1–2.11 with the median of UP's 68
+NITI blocks: transition upper primary → secondary, boys 74.6 (68.6), girls 73.5 (67.3);
+secondary → higher secondary, boys 57.7 (67.9), girls 60.6 (76.7); elementary schools with PTR ≤ 30
+74.2 (72.0); schools with enough girls' toilets 73.0 (61.4); schools with teachers trained for
+children with special needs 20.2 (17.3); 60%+ in Class X, boys 75.5 (75.6), girls 87.4 (81.2);
+60%+ in Class XII, boys 56.0 (72.5), girls 75.8 (76.3). Names, periodicity and source (UDISE+,
+DoSEL) come from NITI's metadata file. The demo's blocks are rebuilt groupings of real schools, not
+real blocks, so the note is shown for the district, never on a demo block.
+
+**PM SHRI matching.** Inside the build, each demo school's real UDISE+ counterpart is looked up in
+the PM SHRI list read from the portal; a match sets `"pmshri": true` (and `kvs`/`nvs`, none here)
+in `data/real/schools.json` — the code itself is not written. Of the 71 PM SHRI schools, 68 are in
+the UDISE+ 2020-21 file; 37 are government Class 1–5 schools in the pool the demo draws from, and
+all 37 became demo schools (Rampur 7, Lucknow 14, Varanasi 16). The others are secondary or
+upper-primary-only schools, Kendriya or Navodaya Vidyalayas, or newer than the UDISE+ file. The
+school page shows a "PM SHRI" / "पीएम श्री" badge and a line in the UDISE+ profile;
+`school_profile` gained `pmshri`, `kvs`, `nvs` columns (added in place on an older database).
+
 ### Credits
 
 UDISE+, Ministry of Education, via the India Data Portal (ISB), ODC-BY 1.0 · PARAKH Rashtriya
 Sarvekshan 2024, NCERT (reproduced accurately with credit; logos not used) · ASER 2024, ASER
 Centre / Pratham · NFHS-5, IIPS and MoHFW, via the India Data Portal (licence not stated) ·
 Samagra Shiksha UP PAB minutes 2025-26, DoSEL, Ministry of Education (Internet Archive copy) ·
-LGD codes, Ministry of Panchayati Raj, via the India Data Portal, ODC-BY · OpenStreetMap
-contributors, ODbL.
+LGD codes, Ministry of Panchayati Raj, via the India Data Portal, ODC-BY · PGI-D, Department of
+School Education & Literacy, Ministry of Education (no licence stated) · Census of India 2011,
+Primary Census Abstract, via the India Data Portal (licence not stated by the portal) ·
+Aspirational Blocks Programme data, Planning Department, Government of Uttar Pradesh, and NITI
+Aayog (no licence stated) · PM SHRI school list, Ministry of Education (no licence stated; read
+from the public page) · OpenStreetMap contributors, ODbL.
 
 ## Speed, and five loose ends closed (backend hardening)
 

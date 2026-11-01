@@ -200,6 +200,139 @@
     "used": 711,
     "type_mismatches": 88,
     "mean_class3_gap": 13
+   },
+   "pgid": {
+    "years": [
+     {
+      "year": "2022-23",
+      "overall": "PRACHESTA-3",
+      "domains": {
+       "outcomes": "AKANSHI-1",
+       "ect": "PRACHESTA-2",
+       "ifse": "PRACHESTA-3",
+       "sscp": "AKANSHI-1",
+       "dl": "AKANSHI-2",
+       "gp": "PRACHESTA-2"
+      }
+     },
+     {
+      "year": "2023-24",
+      "overall": "PRACHESTA-3",
+      "domains": {
+       "outcomes": "PRACHESTA-3",
+       "ect": "PRACHESTA-1",
+       "ifse": "PRACHESTA-2",
+       "sscp": "AKANSHI-1",
+       "dl": "AKANSHI-2",
+       "gp": "PRACHESTA-1"
+      }
+     },
+     {
+      "year": "2024-25",
+      "overall": "PRACHESTA-2",
+      "domains": {
+       "outcomes": "PRACHESTA-2",
+       "ect": "PRACHESTA-1",
+       "ifse": "PRACHESTA-2",
+       "sscp": "AKANSHI-1",
+       "dl": "AKANSHI-1",
+       "gp": "PRACHESTA-1"
+      }
+     },
+     {
+      "year": "2025-26",
+      "overall": "PRACHESTA-2",
+      "domains": {
+       "outcomes": "PRACHESTA-2",
+       "ect": "PRACHESTA-1",
+       "ifse": "PRACHESTA-2",
+       "sscp": "PRACHESTA-3",
+       "dl": "AKANSHI-1",
+       "gp": "PRACHESTA-2"
+      }
+     }
+    ]
+   },
+   "census": {
+    "population": 2335819,
+    "literacy_rate": 53.34,
+    "female_literacy_rate": 44.44,
+    "male_literacy_rate": 61.4,
+    "sc_share": 13.18,
+    "st_share": 0.02,
+    "rural_share": 74.8,
+    "child_0_6_share": 16.24
+   },
+   "aspirational": {
+    "period": "March 2026",
+    "period_hi": "मार्च 2026",
+    "blocks": [
+     {
+      "name": "Saidnagar",
+      "name_hi": "सैदनगर",
+      "lgd_block": 1487,
+      "in_up_abp_plus": "NITI-UP ABP",
+      "education": [
+       {
+        "code": "2.1",
+        "value": 74.6
+       },
+       {
+        "code": "2.2",
+        "value": 73.5
+       },
+       {
+        "code": "2.3",
+        "value": 57.7
+       },
+       {
+        "code": "2.4",
+        "value": 60.6
+       },
+       {
+        "code": "2.5",
+        "value": 74.2
+       },
+       {
+        "code": "2.6",
+        "value": 73
+       },
+       {
+        "code": "2.7",
+        "value": 20.2
+       },
+       {
+        "code": "2.8",
+        "value": 75.5
+       },
+       {
+        "code": "2.9",
+        "value": 87.4
+       },
+       {
+        "code": "2.10",
+        "value": 56
+       },
+       {
+        "code": "2.11",
+        "value": 75.8
+       }
+      ]
+     }
+    ]
+   },
+   "pmshri": {
+    "total": 20,
+    "kvs": 1,
+    "nvs": 1,
+    "by_category": {
+     "primary": 6,
+     "up_to_class_8": 6,
+     "secondary": 8
+    },
+    "in_udise_file": 18,
+    "in_eligible_pool": 7,
+    "demo_schools_flagged": 7
    }
   },
   "DST-02": {
@@ -401,6 +534,86 @@
     "used": 695,
     "type_mismatches": 176,
     "mean_class3_gap": 12.1
+   },
+   "pgid": {
+    "years": [
+     {
+      "year": "2022-23",
+      "overall": "PRACHESTA-3",
+      "domains": {
+       "outcomes": "PRACHESTA-3",
+       "ect": "PRACHESTA-2",
+       "ifse": "PRACHESTA-2",
+       "sscp": "PRACHESTA-3",
+       "dl": "AKANSHI-1",
+       "gp": "PRACHESTA-2"
+      }
+     },
+     {
+      "year": "2023-24",
+      "overall": "PRACHESTA-2",
+      "domains": {
+       "outcomes": "PRACHESTA-3",
+       "ect": "PRACHESTA-1",
+       "ifse": "PRACHESTA-1",
+       "sscp": "PRACHESTA-3",
+       "dl": "PRACHESTA-3",
+       "gp": "PRACHESTA-1"
+      }
+     },
+     {
+      "year": "2024-25",
+      "overall": "PRACHESTA-2",
+      "domains": {
+       "outcomes": "PRACHESTA-2",
+       "ect": "PRACHESTA-1",
+       "ifse": "PRACHESTA-1",
+       "sscp": "PRACHESTA-3",
+       "dl": "PRACHESTA-3",
+       "gp": "PRACHESTA-1"
+      }
+     },
+     {
+      "year": "2025-26",
+      "overall": "PRACHESTA-2",
+      "domains": {
+       "outcomes": "PRACHESTA-2",
+       "ect": "PRACHESTA-1",
+       "ifse": "PRACHESTA-1",
+       "sscp": "PRACHESTA-3",
+       "dl": "PRACHESTA-3",
+       "gp": "PRACHESTA-1"
+      }
+     }
+    ]
+   },
+   "census": {
+    "population": 4589838,
+    "literacy_rate": 77.29,
+    "female_literacy_rate": 71.54,
+    "male_literacy_rate": 82.56,
+    "sc_share": 20.66,
+    "st_share": 0.16,
+    "rural_share": 33.79,
+    "child_0_6_share": 11.84
+   },
+   "aspirational": {
+    "period": "March 2026",
+    "period_hi": "मार्च 2026",
+    "blocks": []
+   },
+   "pmshri": {
+    "total": 27,
+    "kvs": 8,
+    "nvs": 1,
+    "by_category": {
+     "primary": 4,
+     "up_to_class_8": 12,
+     "secondary": 11
+    },
+    "in_udise_file": 26,
+    "in_eligible_pool": 14,
+    "demo_schools_flagged": 14
    }
   },
   "DST-03": {
@@ -602,6 +815,86 @@
     "used": 703,
     "type_mismatches": 100,
     "mean_class3_gap": 12.5
+   },
+   "pgid": {
+    "years": [
+     {
+      "year": "2022-23",
+      "overall": "PRACHESTA-2",
+      "domains": {
+       "outcomes": "PRACHESTA-2",
+       "ect": "PRACHESTA-2",
+       "ifse": "PRACHESTA-2",
+       "sscp": "PRACHESTA-3",
+       "dl": "AKANSHI-1",
+       "gp": "PRACHESTA-2"
+      }
+     },
+     {
+      "year": "2023-24",
+      "overall": "PRACHESTA-2",
+      "domains": {
+       "outcomes": "PRACHESTA-2",
+       "ect": "PRACHESTA-1",
+       "ifse": "PRACHESTA-1",
+       "sscp": "PRACHESTA-3",
+       "dl": "PRACHESTA-3",
+       "gp": "PRACHESTA-1"
+      }
+     },
+     {
+      "year": "2024-25",
+      "overall": "PRACHESTA-1",
+      "domains": {
+       "outcomes": "PRACHESTA-1",
+       "ect": "PRACHESTA-1",
+       "ifse": "PRACHESTA-1",
+       "sscp": "PRACHESTA-3",
+       "dl": "PRACHESTA-3",
+       "gp": "PRACHESTA-1"
+      }
+     },
+     {
+      "year": "2025-26",
+      "overall": "PRACHESTA-1",
+      "domains": {
+       "outcomes": "PRACHESTA-1",
+       "ect": "PRACHESTA-1",
+       "ifse": "PRACHESTA-1",
+       "sscp": "PRACHESTA-3",
+       "dl": "PRACHESTA-3",
+       "gp": "PRACHESTA-2"
+      }
+     }
+    ]
+   },
+   "census": {
+    "population": 3676841,
+    "literacy_rate": 75.6,
+    "female_literacy_rate": 66.69,
+    "male_literacy_rate": 83.78,
+    "sc_share": 13.24,
+    "st_share": 0.78,
+    "rural_share": 56.56,
+    "child_0_6_share": 13.52
+   },
+   "aspirational": {
+    "period": "March 2026",
+    "period_hi": "मार्च 2026",
+    "blocks": []
+   },
+   "pmshri": {
+    "total": 24,
+    "kvs": 2,
+    "nvs": 1,
+    "by_category": {
+     "primary": 2,
+     "up_to_class_8": 13,
+     "secondary": 9
+    },
+    "in_udise_file": 24,
+    "in_eligible_pool": 16,
+    "demo_schools_flagged": 16
    }
   }
  },
@@ -842,5 +1135,273 @@
   "anchor_round": "RND-2025-02",
   "grade": 3,
   "note": "PRS 2024 was held in December 2024; the demo round nearest to it is R0, February 2025."
+ },
+ "pgid": {
+  "title": "Performance Grading Index for Districts (PGI-D)",
+  "by": "Department of School Education & Literacy, Ministry of Education",
+  "url": "https://dpgi.udiseplus.gov.in/",
+  "api": "https://dpgi.udiseplus.gov.in/apis/backend/dgpidata/categorywise/{year}/uttar%20pradesh/{category}",
+  "years": [
+   "2022-23",
+   "2023-24",
+   "2024-25",
+   "2025-26"
+  ],
+  "latest_year": "2025-26",
+  "grades": [
+   {
+    "key": "UTKARSH",
+    "en": "Utkarsh",
+    "hi": "उत्कर्ष",
+    "band": "91–100%"
+   },
+   {
+    "key": "UTTAM-1",
+    "en": "Uttam-1",
+    "hi": "उत्तम-1",
+    "band": "81–90%"
+   },
+   {
+    "key": "UTTAM-2",
+    "en": "Uttam-2",
+    "hi": "उत्तम-2",
+    "band": "71–80%"
+   },
+   {
+    "key": "UTTAM-3",
+    "en": "Uttam-3",
+    "hi": "उत्तम-3",
+    "band": "61–70%"
+   },
+   {
+    "key": "PRACHESTA-1",
+    "en": "Prachesta-1",
+    "hi": "प्रचेष्टा-1",
+    "band": "51–60%"
+   },
+   {
+    "key": "PRACHESTA-2",
+    "en": "Prachesta-2",
+    "hi": "प्रचेष्टा-2",
+    "band": "41–50%"
+   },
+   {
+    "key": "PRACHESTA-3",
+    "en": "Prachesta-3",
+    "hi": "प्रचेष्टा-3",
+    "band": "31–40%"
+   },
+   {
+    "key": "AKANSHI-1",
+    "en": "Akanshi-1",
+    "hi": "आकांक्षी-1",
+    "band": "21–30%"
+   },
+   {
+    "key": "AKANSHI-2",
+    "en": "Akanshi-2",
+    "hi": "आकांक्षी-2",
+    "band": "11–20%"
+   },
+   {
+    "key": "AKANSHI-3",
+    "en": "Akanshi-3",
+    "hi": "आकांक्षी-3",
+    "band": "up to 10%"
+   }
+  ],
+  "domains": [
+   {
+    "cat": 1,
+    "key": "outcomes",
+    "en": "Outcomes",
+    "hi": "परिणाम"
+   },
+   {
+    "cat": 2,
+    "key": "ect",
+    "en": "Effective classroom transaction",
+    "hi": "प्रभावी कक्षा-शिक्षण"
+   },
+   {
+    "cat": 3,
+    "key": "ifse",
+    "en": "Infrastructure, facilities, student entitlements",
+    "hi": "अवसंरचना, सुविधाएँ व विद्यार्थी हक़दारियाँ"
+   },
+   {
+    "cat": 4,
+    "key": "sscp",
+    "en": "School safety and child protection",
+    "hi": "विद्यालय सुरक्षा व बाल संरक्षण"
+   },
+   {
+    "cat": 5,
+    "key": "dl",
+    "en": "Digital learning",
+    "hi": "डिजिटल अधिगम"
+   },
+   {
+    "cat": 6,
+    "key": "gp",
+    "en": "Governance processes",
+    "hi": "शासन प्रक्रियाएँ"
+   }
+  ],
+  "up_distribution_latest": {
+   "PRACHESTA-2": 67,
+   "PRACHESTA-1": 8
+  },
+  "up_districts": 75
+ },
+ "census": {
+  "title": "Census of India 2011, Primary Census Abstract",
+  "via": "India Data Portal (census-pca-demography)",
+  "url": "https://ckandev.indiadataportal.com/dataset/census-pca-demography",
+  "licence": null,
+  "state": {
+   "population": 199795792,
+   "literacy_rate": 67.68,
+   "female_literacy_rate": 57.18,
+   "male_literacy_rate": 77.28,
+   "sc_share": 20.7,
+   "st_share": 0.57,
+   "rural_share": 77.73,
+   "child_0_6_share": 15.41,
+   "published_population": 199812341
+  },
+  "definitions": {
+   "literacy_rate": "literates ÷ population aged 7 and over",
+   "rural_share": "population in villages ÷ total"
+  }
+ },
+ "aspirational": {
+  "title": "Aspirational Blocks Programme: NITI Aayog indicators for Uttar Pradesh",
+  "by": "Planning Department, Government of Uttar Pradesh (data: NITI Aayog)",
+  "page": "https://epariyojana.up.gov.in/TABP/OrderGOs.aspx",
+  "file": "UP_68AB_NITI_Mar2026.xlsx",
+  "period": "March 2026",
+  "period_hi": "मार्च 2026",
+  "niti_blocks_up": 68,
+  "up_abp_plus_blocks": 108,
+  "indicators": {
+   "2.1": {
+    "official": "Transition Rate - Percentage of boys transitioned from Upper Primary to Secondary level",
+    "en": "Transition, boys: upper primary to secondary",
+    "hi": "संक्रमण दर, बालक: उच्च प्राथमिक से माध्यमिक",
+    "periodicity": "Yearly",
+    "source": "UDISE plus, DoSEL",
+    "unit": "Percentage",
+    "higher_is_better": true,
+    "median_up68": 68.6
+   },
+   "2.2": {
+    "official": "Transition Rate - Percentage of girls transitioned from Upper Primary to Secondary level",
+    "en": "Transition, girls: upper primary to secondary",
+    "hi": "संक्रमण दर, बालिकाएँ: उच्च प्राथमिक से माध्यमिक",
+    "periodicity": "Yearly",
+    "source": "UDISE plus, DoSEL",
+    "unit": "Percentage",
+    "higher_is_better": true,
+    "median_up68": 67.3
+   },
+   "2.3": {
+    "official": "Transition Rate - Percentage of boys transitioned from Secondary to Higher Secondary Level",
+    "en": "Transition, boys: secondary to higher secondary",
+    "hi": "संक्रमण दर, बालक: माध्यमिक से उच्च माध्यमिक",
+    "periodicity": "Yearly",
+    "source": "UDISE plus, DoSEL",
+    "unit": "Percentage",
+    "higher_is_better": true,
+    "median_up68": 67.9
+   },
+   "2.4": {
+    "official": "Transition Rate - Percentage of girls transitioned from Secondary to Higher Secondary Level",
+    "en": "Transition, girls: secondary to higher secondary",
+    "hi": "संक्रमण दर, बालिकाएँ: माध्यमिक से उच्च माध्यमिक",
+    "periodicity": "Yearly",
+    "source": "UDISE plus, DoSEL",
+    "unit": "Percentage",
+    "higher_is_better": true,
+    "median_up68": 76.7
+   },
+   "2.5": {
+    "official": "Percentage of elementary schools having Pupil Teacher Ratio (PTR) less than equal to 30",
+    "en": "Elementary schools with a pupil–teacher ratio of 30 or less",
+    "hi": "छात्र-शिक्षक अनुपात 30 या कम वाले प्रारंभिक विद्यालय",
+    "periodicity": "Yearly",
+    "source": "UDISE plus, DoSEL",
+    "unit": "Percentage",
+    "higher_is_better": true,
+    "median_up68": 72
+   },
+   "2.6": {
+    "official": "Percentage of schools having adequate no. of girls’ toilet facilities against the total number of schools",
+    "en": "Schools with enough girls’ toilets",
+    "hi": "पर्याप्त बालिका शौचालय वाले विद्यालय",
+    "periodicity": "Yearly",
+    "source": "UDISE plus, DoSEL",
+    "unit": "Percentage",
+    "higher_is_better": true,
+    "median_up68": 61.4
+   },
+   "2.7": {
+    "official": "Percentage of schools having trained teachers for teaching child with special needs (CwSN)",
+    "en": "Schools with teachers trained for children with special needs",
+    "hi": "विशेष आवश्यकता वाले बच्चों हेतु प्रशिक्षित शिक्षकों वाले विद्यालय",
+    "periodicity": "Yearly",
+    "source": "UDISE plus, DoSEL",
+    "unit": "Percentage",
+    "higher_is_better": true,
+    "median_up68": 17.3
+   },
+   "2.8": {
+    "official": "Percentage of boys with 60% and above marks in Class X board exam",
+    "en": "Boys with 60%+ in the Class X board exam",
+    "hi": "कक्षा 10 बोर्ड परीक्षा में 60%+ अंक वाले बालक",
+    "periodicity": "Yearly",
+    "source": "UDISE plus, DoSEL",
+    "unit": "Percentage",
+    "higher_is_better": true,
+    "median_up68": 75.6
+   },
+   "2.9": {
+    "official": "Percentage of girls with 60% and above marks in Class X board exam",
+    "en": "Girls with 60%+ in the Class X board exam",
+    "hi": "कक्षा 10 बोर्ड परीक्षा में 60%+ अंक वाली बालिकाएँ",
+    "periodicity": "Yearly",
+    "source": "UDISE plus, DoSEL",
+    "unit": "Percentage",
+    "higher_is_better": true,
+    "median_up68": 81.2
+   },
+   "2.10": {
+    "official": "Percentage of boys with 60% and above marks in Class XII board exam",
+    "en": "Boys with 60%+ in the Class XII board exam",
+    "hi": "कक्षा 12 बोर्ड परीक्षा में 60%+ अंक वाले बालक",
+    "periodicity": "Yearly",
+    "source": "UDISE plus, DoSEL",
+    "unit": "Percentage",
+    "higher_is_better": true,
+    "median_up68": 72.5
+   },
+   "2.11": {
+    "official": "Percentage of girls with 60% and above marks in Class XII board exam",
+    "en": "Girls with 60%+ in the Class XII board exam",
+    "hi": "कक्षा 12 बोर्ड परीक्षा में 60%+ अंक वाली बालिकाएँ",
+    "periodicity": "Yearly",
+    "source": "UDISE plus, DoSEL",
+    "unit": "Percentage",
+    "higher_is_better": true,
+    "median_up68": 76.3
+   }
+  }
+ },
+ "pmshri": {
+  "title": "PM SHRI schools",
+  "by": "Department of School Education & Literacy, Ministry of Education",
+  "url": "https://pmshri.education.gov.in/state",
+  "read": "2026-11-01",
+  "note": "Counts only. Read off the public school search, district by district; codes stay in .data/sources/ and are used only to set a yes/no flag on matching demo schools."
  }
 }

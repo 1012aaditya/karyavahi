@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { getLanguage, getSession } from '@/lib/session';
 import { homeFor } from '@/lib/nav';
 import { pick } from '@/lib/i18n';
-import { reconciliation, figures, pabCosts, realDataStatus } from '@/lib/sources';
+import { reconciliation, figures, pabCosts, realDataStatus, pmshriByDistrict, pgidGrade } from '@/lib/sources';
 import { AuthFrame } from '@/components/Brand';
 import { Card, CardHead, Callout, fmtInr } from '@/components/ui';
 import { Pill } from '@/components/labels';
@@ -25,6 +25,10 @@ export default async function SourcesPage() {
   const recon = reconciliation();
   const costs = pabCosts();
   const st = realDataStatus();
+  const pmDemo = pmshriByDistrict();
+  const gradeName = (key: string | undefined) => { const g = key ? pgidGrade(key) : null; return g ? pick(lang, g.en, g.hi) : '—'; };
+  const pmTotal = f ? Object.values(f.districts).reduce((t, d) => t + (d.pmshri?.total ?? 0), 0) : 0;
+  const pmFlagged = Object.values(pmDemo).reduce((t, n) => t + n, 0);
   const L = (en: string, hi: string) => pick(lang, en, hi);
   const pct = (v: number | null) => (v === null ? '—' : `${v.toFixed(1)}%`);
   const signed = (v: number | null) => (v === null ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}`);
@@ -66,6 +70,30 @@ export default async function SourcesPage() {
       year: '2024', licence: 'ODC-BY 1.0', url: 'https://ckandev.indiadataportal.com/dataset/lgd-codes',
       used: L('District and block codes used to join the sources by code, not spelling (Rampur 176, Lucknow 162, Varanasi 187).', 'स्रोतों को वर्तनी नहीं, कोड से जोड़ने के लिए ज़िला व ब्लॉक कोड (रामपुर 176, लखनऊ 162, वाराणसी 187)।'),
     },
+    ...(f?.pgid ? [{
+      key: 'pgid', name: L('Performance Grading Index for Districts (PGI-D)', 'ज़िलों के लिए प्रदर्शन ग्रेडिंग सूचकांक (PGI-D)'), by: L('Department of School Education & Literacy, Ministry of Education', 'स्कूल शिक्षा एवं साक्षरता विभाग, शिक्षा मंत्रालय'),
+      year: f.pgid.years.join(', '), licence: L('No licence stated; credited here', 'कोई लाइसेंस नहीं बताया गया; यहाँ श्रेय दिया गया'), url: f.pgid.url,
+      used: L(`Each district’s grade, overall and in the six categories (Outcomes, classroom transaction, infrastructure, safety, digital learning, governance), ${f.pgid.years[0]} to ${f.pgid.latest_year}, from the portal’s open data. Shown as district context only.`,
+        `हर ज़िले का ग्रेड, समग्र और छह श्रेणियों में (परिणाम, कक्षा-शिक्षण, अवसंरचना, सुरक्षा, डिजिटल अधिगम, शासन), ${f.pgid.years[0]} से ${f.pgid.latest_year}, पोर्टल के खुले आँकड़ों से। केवल ज़िला संदर्भ के रूप में।`),
+    }] : []),
+    ...(f?.census ? [{
+      key: 'census', name: L('Census of India 2011, Primary Census Abstract', 'भारत की जनगणना 2011, प्राथमिक जनगणना सार'), by: L('Office of the Registrar General & Census Commissioner, via the India Data Portal', 'महारजिस्ट्रार एवं जनगणना आयुक्त कार्यालय, इंडिया डेटा पोर्टल के माध्यम से'),
+      year: '2011', licence: f.census.licence ?? L('Licence not stated by the portal; credited here', 'पोर्टल ने लाइसेंस नहीं बताया; यहाँ श्रेय दिया गया'), url: f.census.url,
+      used: L('District level only: population, literacy rate (age 7+), female literacy, Scheduled Caste and Scheduled Tribe shares, rural share. Read through the portal’s query API for the three districts, not the full national files. Block figures are not used because the demo’s blocks are rebuilt groupings, not real blocks.',
+        'केवल ज़िला स्तर: जनसंख्या, साक्षरता दर (7+ वर्ष), महिला साक्षरता, अनुसूचित जाति व जनजाति का हिस्सा, ग्रामीण हिस्सा। पूरी राष्ट्रीय फ़ाइलें नहीं, तीन ज़िलों के लिए पोर्टल के क्वेरी API से पढ़े गए। ब्लॉक आँकड़े उपयोग नहीं किए क्योंकि डेमो के ब्लॉक पुनर्गठित समूह हैं, वास्तविक ब्लॉक नहीं।'),
+    }] : []),
+    ...(f?.aspirational ? [{
+      key: 'abp', name: L('Aspirational Blocks Programme: NITI Aayog indicators for Uttar Pradesh', 'आकांक्षी ब्लॉक कार्यक्रम: उत्तर प्रदेश के लिए नीति आयोग संकेतक'), by: L('Planning Department, Government of Uttar Pradesh (data: NITI Aayog)', 'नियोजन विभाग, उत्तर प्रदेश सरकार (आँकड़े: नीति आयोग)'),
+      year: f.aspirational.period, licence: L('No licence stated; credit UP Planning Department and NITI Aayog', 'कोई लाइसेंस नहीं बताया गया; उ.प्र. नियोजन विभाग व नीति आयोग को श्रेय'), url: f.aspirational.page,
+      used: L(`Which of the three districts has a NITI aspirational block (Rampur: Saidnagar, also on the state’s ABP+ list of ${f.aspirational.up_abp_plus_blocks}), and that block’s 11 education indicators for ${f.aspirational.period}, with names and sources from NITI’s indicator metadata and the median of UP’s ${f.aspirational.niti_blocks_up} NITI blocks. Shown on the district card, not on a demo block.`,
+        `तीनों में से किस ज़िले में नीति आकांक्षी ब्लॉक है (रामपुर: सैदनगर, राज्य की ${f.aspirational.up_abp_plus_blocks} ब्लॉकों वाली ABP+ सूची में भी), और उस ब्लॉक के ${f.aspirational.period_hi ?? f.aspirational.period} के 11 शिक्षा संकेतक, नीति आयोग के संकेतक विवरण से नाम व स्रोत सहित, और उ.प्र. के ${f.aspirational.niti_blocks_up} नीति ब्लॉकों की माध्यिका। ज़िला कार्ड पर दिखाए गए, किसी डेमो ब्लॉक पर नहीं।`),
+    }] : []),
+    ...(f?.pmshri ? [{
+      key: 'pmshri', name: L('PM SHRI schools', 'पीएम श्री विद्यालय'), by: L('Department of School Education & Literacy, Ministry of Education', 'स्कूल शिक्षा एवं साक्षरता विभाग, शिक्षा मंत्रालय'),
+      year: L(`list as read on ${f.pmshri.read}`, `${f.pmshri.read} को पढ़ी गई सूची`), licence: L('No export or licence; read from the public school search page and credited here', 'कोई निर्यात या लाइसेंस नहीं; सार्वजनिक विद्यालय खोज पृष्ठ से पढ़ा गया और यहाँ श्रेय दिया गया'), url: f.pmshri.url,
+      used: L(`The ${pmTotal} PM SHRI schools in the three districts, matched to the demo’s real schools by UDISE code inside the build: ${pmFlagged} demo schools carry a “PM SHRI” badge. Only a yes/no flag is kept; no code or name.`,
+        `तीनों ज़िलों के ${pmTotal} पीएम श्री विद्यालय, बिल्ड के भीतर UDISE कोड से डेमो के वास्तविक विद्यालयों से मिलाए गए: ${pmFlagged} डेमो विद्यालयों पर “पीएम श्री” बैज है। केवल हाँ/नहीं रखा गया; कोई कोड या नाम नहीं।`),
+    }] : []),
     {
       key: 'osm', name: L('OpenStreetMap boundaries', 'ओपनस्ट्रीटमैप सीमाएँ'), by: L('© OpenStreetMap contributors', '© ओपनस्ट्रीटमैप योगदानकर्ता'), year: '2026', licence: 'ODbL 1.0', url: 'https://www.openstreetmap.org/copyright',
       used: L('The outline of Uttar Pradesh and its 75 districts on the hotspot map.', 'हॉटस्पॉट मानचित्र पर उत्तर प्रदेश और उसके 75 ज़िलों की रूपरेखा।'),
@@ -100,7 +128,8 @@ export default async function SourcesPage() {
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink">
               <li>{L('Schools, their enrolment, teachers and locations (UDISE+ via India Data Portal, about 2020-21)', 'विद्यालय, उनका नामांकन, शिक्षक और स्थान (यू-डाइस+, इंडिया डेटा पोर्टल, लगभग 2020-21)')}</li>
               <li>{L('Intervention unit costs where a line exists (UP PAB 2025-26)', 'जहाँ पंक्ति है वहाँ हस्तक्षेप की इकाई लागत (उ.प्र. PAB 2025-26)')}</li>
-              <li>{L('District context: ASER 2024, NFHS-5', 'ज़िला संदर्भ: असर 2024, NFHS-5')}</li>
+              <li>{L('District context: ASER 2024, NFHS-5, PGI-D grades, Census 2011, the NITI aspirational block', 'ज़िला संदर्भ: असर 2024, NFHS-5, PGI-D ग्रेड, जनगणना 2011, नीति आकांक्षी ब्लॉक')}</li>
+              <li>{L('Which schools are PM SHRI schools (Ministry of Education list)', 'कौन-से विद्यालय पीएम श्री विद्यालय हैं (शिक्षा मंत्रालय सूची)')}</li>
               <li>{L('State and district boundaries (OpenStreetMap)', 'राज्य व ज़िला सीमाएँ (ओपनस्ट्रीटमैप)')}</li>
             </ul>
           </div>
@@ -249,6 +278,68 @@ export default async function SourcesPage() {
               </table>
             </div>
             <p className="card-pad border-t border-line text-xs leading-relaxed text-ink-faint">{L('ASER 2024 is a household survey of rural children (government and private schools), page 2 of the Uttar Pradesh district estimates. NFHS-5 was collected in 2019-21.', 'असर 2024 ग्रामीण बच्चों (सरकारी व निजी विद्यालय) का घरेलू सर्वेक्षण है, उत्तर प्रदेश ज़िला अनुमानों का पृष्ठ 2। NFHS-5 के आँकड़े 2019-21 में एकत्र हुए।')}</p>
+          </Card>
+        ) : null}
+
+        {f && (f.pgid || f.census || f.pmshri) ? (
+          <Card>
+            <CardHead title={L('More district context: PGI-D, Census 2011, PM SHRI, aspirational block', 'अधिक ज़िला संदर्भ: PGI-D, जनगणना 2011, पीएम श्री, आकांक्षी ब्लॉक')}
+              hint={L('Context, not cause. District level only; none of it changes a learning result.', 'संदर्भ, कारण नहीं। केवल ज़िला स्तर; इनमें से कुछ भी किसी अधिगम परिणाम को नहीं बदलता।')} />
+            <div className="overflow-x-auto">
+              <table className="table min-w-[680px]" id="more-context">
+                <thead><tr><th>{L('Indicator', 'संकेतक')}</th>{Object.values(f.districts).map((d) => <th key={d.name} className="text-right">{d.name}</th>)}<th className="text-right">{L('Uttar Pradesh', 'उत्तर प्रदेश')}</th></tr></thead>
+                <tbody>
+                  {f.pgid ? f.pgid.years.map((y, i) => (
+                    <tr key={`pgid-${y}`}><td className="text-sm">{L(`PGI-D ${y}: overall grade`, `PGI-D ${y}: समग्र ग्रेड`)}</td>
+                      {Object.values(f.districts).map((d) => <td key={d.name} className="text-right text-sm">{gradeName(d.pgid?.years[i]?.overall)}</td>)}
+                      <td className="text-right text-ink-faint">—</td></tr>
+                  )) : null}
+                  {f.pgid ? (
+                    <tr><td className="text-sm">{L(`PGI-D ${f.pgid.latest_year}: Outcomes category`, `PGI-D ${f.pgid.latest_year}: परिणाम श्रेणी`)}</td>
+                      {Object.values(f.districts).map((d) => <td key={d.name} className="text-right text-sm">{gradeName(d.pgid?.years.at(-1)?.domains.outcomes)}</td>)}
+                      <td className="text-right text-ink-faint">—</td></tr>
+                  ) : null}
+                  {f.census ? ([
+                    ['population', L('Census 2011: population', 'जनगणना 2011: जनसंख्या'), false],
+                    ['literacy_rate', L('Census 2011: literacy rate (age 7+)', 'जनगणना 2011: साक्षरता दर (7+ वर्ष)'), true],
+                    ['female_literacy_rate', L('Census 2011: female literacy rate', 'जनगणना 2011: महिला साक्षरता दर'), true],
+                    ['sc_share', L('Census 2011: Scheduled Castes, share of population', 'जनगणना 2011: अनुसूचित जाति, जनसंख्या में हिस्सा'), true],
+                    ['st_share', L('Census 2011: Scheduled Tribes, share of population', 'जनगणना 2011: अनुसूचित जनजाति, जनसंख्या में हिस्सा'), true],
+                    ['rural_share', L('Census 2011: rural share of population', 'जनगणना 2011: जनसंख्या में ग्रामीण हिस्सा'), true],
+                  ] as const).map(([k, label, isPct]) => {
+                    const fmt = (v: number | undefined) => (v === undefined ? '—' : isPct ? `${v.toFixed(2)}%` : v.toLocaleString('en-IN'));
+                    return (
+                      <tr key={k}><td className="text-sm">{label}</td>
+                        {Object.values(f.districts).map((d) => <td key={d.name} className="tnum text-right text-sm">{fmt(d.census?.[k])}</td>)}
+                        <td className="tnum text-right text-sm text-ink-soft">{fmt(f.census!.state[k])}</td></tr>
+                    );
+                  }) : null}
+                  {f.pmshri ? (
+                    <>
+                      <tr><td className="text-sm">{L('PM SHRI schools in the district (Kendriya, Navodaya)', 'ज़िले में पीएम श्री विद्यालय (केंद्रीय, नवोदय)')}</td>
+                        {Object.values(f.districts).map((d) => <td key={d.name} className="tnum text-right text-sm">{d.pmshri ? `${d.pmshri.total} (${d.pmshri.kvs}, ${d.pmshri.nvs})` : '—'}</td>)}
+                        <td className="text-right text-ink-faint">—</td></tr>
+                      <tr id="pmshri-count"><td className="text-sm">{L('…of them, demo schools with the PM SHRI badge', '…इनमें से, पीएम श्री बैज वाले डेमो विद्यालय')}</td>
+                        {Object.entries(f.districts).map(([id, d]) => <td key={d.name} className="tnum text-right text-sm font-medium">{pmDemo[id] ?? 0}</td>)}
+                        <td className="text-right text-ink-faint">—</td></tr>
+                    </>
+                  ) : null}
+                  {f.aspirational ? (
+                    <tr><td className="text-sm">{L(`NITI aspirational block (${f.aspirational.period})`, `नीति आकांक्षी ब्लॉक (${f.aspirational.period_hi ?? f.aspirational.period})`)}</td>
+                      {Object.values(f.districts).map((d) => <td key={d.name} className="text-right text-sm">{d.aspirational?.blocks.length ? d.aspirational.blocks.map((b) => pick(lang, b.name, b.name_hi ?? b.name)).join(', ') : L('none', 'कोई नहीं')}</td>)}
+                      <td className="tnum text-right text-sm text-ink-soft">{f.aspirational.niti_blocks_up}</td></tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+            <div className="card-pad space-y-2 border-t border-line text-xs leading-relaxed text-ink-faint">
+              {f.pgid ? <p>{L(`PGI-D grades are bands of the district’s total score (Utkarsh 91–100% down to Akanshi-3, up to 10%); the portal publishes the grade, not the score. In ${f.pgid.latest_year}, of UP’s ${f.pgid.up_districts} districts, ${Object.entries(f.pgid.up_distribution_latest).map(([g, n]) => `${n} were ${gradeName(g)}`).join(' and ')}. Category ids from the portal’s own drop-down (0 = overall, 1 = Outcomes).`,
+                `PGI-D ग्रेड ज़िले के कुल अंकों के खंड हैं (उत्कर्ष 91–100% से आकांक्षी-3, 10% तक); पोर्टल ग्रेड प्रकाशित करता है, अंक नहीं। ${f.pgid.latest_year} में उ.प्र. के ${f.pgid.up_districts} ज़िलों में से ${Object.entries(f.pgid.up_distribution_latest).map(([g, n]) => `${n} ${gradeName(g)}`).join(' और ')} थे। श्रेणी क्रमांक पोर्टल की अपनी सूची से (0 = समग्र, 1 = परिणाम)।`)}</p> : null}
+              {f.census?.state.published_population ? <p>{L(`Census: the three districts’ populations match the published totals exactly. The portal’s Uttar Pradesh rows add up to ${f.census.state.population.toLocaleString('en-IN')}, ${(f.census.state.published_population - f.census.state.population).toLocaleString('en-IN')} fewer than the published ${f.census.state.published_population.toLocaleString('en-IN')}; the state column is a comparison only.`,
+                `जनगणना: तीनों ज़िलों की जनसंख्या प्रकाशित योग से ठीक मेल खाती है। पोर्टल की उत्तर प्रदेश पंक्तियों का योग ${f.census.state.population.toLocaleString('en-IN')} है, प्रकाशित ${f.census.state.published_population.toLocaleString('en-IN')} से ${(f.census.state.published_population - f.census.state.population).toLocaleString('en-IN')} कम; राज्य स्तंभ केवल तुलना के लिए है।`)}</p> : null}
+              {f.pmshri ? <p>{L(`PM SHRI matching: ${Object.values(f.districts).map((d) => d.pmshri ? `${d.name} ${d.pmshri.total} on the list, ${d.pmshri.in_udise_file} found in the UDISE+ file, ${d.pmshri.in_eligible_pool} among the government Class 1–5 schools the demo draws from, ${d.pmshri.demo_schools_flagged} of them now demo schools` : '').filter(Boolean).join('; ')}. The rest are secondary or upper-primary-only schools, Kendriya or Navodaya Vidyalayas, or schools newer than the UDISE+ file, none of which the demo holds.`,
+                `पीएम श्री मिलान: ${Object.values(f.districts).map((d) => d.pmshri ? `${d.name} सूची में ${d.pmshri.total}, यू-डाइस+ फ़ाइल में ${d.pmshri.in_udise_file} मिले, डेमो जिन सरकारी कक्षा 1–5 विद्यालयों से लेता है उनमें ${d.pmshri.in_eligible_pool}, जिनमें से ${d.pmshri.demo_schools_flagged} अब डेमो विद्यालय हैं` : '').filter(Boolean).join('; ')}। शेष माध्यमिक या केवल उच्च प्राथमिक विद्यालय, केंद्रीय या नवोदय विद्यालय, या यू-डाइस+ फ़ाइल के बाद के विद्यालय हैं, जिनमें से कोई डेमो में नहीं है।`)}</p> : null}
+            </div>
           </Card>
         ) : null}
 

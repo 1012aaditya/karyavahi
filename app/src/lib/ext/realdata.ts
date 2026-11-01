@@ -9,8 +9,10 @@ import type { DetectionSettings, OutcomeSchoolRow } from '@domain/types';
 import { schoolLabelEn, schoolLabelHi } from '../school-label';
 
 /**
- * The real-data layer: real schools (UDISE+, anonymised), learning results calibrated to the
- * published district figures (PRS 2024), and PAB 2025-26 unit costs on the intervention cards.
+ * The real-data layer: real schools (UDISE+, anonymised; PM SHRI yes/no), learning results
+ * calibrated to the published district figures (PRS 2024), and PAB 2025-26 unit costs on the
+ * intervention cards. District context (ASER, NFHS-5, PGI-D, Census 2011, the NITI aspirational
+ * block) is read straight from figures.json by src/lib/sources.ts.
  *
  * It reads two committed files built by scripts/build-real-data.mjs — data/real/schools.json and
  * data/real/figures.json — so a fresh checkout needs none of the raw downloads. Without them the
@@ -41,7 +43,7 @@ const SEEDED_ROUNDS = ['RND-2025-02', 'RND-2025-07', 'RND-2026-02', 'RND-2026-07
 const CAL_GRADE = 3;
 
 // ------------------------------------------------------------------ the files
-export interface RealSchool { pos: [number, number]; mgmt: string; cat: string; loc: string; enr: number[]; teachers: number; rooms: number }
+export interface RealSchool { pos: [number, number]; mgmt: string; cat: string; loc: string; enr: number[]; teachers: number; rooms: number; pmshri?: boolean; kvs?: boolean; nvs?: boolean }
 export interface PabLine { key: string; amount_inr: number; unit: string; pdf_page: number; printed: string; line_en: string; line_hi: string }
 export interface CardCost {
   basis: 'pab' | 'pab_proxy'; line: string; line_composite?: string; per: 'child_in_class' | 'teacher' | 'school';
@@ -59,13 +61,32 @@ export interface DistrictFigures {
   aser: Record<'govt_school_enrolment_6_14' | 'not_in_school_6_14' | 'std3_5_read_std2' | 'std3_5_subtraction' | 'std6_8_read_std2' | 'std6_8_division', number> & { page: number };
   nfhs: Record<string, NfhsValue>;
   udise: { name: string; lgd_district: number; udise_rows: number; udise_rows_with_lgd_block: number; lgd_blocks: string[]; government_class_1_5: number; outside_outline_or_no_position: number; used: number; type_mismatches: number; mean_class3_gap: number };
+  /** PGI-D grades by year, overall and per category (absent in files built before these sources). */
+  pgid?: { years: { year: string; overall: string; domains: Record<string, string> }[] };
+  census?: CensusFacts;
+  aspirational?: { period: string; period_hi?: string; blocks: { name: string; name_hi?: string; lgd_block: number; in_up_abp_plus: string | null; education: { code: string; value: number | null }[] }[] };
+  pmshri?: { total: number; kvs: number; nvs: number; by_category: { primary: number; up_to_class_8: number; secondary: number }; in_udise_file: number; in_eligible_pool: number; demo_schools_flagged: number };
 }
+export interface CensusFacts {
+  population: number; literacy_rate: number; female_literacy_rate: number; male_literacy_rate: number;
+  sc_share: number; st_share: number; rural_share: number; child_0_6_share: number; published_population?: number;
+}
+export interface PgidMeta {
+  title: string; by: string; url: string; api: string; years: string[]; latest_year: string;
+  grades: { key: string; en: string; hi: string; band: string }[]; domains: { cat: number; key: string; en: string; hi: string }[];
+  up_distribution_latest: Record<string, number>; up_districts: number;
+}
+export interface AbpIndicator { official: string; en: string; hi: string; periodicity: string; source: string; unit: string; higher_is_better: boolean; median_up68: number | null }
 export interface RealFigures {
   built: string;
   districts: Record<string, DistrictFigures>;
   state: { name: string; prs: { language: number; mathematics: number }; aser: Record<string, number> };
   pab: { title: string; url: string; revision_url: string; lines: Record<string, PabLine>; cards: Record<string, CardCost> };
   calibration: { anchor_round: string; grade: number; note: string };
+  pgid?: PgidMeta;
+  census?: { title: string; via: string; url: string; licence: string | null; state: CensusFacts; definitions: Record<string, string> };
+  aspirational?: { title: string; by: string; page: string; file: string; period: string; period_hi?: string; niti_blocks_up: number; up_abp_plus_blocks: number; indicators: Record<string, AbpIndicator> };
+  pmshri?: { title: string; by: string; url: string; read: string; note: string };
 }
 
 const cache = new Map<string, { mtime: number; value: unknown }>();
@@ -104,7 +125,8 @@ export function rteTeacherPosts(enr: number[], upper: boolean): number {
 const DDL = `
 create table if not exists school_profile (
   school_id text primary key, label_en text not null, label_hi text not null, management text, category text, location text,
-  enrolment text, teachers integer, classrooms integer, lon real, lat real, source text not null
+  enrolment text, teachers integer, classrooms integer, lon real, lat real, source text not null,
+  pmshri integer not null default 0, kvs integer not null default 0, nvs integer not null default 0
 );
 create index if not exists ix_assessment_results_id on assessment_results(id);
 create index if not exists ix_findings_id on findings(id);
@@ -131,6 +153,9 @@ export function ensureRealData(c: DatabaseSync): void {
   const ver = realDataVersion();
   if (!ver) return;
   c.exec(DDL);
+  // school_profile gained the PM SHRI flags; add them to a table made before (the data is re-applied below).
+  const cols = new Set(q<{ name: string }>(c, `select name from pragma_table_info('school_profile')`).map((r) => r.name));
+  for (const col of ['pmshri', 'kvs', 'nvs']) if (!cols.has(col)) c.exec(`alter table school_profile add column ${col} integer not null default 0`);
   if (one<{ value: string }>(c, `select value from ext_meta where key = 'realdata'`)?.value === ver) return;
   const schools = realSchools();
   const figures = realFigures();
@@ -152,10 +177,12 @@ function applySchools(c: DatabaseSync, file: Record<string, RealSchool>) {
   const rows = q<{ id: string; block: string; category: string }>(c, 'select s.id, b.name block, s.category from schools s join blocks b on b.id = s.block_id');
   const upd = c.prepare(`update schools set name = ?, enrolment_total = ?, enrolment_g1 = ?, enrolment_g2 = ?, enrolment_g3 = ?,
     teachers_sanctioned = ?, teachers_in_position = ?, ptr = ?, provenance = 'udise_anonymised', source_ref = ? where id = ?`);
-  const prof = c.prepare(`insert into school_profile values (?,?,?,?,?,?,?,?,?,?,?,?)
+  const prof = c.prepare(`insert into school_profile (school_id, label_en, label_hi, management, category, location, enrolment, teachers, classrooms, lon, lat, source, pmshri, kvs, nvs)
+    values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     on conflict(school_id) do update set label_en = excluded.label_en, label_hi = excluded.label_hi, management = excluded.management,
       category = excluded.category, location = excluded.location, enrolment = excluded.enrolment, teachers = excluded.teachers,
-      classrooms = excluded.classrooms, lon = excluded.lon, lat = excluded.lat, source = excluded.source`);
+      classrooms = excluded.classrooms, lon = excluded.lon, lat = excluded.lat, source = excluded.source,
+      pmshri = excluded.pmshri, kvs = excluded.kvs, nvs = excluded.nvs`);
   const SOURCE = 'UDISE+ 2020-21 via India Data Portal (ODC-BY) · name withheld';
   for (const s of rows) {
     const r = file[s.id];
@@ -164,7 +191,8 @@ function applySchools(c: DatabaseSync, file: Record<string, RealSchool>) {
     const teachers = Math.max(1, r.teachers);
     const posts = Math.max(rteTeacherPosts(r.enr, r.cat !== 'primary'), 1);
     upd.run(schoolLabelEn(s.id, s.block), total, r.enr[0], r.enr[1], r.enr[2], posts, r.teachers, r1(total / teachers), SOURCE, s.id);
-    prof.run(s.id, schoolLabelEn(s.id, s.block), schoolLabelHi(s.id, s.block), r.mgmt, r.cat, r.loc, JSON.stringify(r.enr), r.teachers, r.rooms, r.pos[0], r.pos[1], SOURCE);
+    prof.run(s.id, schoolLabelEn(s.id, s.block), schoolLabelHi(s.id, s.block), r.mgmt, r.cat, r.loc, JSON.stringify(r.enr), r.teachers, r.rooms, r.pos[0], r.pos[1], SOURCE,
+      r.pmshri ? 1 : 0, r.kvs ? 1 : 0, r.nvs ? 1 : 0);
   }
 }
 
