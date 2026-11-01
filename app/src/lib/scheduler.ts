@@ -1,7 +1,7 @@
 import 'server-only';
 import { existsSync } from 'node:fs';
-import { one, j, DB_PATH } from './db';
-import { reminderSweep, recordJob, type SweepResult, type SweepTrigger } from './write';
+import { one, j, DB_PATH, restorePristine } from './db';
+import { reminderSweep, recordJob, appendAudit, type SweepResult, type SweepTrigger } from './write';
 
 /**
  * Runs the reminder sweep without anybody pressing a button.
@@ -23,10 +23,40 @@ import { reminderSweep, recordJob, type SweepResult, type SweepTrigger } from '.
 export const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const AUTO_TRIGGERS: SweepTrigger[] = ['startup', 'hourly', 'clock_moved', 'demo_reset', 'system'];
 
-type Holder = { timer: ReturnType<typeof setInterval> | null; intervalMs: number; startedAt: string | null; nextRunAt: number | null };
+type Holder = { timer: ReturnType<typeof setInterval> | null; intervalMs: number; startedAt: string | null; nextRunAt: number | null; lastResetDate?: string | null };
 const holder: Holder = ((globalThis as unknown as { __kv_sched?: Holder }).__kv_sched ??= {
-  timer: null, intervalMs: SWEEP_INTERVAL_MS, startedAt: null, nextRunAt: null,
+  timer: null, intervalMs: SWEEP_INTERVAL_MS, startedAt: null, nextRunAt: null, lastResetDate: null,
 });
+
+/**
+ * The nightly demo reset (KV_NIGHTLY_RESET=on, set on the hosted demo): once a day, in the hour
+ * from 03:00 India time, the demo goes back to the seed, so whoever opens it next morning sees the
+ * story from the start rather than what yesterday's visitors clicked. Off by default (a laptop
+ * keeps your changes). The hourly timer calls it; it acts at most once per India-time date.
+ */
+export const RESET_HOUR_IST = 3;
+const istDate = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+const istHour = (d: Date) => Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false }).format(d)) % 24;
+
+export function maybeNightlyReset(now: Date = new Date()): boolean {
+  if (process.env.KV_NIGHTLY_RESET !== 'on') return false;
+  if (istHour(now) !== RESET_HOUR_IST) return false;
+  const today = istDate(now);
+  if (holder.lastResetDate === today) return false;
+  try {
+    restorePristine();
+    holder.lastResetDate = today;
+    appendAudit({
+      actorUserId: null, actorRole: 'system', actorLabel: 'system:nightly_reset', action: 'demo.reset',
+      entityType: 'system', entityId: 'seed', reason: 'Nightly reset of the hosted demo to the canonical seed',
+    });
+    recordJob('demo_reset', 'succeeded', { trigger: 'nightly', ran_at: now.toISOString(), ist_date: today });
+    return true;
+  } catch (e) {
+    console.error(`[scheduler] nightly reset failed: ${(e as Error).message}`);
+    return false;
+  }
+}
 
 /** One automatic run. Never throws: a failed run is recorded as a failed job and logged. */
 export function runScheduledSweep(trigger: Exclude<SweepTrigger, 'manual'>): SweepResult | null {
@@ -49,7 +79,7 @@ export function startScheduler(opts: { intervalMs?: number; runNow?: boolean } =
   holder.intervalMs = opts.intervalMs ?? SWEEP_INTERVAL_MS;
   holder.startedAt = new Date().toISOString();
   holder.nextRunAt = Date.now() + holder.intervalMs;
-  holder.timer = setInterval(() => { runScheduledSweep('hourly'); }, holder.intervalMs);
+  holder.timer = setInterval(() => { maybeNightlyReset(); runScheduledSweep('hourly'); }, holder.intervalMs);
   // The timer must not keep a process alive on its own (scripts, a server shutting down).
   holder.timer.unref?.();
   if (opts.runNow !== false) runScheduledSweep('startup');

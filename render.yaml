@@ -16,7 +16,7 @@ services:
     # db:prewarm prepares the database during the build, so a woken instance starts in seconds.
     buildCommand: cd app && npm ci && npm run build && npm run db:prewarm
     startCommand: cd app && npm start
-    healthCheckPath: /
+    healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       # node:sqlite needs Node 22.13 or later; the app is developed and tested on Node 24.
@@ -24,6 +24,9 @@ services:
         value: "24"
       - key: NEXT_TELEMETRY_DISABLED
         value: "1"
+      # Back to the demo seed once a night (03:00 India time), so each morning starts clean.
+      - key: KV_NIGHTLY_RESET
+        value: "on"
       # Secrets: entered in the Render dashboard when the blueprint is created, never committed.
       - key: ANTHROPIC_API_KEY
         sync: false

@@ -39,6 +39,7 @@
     "test:voice": "tsx --conditions=react-server scripts/voice-test.mts",
     "e2e:voice": "node scripts/voice-e2e.cjs",
     "gen:r4": "tsx scripts/gen-r4.mts",
+    "test:nightly-reset": "tsx --conditions=react-server scripts/nightly-reset-test.mts",
     "test:ai-guard": "tsx --conditions=react-server scripts/ai-guard-test.mts",
     "crawl": "node scripts/crawl.mjs",
     "e2e": "node scripts/e2e.cjs",
