@@ -36,6 +36,11 @@ function idsFor(a) {
   return {
     complaintId,
     caseId: scopeCase,
+    // A case the composer can open, where the role's area has one.
+    planCaseId: a.scope_type === 'state' ? q(`select id from cases where status = 'under_investigation' limit 1`)
+      : a.scope_type === 'district' ? q(`select id from cases where status = 'under_investigation' and district_id = ? limit 1`, a.scope_id)
+      : a.scope_type === 'block' ? q(`select id from cases where status = 'under_investigation' and block_id = ? limit 1`, a.scope_id)
+      : null,
     taskId: q(`select id from tasks where owner_user_id = ? limit 1`, a.id)
          ?? (scopeCase ? q(`select id from tasks where case_id = ? limit 1`, scopeCase) : null),
     findingId: scopeCase ? q(`select id from findings where case_id = ? limit 1`, scopeCase) : null,
@@ -132,6 +137,9 @@ for (const a of accounts) {
   const routes = [
     ...COMMON,
     ids.caseId ? `/cases/${ids.caseId}` : null,
+    ids.caseId ? `/cases/${ids.caseId}/plan` : null,
+    ids.caseId ? `/cases/${ids.caseId}/assign` : null,
+    ids.planCaseId ? `/cases/${ids.planCaseId}/plan` : null,
     ids.findingId ? `/findings/${ids.findingId}` : null,
     ids.taskId ? `/tasks/${ids.taskId}` : null,
     ids.schoolId ? `/schools/${ids.schoolId}` : null,

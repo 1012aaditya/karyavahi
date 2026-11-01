@@ -32,6 +32,7 @@ import { listBlockers } from '@/lib/blockers';
 import { LifecycleStepper, SectionNav, RecommendationsCard, SimilarCasesCard, CaseBlockersCard, RailCard } from '@/components/case-workspace';
 import { Icon } from '@/components/Icon';
 import { STAGES, stageIndex, nextAction } from '@/lib/case-stage';
+import { COMPOSABLE } from '@/lib/plans';
 
 /**
  * One case, end to end.
@@ -273,6 +274,24 @@ export default async function CasePage({
         plans={plans} currentPlan={currentPlan} approvals={approvals}
         intervention={iv} names={names} lang={lang}
       >
+        {COMPOSABLE.includes(c.status) && gate('awaiting_approval').allowed ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-brand/30 bg-brand-light p-3">
+            <p className="min-w-0 max-w-xl text-sm text-ink">
+              {!currentPlan
+                ? pick(lang, 'Choose an intervention and the schools, see how success will be judged, and submit it for approval.', 'हस्तक्षेप और विद्यालय चुनें, सफलता की कसौटी देखें, और स्वीकृति हेतु भेजें।')
+                : c.status === 'revision_requested'
+                  ? pick(lang, 'The approver sent this plan back. Revise it in the composer and submit it again.', 'स्वीकृतकर्ता ने योजना लौटाई है। संशोधित करके फिर भेजें।')
+                  : c.status === 'reopened'
+                    ? pick(lang, 'The last plan did not produce the gain. Compose the next attempt.', 'पिछली योजना से सुधार नहीं हुआ। अगला प्रयास बनाएँ।')
+                    : currentPlan.drafted_by === 'ai_draft'
+                      ? pick(lang, 'This plan is an AI draft. Review it in the composer, change what you need, and make it yours before it goes for approval.', 'यह योजना AI का मसौदा है। इसे जाँचें, बदलें और स्वीकृति से पहले अपनी बनाएँ।')
+                      : pick(lang, 'Change the plan in the composer, or submit it as it is from Next moves.', 'योजना बदलें, या अगले कदम से इसे भेजें।')}
+            </p>
+            <Link href={`/cases/${c.id}/plan`} className="btn-primary shrink-0">
+              {currentPlan ? pick(lang, 'Open the plan composer', 'योजना संपादक खोलें') : pick(lang, 'Compose a plan', 'योजना बनाएँ')}
+            </Link>
+          </div>
+        ) : null}
         {c.status === 'awaiting_approval' && currentPlan ? (
           <div className="rounded-md border border-brand/30 bg-brand-light p-3">
             <h3 className="mb-2 text-sm font-semibold text-ink">
@@ -297,8 +316,8 @@ export default async function CasePage({
                     tone="good"
                     confirm={pick(
                       lang,
-                      'Approving locks the comparison schools and the success threshold, then creates the tasks.',
-                      'स्वीकृति से तुलना विद्यालय और सफलता लक्ष्य तय हो जाते हैं, फिर काम बनते हैं।',
+                      'Approving locks the comparison schools and the success threshold. The work can then be assigned.',
+                      'स्वीकृति से तुलना विद्यालय और सफलता लक्ष्य तय हो जाते हैं। इसके बाद काम सौंपा जा सकता है।',
                     )}
                   />
                 ) : (
@@ -342,7 +361,21 @@ export default async function CasePage({
         ) : null}
       </PlanPanel></div>
 
-      <div id="work" className="scroll-mt-36"><WorkPanel tasks={tasks} names={names} lang={lang} today={today()} /></div>
+      <div id="work" className="scroll-mt-36 space-y-3">
+        {c.status === 'approved' && tasks.filter((t) => t.plan_id === c.current_plan_id).length === 0 ? (
+          gate('assigned').allowed && may(session, 'task.assign') ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-brand/30 bg-brand-light p-3">
+              <p className="min-w-0 max-w-xl text-sm text-ink">
+                {pick(lang, 'The plan is approved. Turn it into tasks: check who owns each one and by when, then assign them.', 'योजना स्वीकृत है। इसे कामों में बदलें: उत्तरदायी और तिथि जाँचें, फिर सौंपें।')}
+              </p>
+              <Link href={`/cases/${c.id}/assign`} className="btn-primary shrink-0">{pick(lang, 'Review and assign the tasks', 'काम जाँचें और सौंपें')}</Link>
+            </div>
+          ) : (
+            <Callout tone="method">{pick(lang, 'The plan is approved. The block or district officer assigns the tasks next.', 'योजना स्वीकृत है। अगला कदम: खंड या ज़िला अधिकारी काम सौंपेंगे।')}</Callout>
+          )
+        ) : null}
+        <WorkPanel tasks={tasks} names={names} lang={lang} today={today()} />
+      </div>
 
       <div className="scroll-mt-36"><ProofPanel evidence={evidence} names={names} lang={lang}>
         {evidence.some((e) => e.status === 'pending') && may(session, 'evidence.verify') ? (
@@ -518,7 +551,10 @@ export default async function CasePage({
                       ) : null}
                       {!g.allowed ? <p className="mt-1 text-sm text-ink-soft">{g.why}</p> : null}
                     </div>
-                    {g.allowed ? (
+                    {g.allowed && to === 'assigned' ? (
+                      // Work is assigned by turning the plan into tasks, never by moving the status alone.
+                      <Link href={`/cases/${c.id}/assign`} className="btn-quiet">{pick(lang, 'Review and assign the tasks', 'काम जाँचें और सौंपें')}</Link>
+                    ) : g.allowed ? (
                       needsReason ? (
                         <Disclose label={label} tone={to === 'dismissed' || to === 'reopened' ? 'danger' : 'quiet'}>
                           <ActionForm

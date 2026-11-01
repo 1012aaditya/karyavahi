@@ -9,6 +9,8 @@ import { canTransition, reasonRequired, closureEligibility, isPlanDecision } fro
 import { evaluateOutcome, OUTCOME_NOTE } from '@domain/outcome';
 import { settingsAt, settingsById } from '@domain/catalog';
 import type { CaseStatus, OutcomeSchoolRow } from '@domain/types';
+import { composeRefusal, orderSchools, previewPlan, preRegistrationFor, taskDrafts, assignRefusal, type PlanCase } from './plans';
+import { matchForCase } from './studio';
 
 /**
  * Every write in the app. This is the TypeScript twin of the SECURITY DEFINER functions in
@@ -129,6 +131,7 @@ interface CaseCore {
   id: string; status: CaseStatus; lever: 'block' | 'district' | 'pab'; current_plan_id: string | null;
   state_id: string; district_id: string; block_id: string; cluster_id: string; school_ids: string;
   title: string; owner_user_id: string; reopen_count: number;
+  grade: number; competency_id: string; finding_id: string | null; version: number;
 }
 
 function loadCaseForWrite(s: Session, caseId: string): CaseCore {
@@ -175,18 +178,36 @@ function openApproval(s: Session, c: CaseCore, planId: string): void {
     `select id from approvals where case_id = ? and plan_id = ? and decision = 'pending'`, c.id, planId,
   );
   if (open) return;
-  const plan = one<{ intervention_id: string; school_ids: string; version: number; drafted_by: string }>(
-    'select intervention_id, school_ids, version, drafted_by from case_plans where id = ?', planId,
+  ensurePreRegistration(c, planId);
+  const plan = one<{ intervention_id: string; school_ids: string; version: number; drafted_by: string; pre_registration: string | null }>(
+    'select intervention_id, school_ids, version, drafted_by, pre_registration from case_plans where id = ?', planId,
   );
   run(
     `insert into approvals (id, case_id, plan_id, required_role, submitted_by, submitted_at, decision,
        decided_by, decided_at, reason, original_plan, edited_plan, ai_drafted)
      values (?,?,?,?,?,?,'pending',null,null,null,?,null,?)`,
     nextIdFor('approval', 'approvals', 'APR-', 5), c.id, planId, c.lever === 'block' ? 'beo' : 'deo', s.user_id, nowIso(),
-    JSON.stringify({ intervention_id: plan?.intervention_id, school_ids: j(plan?.school_ids, []), version: plan?.version }),
+    JSON.stringify({
+      intervention_id: plan?.intervention_id, school_ids: j(plan?.school_ids, []), version: plan?.version,
+      pre_registration: j(plan?.pre_registration, null),
+    }),
     plan?.drafted_by === 'ai_draft' ? 1 : 0,
   );
   run(`update case_plans set status = 'submitted' where id = ?`, planId);
+}
+
+/**
+ * Give a plan the terms its outcome check will be held to, if it has none yet. Plans composed in
+ * the app carry them from the start; older drafts get them when submitted, and at the latest
+ * when approved. Once written they are never recomputed: a changed plan is a new plan row.
+ */
+function ensurePreRegistration(c: CaseCore, planId: string): void {
+  const plan = one<{ school_ids: string; pre_registration: string | null }>(
+    'select school_ids, pre_registration from case_plans where id = ?', planId,
+  );
+  if (!plan || plan.pre_registration) return;
+  const pre = preRegistrationFor(c, j<string[]>(plan.school_ids, []));
+  if (pre) run('update case_plans set pre_registration = ? where id = ? and pre_registration is null', JSON.stringify(pre), planId);
 }
 
 // ------------------------------------------------------------------ transition_case
@@ -223,6 +244,12 @@ export function transitionCase(
   checkMoveAuthority(s, c, to, isPlanDecision(from, to) ? pendingSubmitter(caseId, c.current_plan_id) : null, corr);
   if (to === 'awaiting_approval' && !c.current_plan_id) {
     throw new Refused('There is no plan on this case to submit for approval.', 'no_plan');
+  }
+  if (to === 'assigned') {
+    const n = one<{ c: number }>('select count(*) c from tasks where plan_id = ?', c.current_plan_id)?.c ?? 0;
+    if (n === 0) {
+      throw new Refused('Work is assigned by turning the approved plan into tasks, and this plan has none yet. Use "Review and assign the tasks".', 'no_tasks');
+    }
   }
   if (isPlanDecision(from, to)) {
     require_(s, to === 'approved' && c.lever === 'block' ? 'plan.approve_block'
@@ -396,6 +423,12 @@ export function decidePlan(
       : o.decision === 'approved_for_pab' ? 'referred_pab'
       : 'approved';
     run('update case_plans set status = ? where id = ?', planStatus, o.planId);
+    if (planStatus === 'approved') {
+      // Approval locks the outcome check's terms and makes the plan's schools the case's schools,
+      // which is what scoping and the outcome check read from here on.
+      ensurePreRegistration(c, o.planId);
+      run(`update cases set school_ids = (select school_ids from case_plans where id = ?) where id = ?`, o.planId, o.caseId);
+    }
 
     appendAudit({
       actorUserId: s.user_id, actorRole: actingRole(s), action: `plan.${o.decision}`,
@@ -409,6 +442,197 @@ export function decidePlan(
     });
 
     return transitionCase(s, o.caseId, to, o.reason);
+  });
+}
+
+// ------------------------------------------------------------------ the plan composer
+const asPlanCase = (c: CaseCore): PlanCase => c;
+
+/**
+ * Save a new plan for a case: an intervention, the schools it covers and why. The preview the
+ * officer saw is recomputed here from the same functions, so the stored comparison schools and
+ * threshold are exactly the ones shown. Every save is a new plan row (a new version, or a new
+ * cycle after a reopening); an earlier draft that was never submitted is marked superseded.
+ */
+export function draftPlan(
+  s: Session,
+  o: { caseId: string; interventionId: string; schoolIds: string[]; rationale: string; caseVersion: number },
+): { planId: string } {
+  const c = loadCaseForWrite(s, o.caseId);
+  const refusal = composeRefusal(s, asPlanCase(c));
+  if (refusal) {
+    appendAudit({
+      actorUserId: s.user_id, actorRole: actingRole(s), action: 'plan.draft_refused',
+      entityType: 'case', entityId: c.id, reason: refusal.message, result: 'failure',
+    });
+    throw new Refused(refusal.message, refusal.code);
+  }
+  if (c.version !== o.caseVersion) {
+    throw new Refused('This case changed while you were composing. Reload to see the latest, then save again.', 'stale');
+  }
+  const rationale = o.rationale.trim();
+  if (rationale.length < 10) throw new Refused('Say in a sentence why this plan fits this case.', 'reason_required');
+
+  const matches = matchForCase(s, c.id)?.matches ?? [];
+  const m = matches.find((x) => x.intervention.id === o.interventionId);
+  if (!m) throw new Refused(`There is no intervention "${o.interventionId}" in the library.`, 'not_found');
+  if (!m.eligible) throw new Refused(`${m.intervention.name} does not fit this case: ${m.excludedBecause}.`, 'ineligible');
+
+  const { ordered, unknown } = orderSchools(asPlanCase(c), o.schoolIds);
+  if (unknown.length) throw new Refused(`${unknown.join(', ')} is not one of this case's schools.`, 'school_out_of_case');
+  if (ordered.length === 0) throw new Refused('Choose at least one school for the plan.', 'no_schools');
+
+  const preview = previewPlan(asPlanCase(c), matches, o.interventionId, ordered)!;
+  const pre = preview.preRegistration;
+  if (!pre) {
+    throw new Refused('No later assessment round is scheduled, so there is nothing to check this plan against.', 'no_followup_round');
+  }
+  if (pre.comparison_school_ids.length === 0) {
+    throw new Refused('No comparison schools could be found for these schools, so the outcome could not be checked fairly.', 'no_comparison');
+  }
+
+  return tx(() => {
+    const cur = c.current_plan_id
+      ? one<{ cycle: number; status: string }>('select cycle, status from case_plans where id = ?', c.current_plan_id)
+      : null;
+    const cycle = !cur ? 1 : c.status === 'reopened' ? cur.cycle + 1 : cur.cycle;
+    const version = Number(one<{ v: number }>(
+      'select coalesce(max(version), 0) v from case_plans where case_id = ? and cycle = ?', c.id, cycle,
+    )?.v ?? 0) + 1;
+    const planId = nextIdFor('plan', 'case_plans', 'PLN-', 5);
+    run(
+      `insert into case_plans (id, case_id, cycle, version, intervention_id, alternatives, school_ids, rationale,
+         drafted_by, ai_model, pre_registration, estimated_cost_inr, cost_is_illustrative, status, created_at, created_by)
+       values (?,?,?,?,?,?,?,?,'officer',null,?,?,1,'draft',?,?)`,
+      planId, c.id, cycle, version, o.interventionId, JSON.stringify(preview.alternatives), JSON.stringify(ordered),
+      rationale, JSON.stringify(pre), preview.estimatedCost, nowIso(), s.user_id,
+    );
+    if (cur?.status === 'draft') run(`update case_plans set status = 'superseded' where id = ?`, c.current_plan_id);
+    // The intervention's lever decides who approves the plan, so the case takes it on.
+    const changed = run(
+      `update cases set current_plan_id = ?, lever = ?, updated_at = ?, version = version + 1 where id = ? and version = ?`,
+      planId, m.intervention.lever, nowIso(), c.id, o.caseVersion,
+    );
+    if (changed === 0) throw new Refused('This case changed while you were composing. Reload to see the latest, then save again.', 'stale');
+
+    addCaseEvent({
+      caseId: c.id, actorUserId: s.user_id, actorLabel: s.user_id, kind: 'plan_drafted',
+      summary: `Plan drafted: ${m.intervention.name} in ${ordered.length} school${ordered.length === 1 ? '' : 's'}`, related: planId,
+    });
+    appendAudit({
+      actorUserId: s.user_id, actorRole: actingRole(s), action: 'plan.drafted',
+      entityType: 'case_plan', entityId: planId,
+      before: c.current_plan_id ? { plan_id: c.current_plan_id, lever: c.lever } : null,
+      after: {
+        case_id: c.id, intervention_id: o.interventionId, school_ids: ordered, cycle, version, lever: m.intervention.lever,
+        comparison_school_ids: pre.comparison_school_ids,
+        success_threshold_pp: pre.success_threshold_pp,
+      },
+      reason: rationale,
+    });
+    return { planId };
+  });
+}
+
+/**
+ * Turn the approved plan into tasks and move the case to "Work assigned". The officer may change
+ * each task's owner and due date, but not drop or add tasks: the list is the plan, and the
+ * independent spot-check in it is what lets the case close on proof later.
+ */
+export function assignTasks(
+  s: Session,
+  o: { caseId: string; caseVersion: number; rows: { rowKey: string; ownerUserId: string; dueDate: string }[] },
+): { taskIds: string[] } {
+  const c = loadCaseForWrite(s, o.caseId);
+  const corr = randomUUID();
+  const refusal = assignRefusal(s, asPlanCase(c));
+  if (refusal) {
+    appendAudit({
+      actorUserId: s.user_id, actorRole: actingRole(s), action: 'plan.assign_refused',
+      entityType: 'case', entityId: c.id, reason: refusal.message, correlationId: corr, result: 'failure',
+    });
+    throw new Refused(refusal.message, refusal.code);
+  }
+  if (c.version !== o.caseVersion) {
+    throw new Refused('This case changed while you were reviewing the tasks. Reload and check them again.', 'stale');
+  }
+  const planId = c.current_plan_id!;
+  const plan = one<{ status: string; cycle: number }>('select status, cycle from case_plans where id = ?', planId);
+  if (plan?.status !== 'approved') throw new Refused('Only an approved plan can be turned into tasks.', 'wrong_status');
+  if ((one<{ c: number }>('select count(*) c from tasks where plan_id = ?', planId)?.c ?? 0) > 0) {
+    throw new Refused('The tasks for this plan have already been assigned.', 'already_assigned');
+  }
+
+  // The submitted rows must be the plan's rows, each exactly once, with an owner the plan allows.
+  const drafts = taskDrafts(asPlanCase(c), planId);
+  const byKey = new Map(o.rows.map((r) => [r.rowKey, r]));
+  if (byKey.size !== o.rows.length) throw new Refused('A task appears twice in the list.', 'bad_input');
+  const missing = drafts.filter((d) => !byKey.has(d.rowKey));
+  if (missing.length) throw new Refused(`The list is missing ${missing.length} of the plan's tasks; every task in the plan must be assigned.`, 'bad_input');
+  const extra = o.rows.filter((r) => !drafts.some((d) => d.rowKey === r.rowKey));
+  if (extra.length) throw new Refused('The list has a task this plan does not contain.', 'bad_input');
+
+  const horizon = addDays(today(), 180);
+  const chosen = drafts.map((d) => {
+    const r = byKey.get(d.rowKey)!;
+    const where = d.schoolName ? ` at ${d.schoolName}` : '';
+    if (!d.options.some((x) => x.id === r.ownerUserId)) {
+      throw new Refused(`"${d.title_en}"${where} must go to a ${d.template.owner_role.toUpperCase()} who covers it; the person chosen does not.`, 'owner');
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(r.dueDate) || r.dueDate < today() || r.dueDate > horizon) {
+      throw new Refused(`"${d.title_en}"${where} needs a due date between today and ${horizon}.`, 'bad_input');
+    }
+    return { d, ownerUserId: r.ownerUserId, dueDate: r.dueDate };
+  });
+  // The independent check only counts if it is independent: whoever does it must not also be
+  // delivering the work it checks.
+  const deliverers = new Set(chosen.filter((x) => !x.d.template.cross_source).map((x) => x.ownerUserId));
+  const selfCheck = chosen.find((x) => x.d.template.cross_source && deliverers.has(x.ownerUserId));
+  if (selfCheck) {
+    throw new Refused(`"${selfCheck.d.title_en}" is the independent check, so it must go to someone who is not also delivering the work.`, 'not_independent');
+  }
+
+  return tx(() => {
+    const now = nowIso();
+    const taskIds: string[] = [];
+    for (const x of chosen) {
+      const id = nextIdFor('task', 'tasks', 'TSK-', 5);
+      taskIds.push(id);
+      run(
+        `insert into tasks (id, case_id, plan_id, cycle, template_key, title_en, title_hi, school_id, owner_user_id, owner_role,
+           proof_type, proof_count, cross_source, status, assigned_at, due_date, original_due_date, acknowledged_at, started_at,
+           submitted_at, verified_at, reminder_sent_at, escalated_at, is_overdue, reassigned_from, reassign_reason,
+           deadline_change_reason, version)
+         values (?,?,?,?,?,?,?,?,?,?,?,?,?,'assigned',?,?,?,null,null,null,null,null,null,0,null,null,null,0)`,
+        id, c.id, planId, plan.cycle, x.d.template.key, x.d.title_en, x.d.title_hi, x.d.schoolId, x.ownerUserId,
+        x.d.template.owner_role, x.d.template.proof_type, x.d.template.proof_count, x.d.template.cross_source ? 1 : 0,
+        now, x.dueDate, x.dueDate,
+      );
+      const defaultOwner = x.d.ownerUserId;
+      appendAudit({
+        actorUserId: s.user_id, actorRole: actingRole(s), action: 'task.assigned',
+        entityType: 'task', entityId: id, correlationId: corr,
+        after: {
+          case_id: c.id, plan_id: planId, template_key: x.d.template.key, school_id: x.d.schoolId,
+          owner_user_id: x.ownerUserId, due_date: x.dueDate,
+          ...(defaultOwner && defaultOwner !== x.ownerUserId ? { suggested_owner_user_id: defaultOwner } : {}),
+        },
+      });
+      notify({
+        userId: x.ownerUserId, kind: 'assignment', title: 'New task assigned to you',
+        body: `${x.d.title_en}${x.d.schoolName ? ` · ${x.d.schoolName}` : ''} · due ${x.dueDate}`,
+        entityType: 'task', entityId: id, link: `/tasks/${id}`,
+      });
+    }
+    const people = new Set(chosen.map((x) => x.ownerUserId)).size;
+    addCaseEvent({
+      caseId: c.id, actorUserId: s.user_id, actorLabel: s.user_id, kind: 'tasks_assigned',
+      summary: `${taskIds.length} tasks assigned to ${people} ${people === 1 ? 'person' : 'people'}`, related: planId,
+    });
+    const moved = run(`update cases set version = version + 1 where id = ? and version = ?`, c.id, o.caseVersion);
+    if (moved === 0) throw new Refused('This case changed while you were reviewing the tasks. Reload and check them again.', 'stale');
+    transitionCase(s, c.id, 'assigned');
+    return { taskIds };
   });
 }
 

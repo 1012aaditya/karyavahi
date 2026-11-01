@@ -71,6 +71,53 @@ export async function decidePlanAction(_prev: State, form: FormData): Promise<St
   return res;
 }
 
+// ------------------------------------------------------------------ plan composer
+/** Save a composed plan, and submit it for approval when the officer pressed that button. A
+ *  refused submission leaves the saved draft in place and says so. */
+export async function composePlanAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const caseId = str(form, 'case_id');
+  const submit = str(form, 'intent') === 'submit';
+  let saved = false;
+  const res = await attempt(() => {
+    w.draftPlan(s, {
+      caseId,
+      interventionId: str(form, 'intervention_id'),
+      schoolIds: str(form, 'school_ids').split(',').filter(Boolean),
+      rationale: str(form, 'rationale'),
+      caseVersion: Number(str(form, 'case_version')),
+    });
+    saved = true;
+    if (submit) w.transitionCase(s, caseId, 'awaiting_approval');
+  }, submit ? 'Plan saved and submitted. Another officer now has to approve it.' : 'Plan saved as a draft. Submit it from the case when it is ready.');
+  revalidatePath(`/cases/${caseId}`);
+  revalidatePath('/approvals');
+  if (res.ok) redirect(`/cases/${caseId}?done=${encodeURIComponent(res.ok)}#plan`);
+  if (saved) {
+    redirect(`/cases/${caseId}?done=${encodeURIComponent(`Plan saved as a draft, but not submitted: ${res.error}`)}#plan`);
+  }
+  return res;
+}
+
+/** Turn an approved plan into tasks, with the owners and due dates the officer settled on. */
+export async function assignTasksAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const caseId = str(form, 'case_id');
+  const rows = form.getAll('row').map(String).map((rowKey) => ({
+    rowKey,
+    ownerUserId: str(form, `owner:${rowKey}`),
+    dueDate: str(form, `due:${rowKey}`),
+  }));
+  let count = 0;
+  const res = await attempt(() => {
+    count = w.assignTasks(s, { caseId, caseVersion: Number(str(form, 'case_version')), rows }).taskIds.length;
+  }, 'Tasks assigned.');
+  revalidatePath(`/cases/${caseId}`);
+  revalidatePath('/tasks');
+  if (res.ok) redirect(`/cases/${caseId}?done=${encodeURIComponent(`${count} tasks assigned. Each owner has been notified.`)}#work`);
+  return res;
+}
+
 export async function setConclusionAction(_prev: State, form: FormData): Promise<State> {
   const s = await requireSession();
   const caseId = str(form, 'case_id');

@@ -28,6 +28,7 @@ const { one, run } = await import('../src/lib/db');
 const { Refused, roleCovers } = await import('../src/lib/guard');
 const w = await import('../src/lib/write');
 const cs = await import('../src/lib/cases');
+const plans = await import('../src/lib/plans');
 const { TRANSITIONS, TRANSITION_ROLES } = await import('../../src/domain/lifecycle');
 
 let pass = 0, fail = 0;
@@ -110,7 +111,11 @@ w.decidePlan(deo, { caseId: 'CASE-0184', planId: p184, decision: 'approved' });
 ok('the district officer approves it', statusOf('CASE-0184') === 'approved');
 ok('the approval row names the district officer',
   cs.caseApprovals(deo, 'CASE-0184').some((a) => a.decision === 'approved' && a.decided_by === deo.user_id));
-w.transitionCase(beo, 'CASE-0184', 'assigned');
+{
+  const pc = plans.planCase(beo, 'CASE-0184')!;
+  refused('the cluster coordinator cannot assign the work', () => w.assignTasks(S('crc.clu-001@demo.karyavahi.test'), { caseId: 'CASE-0184', caseVersion: pc.version, rows: [] }), 'role');
+  w.assignTasks(beo, { caseId: 'CASE-0184', caseVersion: pc.version, rows: plans.taskDrafts(pc, p184).map((d) => ({ rowKey: d.rowKey, ownerUserId: d.ownerUserId!, dueDate: d.dueDate })) });
+}
 ok('the block officer then assigns the work', statusOf('CASE-0184') === 'assigned');
 
 console.log('\n--- submitting and withdrawing ---');

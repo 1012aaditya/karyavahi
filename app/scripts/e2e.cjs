@@ -101,6 +101,63 @@ const ok = (label, cond, extra = '') => {
   ok('closing is listed but blocked, with the reason',
     /Closing needs an outcome evaluation|no outcome evaluation/i.test(next) || next.includes('What can happen next') || next.includes('Next moves'));
 
+  // ---- a new case from investigation to assigned work, by two officers ----
+  const signIn = async (email) => {
+    await ctx.clearCookies();
+    await page.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
+    await page.fill('input[name=email]', email);
+    await page.getByRole('button', { name: /Sign in/ }).first().click();
+    await page.waitForLoadState('networkidle');
+    await ctx.addCookies([{ name: 'kv_lang', value: 'en', url: BASE }]);
+  };
+  await signIn('beo.blk-17@demo.karyavahi.test');
+  await page.goto(`${BASE}/cases/CASE-0127`, { waitUntil: 'networkidle' });
+  ok('CASE-0127 is being looked into', (await page.locator('body').innerText()).includes('Being looked into'));
+  await page.getByRole('link', { name: 'Open the plan composer' }).click();
+  await page.waitForURL(/\/cases\/CASE-0127\/plan/);
+  await page.waitForLoadState('networkidle');
+  ok('the composer opens with ranked interventions', page.url().includes('/cases/CASE-0127/plan')
+    && (await page.getByRole('radio').count()) >= 2);
+  await page.getByRole('button', { name: 'Preview the plan' }).click();
+  await page.waitForURL(/\/plan\?.*iv=/);
+  await page.waitForLoadState('networkidle');
+  const previewText = await page.locator('body').innerText();
+  ok('the preview shows how success will be judged', previewText.includes('How success will be judged') && /\d+ comparison schools:/.test(previewText));
+  ok('the preview lists the work the plan turns into', /the work it will turn into/i.test(previewText));
+  await page.screenshot({ path: `${SHOTS}/06a-composer.png`, fullPage: true });
+  await page.fill('textarea[name=rationale]', 'Two driver schools lost their Class teacher in June and CRC visits stopped.');
+  await page.getByRole('button', { name: 'Save and submit for approval' }).click();
+  await page.waitForURL(/\/cases\/CASE-0127\?done=/);
+  await page.waitForLoadState('networkidle');
+  const submitted = await page.locator('body').innerText();
+  ok('saving and submitting confirms what happened', submitted.includes('Plan saved and submitted'));
+  ok('the case now waits for approval', submitted.includes('Waiting for approval'));
+  ok('the plan is labelled as written by the officer', /Officer-written|Officer written|Written by an officer/i.test(submitted));
+
+  await signIn('deo.amp@demo.karyavahi.test');
+  await page.goto(`${BASE}/cases/CASE-0127`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: /^Approve the plan$/ }).first().click();
+  await page.waitForURL(/\/cases\/CASE-0127\?done=/);
+  await page.waitForLoadState('networkidle');
+  ok('the district officer approves the new plan', (await page.locator('body').innerText()).includes('The work can now be assigned'));
+
+  await signIn('beo.blk-17@demo.karyavahi.test');
+  await page.goto(`${BASE}/cases/CASE-0127`, { waitUntil: 'networkidle' });
+  await page.getByRole('link', { name: 'Review and assign the tasks' }).first().click();
+  await page.waitForURL(/\/cases\/CASE-0127\/assign/);
+  await page.waitForLoadState('networkidle');
+  ok('the task list has an owner and a date for every task',
+    (await page.locator('select[name^="owner:"]').count()) > 0
+      && (await page.locator('select[name^="owner:"]').count()) === (await page.locator('input[type=date][name^="due:"]').count()));
+  await page.screenshot({ path: `${SHOTS}/06b-assign.png`, fullPage: true });
+  await page.getByRole('button', { name: /^Assign \d+ tasks$/ }).click();
+  await page.waitForURL(/\/cases\/CASE-0127\?done=/);
+  await page.waitForLoadState('networkidle');
+  const assignedText = await page.locator('body').innerText();
+  ok('assigning confirms the owners were notified', /\d+ tasks assigned\. Each owner has been notified/.test(assignedText));
+  ok('the case is now "Work assigned"', assignedText.includes('Work assigned'));
+  await page.screenshot({ path: `${SHOTS}/06c-assigned.png`, fullPage: true });
+
   // ---- the other roles ----
   const roles = [
     ['state.lead@demo.karyavahi.test', 'overview', '07-state'],

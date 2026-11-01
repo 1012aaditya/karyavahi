@@ -108,6 +108,8 @@ src/lib/
   clock.ts       The demo clock. Everything date-dependent reads this, not the wall clock.
   repo.ts        Reference data, geography, schools, trends.
   cases.ts       The case ledger: findings, diagnoses, plans, approvals, tasks, evidence, outcomes.
+  plans.ts       The Plan Composer and the task generator, read side: candidate schools, the
+                 pre-registration (comparison schools and threshold), the task list and owners.
   dash.ts        Dashboard rollups.
   feed.ts        Notifications, reports, the audit chain, the AI log, the outbox, imports, jobs.
   assistant.ts   Questions answered from the database, with the record ids behind each answer.
@@ -145,6 +147,33 @@ Three layers, in this order, on every write:
    submitted (they may still send it back); a block-lever plan is decided by a BEO or DEO and a
    district or PAB plan by a DEO or the state team. The reminder sweep and the demo clock are the
    demo admin's alone. `npm run test:authority` checks all of this.
+
+## Composing a plan and assigning the work
+
+A case being looked into, sent back or reopened gets its plan in the **Plan Composer**
+(`/cases/[id]/plan`, from the case's Plan section). The officer picks an intervention from the
+ranked matches (`matchForCase` in `studio.ts`, every point explained), picks the schools, and
+previews what the plan will say before anything is saved:
+
+- **How success will be judged.** The follow-up round, the threshold from the settings in force,
+  and the comparison schools: for each plan school, the two closest on the baseline result (and
+  more lightly on enrolment) from other clusters in the district, not already in another open
+  case. This is the rule the seed used for every historical plan (`preRegistrationFor`).
+- **The work it will turn into** — one task per template, per school where the template says so.
+
+Saving (`draftPlan` in `write.ts`) recomputes all of this with the same functions, so the stored
+plan is exactly the preview. Each save is a new plan row; an unsubmitted earlier draft is marked
+`superseded`. The case takes the intervention's lever, which decides who approves. "Save and
+submit" also submits it; someone other than the submitter approves it, and approval locks the
+terms. Older plans that never had them (the seeded AI drafts) get them when submitted, or at the
+latest when approved, and never again after that.
+
+An approved plan becomes work at `/cases/[id]/assign` (`assignTasks`). Each task's owner is
+suggested from who covers it: the school's headmaster, the case's cluster coordinator (or another
+in the block), the block resource coordinator with the fewest open tasks, the district officer.
+The officer may change owners and due dates but not drop or add tasks, and the independent
+spot-check must go to someone who is not delivering the work. Every owner is notified. A case can
+no longer be moved to "Work assigned" without its tasks. `npm run test:plan` checks all of it.
 
 A refusal is shown, with its reason, next to the button that caused it. Illegal transitions,
 moves without authority, approvals of your own plan, hand-run sweeps and self-verification

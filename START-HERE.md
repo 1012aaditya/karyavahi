@@ -54,6 +54,10 @@ The login page lists one account per role. The most interesting path through the
    (`deo.rmp@demo.karyavahi.test`), open CASE-0184 and approve the plan. That locks the comparison
    schools and the success threshold **before** anyone knows the result.
 4. Sign out, sign in as the auditor, and open the audit trail: the approval is there, hash-chained.
+   To take a case through planning yourself, sign in as `beo.blk-17@demo.karyavahi.test`, open
+   **CASE-0127** and press **Open the plan composer**: pick an intervention and schools, preview
+   how success will be judged, and submit. The district officer (`deo.amp@demo.karyavahi.test`)
+   approves it, and the block officer then turns it into tasks with **Review and assign the tasks**.
 5. Try something you should not be able to do — sign in as the cluster coordinator and open
    `/approvals`, or as a headmaster and open `/audit`. The refusal explains itself.
 

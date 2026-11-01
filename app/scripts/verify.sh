@@ -36,6 +36,9 @@ npx tsx --conditions=react-server scripts/integrity-test.mts 2>&1 | grep -vE 'Ex
 step 'reads stay inside the reader'"'"'s area'
 npx tsx --conditions=react-server scripts/scope-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
 
+step 'the plan composer and the task generator'
+npx tsx --conditions=react-server scripts/plan-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
+
 step 'sign-in sessions and request checks'
 npx tsx --conditions=react-server scripts/session-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
 

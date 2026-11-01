@@ -363,11 +363,15 @@ export function PlanPanel({
           'What will be done, in which schools, how success was defined before the work started, and who signed it off.',
           'क्या किया जाएगा, किन विद्यालयों में, सफलता की परिभाषा पहले से तय, और किसने स्वीकृत किया।',
         )}
-        right={currentPlan?.drafted_by === 'ai_draft' ? <AiDrafted lang={lang} model={currentPlan.ai_model} /> : null}
+        right={currentPlan?.drafted_by === 'ai_draft' ? <AiDrafted lang={lang} model={currentPlan.ai_model} />
+          : currentPlan?.drafted_by === 'officer' ? <OfficerWritten lang={lang} /> : null}
       />
 
       {!currentPlan ? (
-        <Empty>{pick(lang, 'No plan drafted yet.', 'अभी कोई योजना नहीं।')}</Empty>
+        <>
+          <Empty>{pick(lang, 'No plan drafted yet.', 'अभी कोई योजना नहीं।')}</Empty>
+          {children ? <div className="card-pad pt-0">{children}</div> : null}
+        </>
       ) : (
         <div className="card-pad space-y-4">
           <Facts cols={4}>
@@ -460,16 +464,33 @@ export function PlanPanel({
 
           {currentPlan.pre_registration ? (
             <div className="rounded-md border border-brand/25 bg-brand-light p-3">
-              <h3 className="mb-1 text-sm font-semibold text-ink">
-                {pick(lang, 'Success was defined before the work started', 'काम शुरू होने से पहले सफलता तय की गई')}
-              </h3>
-              <p className="mb-2 text-sm leading-relaxed text-ink-soft">
-                {pick(
-                  lang,
-                  'These terms were locked when the plan was approved — the metric, the two rounds to compare, the comparison schools, and the bar to clear. They cannot be chosen afterwards to suit the result.',
-                  'ये शर्तें योजना स्वीकृत होते समय तय हो गईं — मापदंड, तुलना के दो दौर, तुलना विद्यालय, और लक्ष्य। बाद में परिणाम के अनुसार नहीं बदली जा सकतीं।',
-                )}
-              </p>
+              {['draft', 'submitted', 'revision_requested'].includes(currentPlan.status) ? (
+                <>
+                  <h3 className="mb-1 text-sm font-semibold text-ink">
+                    {pick(lang, 'How success will be judged', 'सफलता कैसे आँकी जाएगी')}
+                  </h3>
+                  <p className="mb-2 text-sm leading-relaxed text-ink-soft">
+                    {pick(
+                      lang,
+                      'These terms are set out now and locked when the plan is approved: the metric, the two rounds to compare, the comparison schools, and the bar to clear. They cannot be chosen afterwards to suit the result.',
+                      'ये शर्तें अभी तय हैं और स्वीकृति पर बंद हो जाएँगी — मापदंड, तुलना के दो दौर, तुलना विद्यालय, और लक्ष्य। बाद में परिणाम के अनुसार नहीं बदली जा सकतीं।',
+                    )}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3 className="mb-1 text-sm font-semibold text-ink">
+                    {pick(lang, 'Success was defined before the work started', 'काम शुरू होने से पहले सफलता तय की गई')}
+                  </h3>
+                  <p className="mb-2 text-sm leading-relaxed text-ink-soft">
+                    {pick(
+                      lang,
+                      'These terms were locked when the plan was approved — the metric, the two rounds to compare, the comparison schools, and the bar to clear. They cannot be chosen afterwards to suit the result.',
+                      'ये शर्तें योजना स्वीकृत होते समय तय हो गईं — मापदंड, तुलना के दो दौर, तुलना विद्यालय, और लक्ष्य। बाद में परिणाम के अनुसार नहीं बदली जा सकतीं।',
+                    )}
+                  </p>
+                </>
+              )}
               <Facts cols={3}>
                 <Field label={pick(lang, 'Measured on', 'मापदंड')}>
                   {pick(lang, 'Class', 'कक्षा')} {currentPlan.pre_registration.grade} · {names.competency}
