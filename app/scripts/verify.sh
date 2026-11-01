@@ -42,6 +42,9 @@ npx tsx --conditions=react-server scripts/plan-test.mts 2>&1 | grep -vE 'Experim
 step 'My day and photo proof'
 npx tsx --conditions=react-server scripts/myday-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
 
+step 'the real map: boundaries, who sees what, school situation'
+npx tsx --conditions=react-server scripts/map-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
+
 step 'sign-in sessions and request checks'
 npx tsx --conditions=react-server scripts/session-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
 

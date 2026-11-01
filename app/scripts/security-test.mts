@@ -55,7 +55,8 @@ try {
 
   console.log('\n— hierarchy and geography —');
   ok('every cluster has an admin parent block', Number(one<{ n: number }>(`select count(*) n from clusters c where not exists (select 1 from geo_relationships r where r.child_id = c.id and r.hierarchy_id = 'admin' and r.parent_id = c.block_id)`)!.n) === 0);
-  ok('every school has an illustrative point', Number(one<{ n: number }>(`select count(*) n from geo_units where level = 'school' and (boundary is null or geometry_source <> 'illustrative')`)!.n) === 0);
+  // On the real map school positions are 'simulated'; without the boundary file, 'illustrative'.
+  ok('every school has a placed point', Number(one<{ n: number }>(`select count(*) n from geo_units where level = 'school' and (boundary is null or geometry_source not in ('illustrative','simulated'))`)!.n) === 0);
   ok('cities form a second hierarchy (city ≠ district)', all(`select 1 from geo_relationships where hierarchy_id = 'urban' and parent_id like 'CTY-%'`).length >= 3);
   ok('India has no drawn outline', one<{ boundary: string | null }>(`select boundary from geo_units where id = 'IN'`)!.boundary === null);
   ok('every non-top user has a designated authority', Number(one<{ n: number }>(`select count(*) n from reporting_lines r join user_roles u on u.user_id = r.user_id where r.manager_user_id is null and u.role not in ('state_admin','demo_admin')`)!.n) === 0);
@@ -87,7 +88,9 @@ try {
   ok('headmaster map shows only their own school', 'parent' in m4 && m4.features.features.length === 1 && m4.features.features[0].id === 'SCH-00001');
   ok('headmaster cannot open their cluster', 'error' in geo.mapData(hm1, { parentId: 'CLU-001' }));
   const m5 = geo.mapData(state, {});
-  ok('state officer opens at state level showing districts', 'parent' in m5 && m5.childLevel === 'district' && m5.features.features.length === 3);
+  // The real map also draws the state's other districts, marked as having no demo data.
+  ok('state officer opens at state level showing districts', 'parent' in m5 && m5.childLevel === 'district'
+    && m5.features.features.filter((f) => !Number((f.properties as Record<string, unknown>).noData)).length === 3);
   ok('urban hierarchy: DEO sees the district city', 'parent' in geo.mapData(deo, { parentId: 'DST-01', hierarchy: 'urban' }));
   ok('geo search never returns out-of-scope places', geo.geoSearch(beo, 'a').every((c) => geo.canOpen(beo, geo.geoUnit(c.id)!)));
   ok('map features carry every layer metric', 'parent' in m1 && ['severity', 'critical', 'complaints', 'overdue', 'delivery', 'improved', 'insufficient'].every((k) => k in (m1.features.features[0].properties ?? {})));

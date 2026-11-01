@@ -21,6 +21,8 @@
     "test:plan": "tsx --conditions=react-server scripts/plan-test.mts",
     "test:myday": "tsx --conditions=react-server scripts/myday-test.mts",
     "test:hindi": "node scripts/hindi-check.mjs",
+    "test:map": "tsx --conditions=react-server scripts/map-test.mts",
+    "geo:fetch": "node scripts/fetch-up-boundaries.mjs",
     "crawl": "node scripts/crawl.mjs",
     "e2e": "node scripts/e2e.cjs",
     "db:init": "node scripts/db-init.mjs",

@@ -23,7 +23,16 @@ interface Detail {
   breakdown: { grade: number; competency: string; prev: number | null; curr: number | null; rel: number | null; severity: string; n: number }[];
   cases: { id: string; title: string; severity: string; status: string }[]; caseCount: number; critical: number;
   complaints: { id: string; title: string; status: string; priority: string }[]; complaintCount: number; warnings: string[];
+  now: null | {
+    enrolment: number; teachers: { sanctioned: number; inPosition: number; short: number }; netTransfersOut: number | null;
+    lastVisit: { date: string; role: string; purpose: string; days: number | null } | null;
+    attendance: { recent: number | null; before: number | null; change: number | null };
+    levels: { teachers: string; visits: string; attendance: string };
+    openTasks: number; overdueTasks: number;
+  };
 }
+/** Same colours as the map's "right now" scales; "stable" is fine, shown in green. */
+const NOW_DOT: Record<string, string> = { critical: SEVERITY_COLORS.critical, significant: SEVERITY_COLORS.significant, moderate: SEVERITY_COLORS.moderate, stable: SEVERITY_COLORS.improving, insufficient: SEVERITY_COLORS.insufficient };
 const pp = (v: unknown) => (v === null || v === undefined ? '—' : `${Number(v) > 0 ? '+' : Number(v) < 0 ? '−' : ''}${Math.abs(Number(v)).toFixed(1)} pp`);
 const ORDER = ['critical', 'significant', 'moderate', 'stable', 'improving', 'insufficient'];
 
@@ -73,7 +82,9 @@ export function HotspotWorkspace({ rounds, competencies, latestLabel }: { rounds
 
   const crumbs = data?.crumbs ?? [];
   const up = crumbs.length > 1 ? crumbs[crumbs.length - 2] : null;
-  const counts = ORDER.map((s) => ({ s, n: features.filter((f) => f.properties.severity === s).length }));
+  // Districts drawn only to complete the state map carry no data; they are not "insufficient".
+  const noData = features.filter((f) => Number(f.properties.noData) === 1).length;
+  const counts = ORDER.map((s) => ({ s, n: features.filter((f) => f.properties.severity === s && !Number(f.properties.noData)).length }));
   const top = [...features].filter((f) => ['critical', 'significant', 'moderate'].includes(String(f.properties.severity)) || Number(f.properties.hotChildren) > 0)
     .sort((a, b) => ORDER.indexOf(String(a.properties.severity)) - ORDER.indexOf(String(b.properties.severity)) || Number(b.properties.hotChildren) - Number(a.properties.hotChildren)).slice(0, 6);
 
@@ -159,7 +170,7 @@ export function HotspotWorkspace({ rounds, competencies, latestLabel }: { rounds
               <div className="border-b border-line px-5 py-4">
                 <p className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{LEVEL_NAME[data?.parent.level ?? ''] ?? 'Area'}</p>
                 <h2 className="text-lg font-semibold tracking-tight text-ink">{data?.parent.name ?? '…'}</h2>
-                <p className="mt-0.5 text-sm text-ink-faint">{features.length} {data?.childLevel ? `${LEVEL_NAME[data.childLevel] ?? data.childLevel}s` : 'areas'} · select one on the map</p>
+                <p className="mt-0.5 text-sm text-ink-faint">{features.length} {data?.childLevel ? `${LEVEL_NAME[data.childLevel] ?? data.childLevel}s` : 'areas'}{noData ? ` · ${features.length - noData} with demo data` : ''} · select one on the map</p>
               </div>
               <ul className="grid grid-cols-3 gap-px border-b border-line bg-line text-center">
                 {counts.map((c) => (
@@ -206,6 +217,35 @@ export function HotspotWorkspace({ rounds, competencies, latestLabel }: { rounds
               {detailState === 'error' ? <p className="px-5 py-4 text-sm text-crit">Could not load details for this area.</p> : null}
               {detail ? (
                 <div className="space-y-4 px-5 py-4">
+                  {detail.now ? (
+                    <div>
+                      <p className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">Right now</p>
+                      <ul className="mt-1.5 space-y-1.5 text-sm">
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: NOW_DOT[detail.now.levels.teachers] }} />
+                          <span className="text-ink-soft"><span className="font-medium text-ink">Teachers {detail.now.teachers.inPosition} of {detail.now.teachers.sanctioned}</span>
+                            {detail.now.teachers.short ? ` · ${detail.now.teachers.short} post${detail.now.teachers.short > 1 ? 's' : ''} empty` : ' · all posts filled'}
+                            {detail.now.netTransfersOut ? ` · ${detail.now.netTransfersOut} left in the last 6 months` : ''}</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: NOW_DOT[detail.now.levels.visits] }} />
+                          <span className="text-ink-soft">{detail.now.lastVisit
+                            ? <><span className="font-medium text-ink">Last visit {detail.now.lastVisit.days} days ago</span> · {detail.now.lastVisit.role.toUpperCase()}, {detail.now.lastVisit.purpose.replace(/_/g, ' ')}</>
+                            : <span className="font-medium text-ink">Never visited</span>}</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: NOW_DOT[detail.now.levels.attendance] }} />
+                          <span className="text-ink-soft">{detail.now.attendance.change === null
+                            ? <span className="font-medium text-ink">Attendance: not enough months</span>
+                            : <><span className="font-medium text-ink">Attendance {detail.now.attendance.recent}%</span> · {detail.now.attendance.change > 0 ? '+' : ''}{detail.now.attendance.change} pts on the 3 months before</>}</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${detail.now.overdueTasks ? 'bg-crit' : 'bg-line-strong'}`} />
+                          <span className="text-ink-soft"><span className="font-medium text-ink">{detail.now.openTasks} open task{detail.now.openTasks === 1 ? '' : 's'}</span>{detail.now.overdueTasks ? ` · ${detail.now.overdueTasks} overdue` : ''} · {detail.now.enrolment} children in classes 1–3</span>
+                        </li>
+                      </ul>
+                    </div>
+                  ) : null}
                   {detail.breakdown.length ? (
                     <div>
                       <p className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">Most affected competencies</p>

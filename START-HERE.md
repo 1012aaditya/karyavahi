@@ -64,6 +64,15 @@ The login page lists one account per role. The most interesting path through the
 5. Try something you should not be able to do — sign in as the cluster coordinator and open
    `/approvals`, or as a headmaster and open `/audit`. The refusal explains itself.
 
+## The hotspot map
+
+Sign in as the state team (`state.lead@demo.karyavahi.test`) and open **Learning hotspots**: the
+real map of Uttar Pradesh, with the demo placed in Rampur, Lucknow and Varanasi. Double-click to
+zoom from district to block to cluster to school; switch **Blocks / Cities** to see Lucknow city;
+use **Layers → Colour areas by** for teacher shortage, visit gaps or attendance. The boundaries
+are real (OpenStreetMap); everything inside them is simulated. To see it on Google Maps, put a
+browser key in `app/.env.local` as `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=…` and restart the app.
+
 ## Folder layout
 
 ```

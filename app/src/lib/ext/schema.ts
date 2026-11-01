@@ -1,5 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { generateGeography, unionUnit, toMultiPolygon, type GenUnit } from './geogen';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  generateGeography, generateInsideReal, unionUnit, toMultiPolygon, circleRing, insideGeometry,
+  type GenUnit, type Geometry,
+} from './geogen';
 
 /**
  * Extension schema: geography, organisational hierarchy, complaints, onboarding and sign-in sessions.
@@ -123,6 +128,7 @@ export function ensureExtensions(c: DatabaseSync): void {
       throw e;
     }
   }
+  ensureRealGeography(c);
   migrateIntegrity(c);
 }
 
@@ -191,6 +197,8 @@ function migrateIntegrity(c: DatabaseSync): void {
 
 // ---------------------------------------------------------------- geography
 function seedGeography(c: DatabaseSync) {
+  // The illustrative shapes replace any real-map geography, so the real map must be re-applied.
+  exec(c, `delete from ext_meta where key = 'geo'`);
   exec(c, 'delete from geo_units'); exec(c, 'delete from geo_relationships'); exec(c, 'delete from geo_levels'); exec(c, 'delete from geo_hierarchies');
   exec(c, `insert into geo_hierarchies values ('admin', 'Administrative', 'Country → State → District → Block → Cluster → School')`);
   exec(c, `insert into geo_hierarchies values ('urban', 'Urban areas', 'Country → State → District → City → Cluster → School (city clusters only)')`);
@@ -240,6 +248,129 @@ function seedGeography(c: DatabaseSync) {
     rel.run(id, d.id, 'urban');
     for (const x of dcl) rel.run(x.cl.id, id, 'urban');
   }
+}
+
+// ---------------------------------------------------------------- the real map
+/**
+ * When data/up-geo.json is present (real OpenStreetMap boundaries for Uttar Pradesh, built by
+ * scripts/fetch-up-boundaries.mjs), the demo is placed on the real map: its three districts
+ * become Rampur, Lucknow and Varanasi with their real outlines; its blocks, clusters and schools
+ * are drawn inside them as simulated subdivisions; the other 72 districts appear with no data;
+ * the three cities are approximate circles around their real centres. The learning data stays
+ * simulated, and every unit records where its shape came from (geometry_source).
+ */
+export const GEO_FILE = join(process.cwd(), 'data', 'up-geo.json');
+const REAL_GEO_VERSION = 'up-osm-v2';
+/** Which real district each demo district is placed in, in district id order. */
+const REAL_DISTRICTS = ['Rampur', 'Lucknow', 'Varanasi'];
+
+interface UpGeo {
+  attribution: string;
+  state: { name: string; osm_id: number; geometry: Geometry };
+  districts: { name: string; osm_id: number; geometry: Geometry }[];
+  cities: { district: string; name: string; center: [number, number]; radius_km: number }[];
+}
+
+function ensureRealGeography(c: DatabaseSync) {
+  if (!existsSync(GEO_FILE)) return;
+  if (one<{ value: string }>(c, `select value from ext_meta where key = 'geo'`)?.value === REAL_GEO_VERSION) return;
+  const up = JSON.parse(readFileSync(GEO_FILE, 'utf8')) as UpGeo;
+  c.exec('begin immediate');
+  try {
+    seedRealGeography(c, up);
+    exec(c, `insert into ext_meta (key, value) values ('geo', ?) on conflict(key) do update set value = excluded.value`, REAL_GEO_VERSION);
+    c.exec('commit');
+  } catch (e) {
+    try { c.exec('rollback'); } catch { /* already rolled back */ }
+    throw e;
+  }
+}
+
+function seedRealGeography(c: DatabaseSync, up: UpGeo) {
+  const shape = (g: Geometry): string => JSON.stringify(g.type === 'Polygon' ? { type: 'MultiPolygon', coordinates: [g.coordinates] } : g);
+  const bboxOf = (g: Geometry): [number, number, number, number] => {
+    const pts = (g.type === 'Polygon' ? g.coordinates : g.coordinates.flat()).flat();
+    return [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1]))];
+  };
+
+  const state = one<{ id: string }>(c, 'select id from states limit 1')!;
+  const districts = q<{ id: string; code: string; schools: number }>(c, `select d.id, d.code, (select count(*) from schools s where s.district_id = d.id) schools from districts d order by d.id`);
+  // The demo's districts take the real names; the state takes its real name.
+  districts.forEach((d, i) => { if (REAL_DISTRICTS[i]) exec(c, 'update districts set name = ? where id = ?', REAL_DISTRICTS[i], d.id); });
+  exec(c, 'update states set name = ? where id = ?', up.state.name, state.id);
+
+  const blocks = q<{ id: string; name: string; code: string; district_id: string; schools: number }>(c, `select b.id, b.name, b.code, b.district_id, (select count(*) from schools s where s.block_id = b.id) schools from blocks b order by b.id`);
+  const clusters = q<{ id: string; name: string; block_id: string; district_id: string; schools: number }>(c, `select cl.id, cl.name, cl.block_id, cl.district_id, (select count(*) from schools s where s.cluster_id = cl.id) schools from clusters cl order by cl.id`);
+  const schools = q<{ id: string; name: string; cluster_id: string }>(c, 'select id, name, cluster_id from schools order by id');
+  const outlines = new Map<string, Geometry>();
+  districts.forEach((d, i) => { const real = up.districts.find((x) => x.name === REAL_DISTRICTS[i]); if (real) outlines.set(d.id, real.geometry); });
+  const g = generateInsideReal({ districts, blocks, clusters, schools, outlines });
+
+  exec(c, 'delete from geo_units'); exec(c, 'delete from geo_relationships'); exec(c, 'delete from geo_levels'); exec(c, 'delete from geo_hierarchies');
+  exec(c, `insert into geo_hierarchies values ('admin', 'Administrative', 'Country → State → District → Block → Cluster → School')`);
+  exec(c, `insert into geo_hierarchies values ('urban', 'Urban areas', 'Country → State → District → City → Cluster → School (city clusters only)')`);
+  [['country', 0, 'Country'], ['state', 1, 'State'], ['district', 2, 'District'], ['block', 3, 'Block'], ['cluster', 4, 'Cluster'], ['school', 5, 'School']]
+    .forEach(([l, r, lab]) => exec(c, `insert into geo_levels values ('admin', ?, ?, ?)`, l, r, lab));
+  [['country', 0, 'Country'], ['state', 1, 'State'], ['district', 2, 'District'], ['city', 3, 'City'], ['cluster', 4, 'Cluster'], ['school', 5, 'School']]
+    .forEach(([l, r, lab]) => exec(c, `insert into geo_levels values ('urban', ?, ?, ?)`, l, r, lab));
+
+  const ins = c.prepare(`insert into geo_units values (?,?,?,?,?,?,?,?,?,?)`);
+  const rel = c.prepare(`insert into geo_relationships values (?,?,?)`);
+  const putReal = (id: string, level: string, name: string, code: string | null, geom: Geometry, centroid: [number, number], note: string) =>
+    ins.run(id, level, name, code, 'osm', centroid[0], centroid[1], JSON.stringify(bboxOf(geom)), shape(geom), note);
+  const putSim = (id: string, level: string, name: string, code: string | null, u: GenUnit | undefined, note: string) =>
+    ins.run(id, level, name, code, u ? 'simulated' : 'none', u?.centroid[0] ?? null, u?.centroid[1] ?? null, u ? JSON.stringify(u.bbox) : null, u ? geojson(u) : null, note);
+
+  const OSM_NOTE = `Real boundary. ${up.attribution}`;
+  ins.run('IN', 'country', 'India', 'IN', 'none', null, null, null, null, 'Country outline not drawn; the map shows one state.');
+  const sb = bboxOf(up.state.geometry);
+  putReal(state.id, 'state', up.state.name, null, up.state.geometry, [(sb[0] + sb[2]) / 2, (sb[1] + sb[3]) / 2], OSM_NOTE);
+  rel.run(state.id, 'IN', 'admin'); rel.run(state.id, 'IN', 'urban');
+
+  // The demo districts: real outline, label placed inside by the generator.
+  districts.forEach((d, i) => {
+    const u = g.units.get(d.id);
+    if (!u || !outlines.get(d.id)) return;
+    putReal(d.id, 'district', REAL_DISTRICTS[i], d.code, outlines.get(d.id)!, u.centroid, `${OSM_NOTE} Learning data inside it is simulated.`);
+    rel.run(d.id, state.id, 'admin'); rel.run(d.id, state.id, 'urban');
+  });
+  // Every other district of the state, shown so the state view is complete, with no data.
+  for (const x of up.districts) {
+    if (REAL_DISTRICTS.includes(x.name)) continue;
+    const bb = bboxOf(x.geometry);
+    const id = `UPD-${x.osm_id}`;
+    putReal(id, 'district', x.name, null, x.geometry, [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2], `${OSM_NOTE} No demo data in this district.`);
+    rel.run(id, state.id, 'admin'); rel.run(id, state.id, 'urban');
+  }
+  const SIM_NOTE = 'Simulated subdivision drawn inside the real district outline. Not a real boundary.';
+  for (const b of blocks) { putSim(b.id, 'block', b.name, b.code, g.units.get(b.id), SIM_NOTE); rel.run(b.id, b.district_id, 'admin'); }
+  for (const cl of clusters) { putSim(cl.id, 'cluster', cl.name, null, g.units.get(cl.id), SIM_NOTE); rel.run(cl.id, cl.block_id, 'admin'); }
+  for (const s of schools) {
+    const p = g.schoolPoints.get(s.id);
+    ins.run(s.id, 'school', s.name, null, p ? 'simulated' : 'none', p?.[0] ?? null, p?.[1] ?? null, null, p ? JSON.stringify({ type: 'Point', coordinates: p }) : null,
+      'Simulated position inside its cluster. Not a real school or location.');
+    rel.run(s.id, s.cluster_id, 'admin');
+    rel.run(s.id, s.cluster_id, 'urban');
+  }
+
+  // Cities: a circle around the real city centre, made of the demo clusters whose centre falls
+  // inside it (at least the two nearest, so every city has something to show).
+  districts.forEach((d, i) => {
+    const city = up.cities.find((x) => x.district === REAL_DISTRICTS[i]);
+    if (!city) return;
+    const ring = circleRing(city.center, city.radius_km);
+    const area: Geometry = { type: 'Polygon', coordinates: [ring] };
+    const near = clusters.filter((cl) => cl.district_id === d.id && g.units.has(cl.id))
+      .map((cl) => ({ cl, u: g.units.get(cl.id)! }))
+      .sort((a, b) => ((a.u.centroid[0] - city.center[0]) ** 2 + (a.u.centroid[1] - city.center[1]) ** 2) - ((b.u.centroid[0] - city.center[0]) ** 2 + (b.u.centroid[1] - city.center[1]) ** 2));
+    const inside = near.filter((x) => insideGeometry(x.u.centroid, area));
+    const members = inside.length >= 2 ? inside : near.slice(0, 2);
+    const id = `CTY-${String(i + 1).padStart(2, '0')}`;
+    ins.run(id, 'city', city.name, null, 'approximate', city.center[0], city.center[1], JSON.stringify(bboxOf(area)), shape(area),
+      `Approximate area: a ${city.radius_km} km circle around the real city centre (${up.attribution}). Clusters inside it are simulated.`);
+    rel.run(id, d.id, 'urban');
+    for (const x of members) rel.run(x.cl.id, id, 'urban');
+  });
 }
 
 // ---------------------------------------------------------------- reporting lines

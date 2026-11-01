@@ -286,6 +286,45 @@ already used as proof elsewhere, and stores it in `.data/evidence-files/` under 
 `/api/evidence/[id]/photo` serves it only to someone who can see that proof, and hashes it again
 first, refusing a file that has changed on disk. `npm run test:myday` checks all of this.
 
+## The hotspot map: real Uttar Pradesh, simulated data
+
+The map shows the real state of Uttar Pradesh. `data/up-geo.json` holds the state outline, its
+75 districts and three city centres from OpenStreetMap (© OpenStreetMap contributors, ODbL),
+simplified to about 0.5 MB; `npm run geo:fetch` rebuilds it from the Overpass API. When the file
+is present the database is set up with it (`seedRealGeography` in `src/lib/ext/schema.ts`):
+
+- the demo's three districts become **Rampur, Lucknow and Varanasi**, with their real outlines;
+- their blocks, clusters and school positions are **simulated**: drawn inside the real outline by
+  dividing it into small cells (`generateInsideReal` in `src/lib/ext/geogen.ts`), never named
+  after real sub-districts or schools;
+- the other 72 districts are drawn with **no data** (faint, not zoomable);
+- the three **cities** are circles around the real city centres, holding the simulated clusters
+  inside them.
+
+Every unit records where its shape came from (`geometry_source`: `osm`, `simulated`,
+`approximate`), and the map, legend and side panel say so. All learning figures remain fictional.
+Without the file the app falls back to the invented honeycomb state.
+
+Who sees what is unchanged and decided on the server: the state team sees all 75 districts, a
+district officer only their district, a block officer their block, a coordinator their cluster,
+a headmaster their school. The state view colours each district by its worst block (a district
+measured against itself would always read zero) and counts its hot clusters.
+
+**Colour areas by** (Layers menu) switches between learning change and three measures of each
+school's situation right now, from `src/lib/school-now.ts`: teacher shortage (posts unfilled, or a
+teacher who left without a replacement), visit gaps (days since the last visit) and attendance
+trend (last three months against the three before). A larger area takes the colour that half,
+30% or 15% of its schools reach. Clicking a school shows a **Right now** card. Headmasters never
+see staff movements, on the map or anywhere else.
+
+**Google Maps.** With a browser key in `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (in `app/.env.local`,
+which git ignores), the hotspot page draws on Google Maps, with roads, places and a satellite
+view (`src/components/google-map-view.ts`). Google's free *Maps Demo Key* works for prototyping;
+production needs a key with billing. Restrict the key to your site's address. Without a key, or
+if Google refuses it, the same map is drawn without background tiles, and a note says why. The
+small dashboard maps always use the plain map. `npm run test:map` checks the geography, the
+access rules and the thresholds.
+
 ## Known limits
 
 - **Uploading a data file is not implemented.** The import wizard's validation behaviour is
