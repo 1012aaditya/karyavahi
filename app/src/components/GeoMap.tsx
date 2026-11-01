@@ -19,9 +19,30 @@ import type { FeatureCollection, Feature } from 'geojson';
  *               map/list), independently selectable layers, URL state via the history API so
  *               selecting or drilling in never reloads the page.
  *
- * No third-party tiles: every shape comes from /api/geo/map, which returns only the user's
- * permitted geography. Labels are HTML markers (no glyph server needed).
+ * Every shape comes from /api/geo/map, which returns only the user's permitted geography. Labels
+ * are HTML markers (no glyph server needed). Where Google Maps would draw (the hotspot workspace,
+ * and maps asking for basemap 'auto') but has no key or refuses it, a free OpenStreetMap street
+ * layer (OpenFreeMap, no key, no quota) goes underneath; the small dashboard maps stay plain to
+ * save data. If the street style cannot be fetched (offline, or the service is down) the map is
+ * the plain one, as before.
  */
+
+const PLAIN_STYLE = { version: 8 as const, sources: {}, layers: [{ id: 'bg', type: 'background' as const, paint: { 'background-color': PALETTE.map.DEFAULT } }] };
+const STREET_STYLE_URL = 'https://tiles.openfreemap.org/styles/positron';
+let streetStyle: Promise<import('maplibre-gl').StyleSpecification | null> | null = null;
+/** The street style, fetched once per page load; null when it cannot be had within a few seconds. */
+function loadStreetStyle(): Promise<import('maplibre-gl').StyleSpecification | null> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return Promise.resolve(null);
+  streetStyle ??= (async () => {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 5000);
+    try {
+      const r = await fetch(STREET_STYLE_URL, { signal: ctl.signal });
+      return r.ok ? ((await r.json()) as import('maplibre-gl').StyleSpecification) : null;
+    } catch { return null; } finally { clearTimeout(t); }
+  })();
+  return streetStyle.then((s) => { if (!s) streetStyle = null; return s; });
+}
 
 export interface MapPayload {
   parent: { id: string; name: string; level: string; bbox: number[] | null; geometry_source: string; note: string | null };
@@ -216,12 +237,14 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
   const [legend, setLegend] = useState(!compact);
 
   const workspace = !compact;
-  // The hotspot workspace draws on Google Maps when a browser key is configured; otherwise, and
-  // for the small dashboard maps, on MapLibre with no background tiles.
+  // The hotspot workspace draws on Google Maps when a browser key is configured; otherwise on
+  // MapLibre over the OpenStreetMap street layer. The small dashboard maps use MapLibre with no tiles.
   const googleKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
   // If Google refuses the key, the page falls back to the plain map and says why.
   const [googleRefused, setGoogleRefused] = useState<Refusal | null>(null);
   const useGoogle = (workspace || basemap === 'auto') && googleKey.length > 0 && !googleRefused;
+  // Whether the OpenStreetMap street layer is drawn under the MapLibre map.
+  const [streetsOn, setStreetsOn] = useState(false);
   const gview = useRef<GoogleMapView | null>(null);
   const byParam = sp.get('by');
   const by: ColourBy = workspace && COLOUR_BY.some((c) => c.key === byParam) ? (byParam as ColourBy) : 'learning';
@@ -267,12 +290,15 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
     let cancelled = false;
     (async () => {
       try {
-        const lib = await import('maplibre-gl');
+        const [lib, street] = await Promise.all([import('maplibre-gl'), workspace || basemap === 'auto' ? loadStreetStyle() : Promise.resolve(null)]);
         if (cancelled || !box.current) return;
         libRef.current = lib;
+        setStreetsOn(street !== null);
+        // On the street map the areas are a little more see-through, so roads and towns show beneath.
+        const op = street ? { fill: 0.62, hover: 0.8, outline: 0.2 } : { fill: 0.85, hover: 0.96, outline: 0.55 };
         const map = new lib.Map({
           container: box.current,
-          style: { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': PALETTE.map.DEFAULT } }] },
+          style: street ?? PLAIN_STYLE,
           center: [0, 0], zoom: 6, attributionControl: false, doubleClickZoom: false, dragRotate: false, pitchWithRotate: false,
           // The map's own controls speak the page language.
           ...(lang === 'hi' ? { locale: {
@@ -290,8 +316,8 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
           map.addImage('hatch', hatchImage());
           map.addSource('outline', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
           map.addSource('units', { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, promoteId: 'id' });
-          map.addLayer({ id: 'outline-fill', type: 'fill', source: 'outline', paint: { 'fill-color': PALETTE.paper.DEFAULT, 'fill-opacity': 0.55 } });
-          map.addLayer({ id: 'units-fill', type: 'fill', source: 'units', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': fillExpr(new Set(DEFAULT_LAYERS)), 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.96, 0.85] } });
+          map.addLayer({ id: 'outline-fill', type: 'fill', source: 'outline', paint: { 'fill-color': PALETTE.paper.DEFAULT, 'fill-opacity': op.outline } });
+          map.addLayer({ id: 'units-fill', type: 'fill', source: 'units', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': fillExpr(new Set(DEFAULT_LAYERS)), 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], op.hover, op.fill] } });
           map.addLayer({ id: 'units-hatch', type: 'fill', source: 'units', filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'insufficient'], 1]], paint: { 'fill-pattern': 'hatch' } });
           map.addLayer({ id: 'units-line', type: 'line', source: 'units', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'line-color': PALETTE.paper.DEFAULT, 'line-width': 1.5 } });
           map.addLayer({ id: 'units-sel', type: 'line', source: 'units', filter: ['==', ['get', 'id'], ''], paint: { 'line-color': PALETTE.ink.DEFAULT, 'line-width': 3 } });
@@ -539,15 +565,15 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
           </div>
         ) : null}
         {googleRefused ? (
-          <div className="absolute right-14 top-3 z-20 max-w-xs rounded-lg border border-warn/30 bg-warn-light px-3 py-2 text-xs leading-snug text-warn shadow-lift">
-            {googleRefused === 'quota'
-              ? L('Google Maps has used up today’s limit for this key, so this is the plain map.', 'इस कुंजी की Google Maps की आज की सीमा पूरी हो गई, इसलिए यह सादा नक्शा है।')
-              : googleRefused === 'unreachable'
-                ? L('Google Maps could not be reached, so this is the plain map.', 'Google Maps तक पहुँच नहीं हुई, इसलिए यह सादा नक्शा है।')
-                : L('Google Maps refused the API key, so this is the plain map. Check NEXT_PUBLIC_GOOGLE_MAPS_API_KEY and that the key allows this site.', 'Google Maps ने API कुंजी अस्वीकार की, इसलिए यह सादा नक्शा है।')}
+          // A quiet line, not a warning: the map still works. Google's own console error says why it refused.
+          <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-white/85 px-2.5 py-0.5 text-2xs text-ink-faint shadow-lift" data-testid="map-fallback-note">
+            {streetsOn
+              ? L('Showing the OpenStreetMap view', 'OpenStreetMap का नक्शा दिखाया जा रहा है')
+              : L('Showing the plain map', 'सादा नक्शा दिखाया जा रहा है')}
           </div>
         ) : null}
-        {(workspace || bare) && data?.sources.geometry === 'osm' ? (
+        {/* With the street layer, MapLibre's own attribution already credits OpenStreetMap. */}
+        {(workspace || bare) && data?.sources.geometry === 'osm' && !streetsOn ? (
           <div className="pointer-events-none absolute bottom-1 right-14 z-10 rounded bg-white/80 px-1.5 text-2xs text-ink-soft">{L('Boundaries © OpenStreetMap contributors', 'सीमाएँ © OpenStreetMap योगदानकर्ता')}</div>
         ) : null}
         {workspace && legend ? (

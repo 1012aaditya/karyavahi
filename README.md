@@ -94,7 +94,8 @@ Claude API features used: adaptive thinking, structured outputs (`output_config.
 | Service | Used for | Key needed |
 |---|---|---|
 | Meta **WhatsApp Cloud API** (Graph API) | Sending tasks to test phones and receiving replies and photos (`app/src/lib/whatsapp/`) | `WHATSAPP_*` settings (below). Optional; without them, messages are only simulated in the admin outbox |
-| **Google Maps JavaScript API** | Optional base map | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, optional. Without it, the app uses **MapLibre** with OpenStreetMap boundaries and needs no key |
+| **Google Maps JavaScript API** | Optional base map | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, optional. Without it, or when Google refuses it (for example its daily limit), the app uses **MapLibre** with OpenStreetMap boundaries |
+| **OpenFreeMap** (OpenStreetMap street tiles) | The street layer under the MapLibre map on the hotspot and home maps. If it can't load (offline), the map stays plain | None |
 | Browser **Web Speech API** | "Listen" (speech synthesis) and "speak a note" (speech recognition) | None. It runs in the user's browser; in Chrome, speech recognition is processed by the browser vendor's speech service |
 
 ### How Claude is kept honest
