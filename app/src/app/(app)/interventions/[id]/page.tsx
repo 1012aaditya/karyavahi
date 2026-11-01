@@ -3,19 +3,32 @@ import { notFound } from 'next/navigation';
 import { getLanguage } from '@/lib/session';
 import { pageSession } from '@/lib/page-session';
 import { intervention, competencies } from '@/lib/repo';
-import { listCases } from '@/lib/cases';
-import { lookupsFor } from '@/lib/lookups';
 import { pick } from '@/lib/i18n';
 import {
   Card, CardHead, PageHead, Callout, Facts, Field, Mono, fmtInr, fmtDate,
 } from '@/components/ui';
 import { Pill, Illustrative, EvidenceStrength, EvidenceTypeName, RoleName } from '@/components/labels';
-import { matchForCase, feasibility, interventionHistory } from '@/lib/studio';
+import { matchForCase, feasibility, interventionHistory, authorityFor } from '@/lib/studio';
 import { getCase } from '@/lib/cases';
-import { FitPanel, HistoryPanel, FeasibilityPanel } from '@/components/studio';
+import { FitPanel, FeasibilityPanel } from '@/components/studio';
 import { Icon } from '@/components/Icon';
 
-/** One intervention card, in full, including the parts that argue against using it. */
+/**
+ * One intervention card, in full, including the parts that argue against using it. It leads with
+ * a picture: who has to approve it, how long it runs and what it costs, how it has fared in this
+ * ledger, and a timeline of the tasks approving it would create.
+ */
+
+const LADDER = [
+  { k: 'block', en: 'Block', hi: 'खंड' },
+  { k: 'district', en: 'District', hi: 'ज़िला' },
+  { k: 'pab', en: 'PAB', hi: 'PAB' },
+] as const;
+const CATEGORY: Record<string, { en: string; hi: string }> = {
+  numeracy: { en: 'Numeracy', hi: 'गणित' }, literacy: { en: 'Literacy', hi: 'भाषा' }, attendance: { en: 'Attendance', hi: 'उपस्थिति' },
+  teacher_support: { en: 'Teacher support', hi: 'शिक्षक सहायता' }, staffing: { en: 'Staffing', hi: 'स्टाफ़' }, materials: { en: 'Materials', hi: 'सामग्री' },
+};
+const ROLE_BAR: Record<string, string> = { headmaster: 'bg-brand/60', crc: 'bg-pend/60', brc: 'bg-navy-600/60', beo: 'bg-amber', deo: 'bg-warn' };
 
 type WF = { case?: string; schools?: string; budget?: string; teachers?: string; weeks?: string; attendance?: string; training?: string; connectivity?: string };
 const numOr = (v: string | undefined, min: number, max: number): number | null => {
@@ -52,8 +65,15 @@ export default async function InterventionPage({ params, searchParams }: { param
   const hist = interventionHistory(i.id).get(i.id) ?? { plans: 0, evaluated: 0, improved: 0, confirmed: 0, notImproved: 0, inconclusive: 0 };
 
   const comps = new Map(competencies().map((c) => [c.id, pick(lang, c.name_en, c.name_hi)]));
-  const using = listCases(session, { limit: 200 }).slice(0, 0); // cases link via plans; listed below from plans
-  const look = lookupsFor(lang);
+  const auth = authorityFor(session, i.lever);
+  const rung = LADDER.findIndex((l) => l.k === i.lever);
+  const dayMax = Math.max(1, ...i.task_templates.map((t) => t.duration_days));
+  const weeks = Math.max(0, i.duration_weeks || 0);
+  const outcomes = [
+    { en: 'Gain shown', hi: 'सुधार दिखा', n: hist.improved, cls: 'bg-good' },
+    { en: 'No gain', hi: 'सुधार नहीं', n: hist.notImproved, cls: 'bg-warn' },
+    { en: 'Inconclusive', hi: 'अनिर्णीत', n: hist.inconclusive, cls: 'bg-navy-200' },
+  ];
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
@@ -85,11 +105,68 @@ export default async function InterventionPage({ params, searchParams }: { param
         </div>
       )}
 
+      {/* The picture: approval, time and cost, and the track record. */}
+      <section className="grid gap-3 lg:grid-cols-3" aria-label={pick(lang, 'This intervention at a glance', 'यह हस्तक्षेप एक नज़र में')}>
+        <div className="rounded-2xl border border-line bg-white p-4 sm:p-5">
+          <p className="label">{pick(lang, 'Who has to approve it', 'किसकी स्वीकृति चाहिए')}</p>
+          <ol className="mt-4 flex items-center gap-1" aria-label={pick(lang, 'Approval ladder', 'स्वीकृति सीढ़ी')}>
+            {LADDER.map((l, idx) => (
+              <li key={l.k} className="flex flex-1 items-center gap-1">
+                <span aria-current={idx === rung ? 'step' : undefined}
+                  className={`flex-1 rounded-xl border px-2 py-2 text-center text-sm ${idx === rung ? 'border-brand bg-brand font-semibold text-white' : idx < rung ? 'border-brand/30 bg-brand-light text-brand' : 'border-line bg-paper-sunk text-ink-faint'}`}>
+                  {pick(lang, l.en, l.hi)}
+                </span>
+                {idx < LADDER.length - 1 ? <Icon name="chevron-right" size={14} className="shrink-0 text-ink-faint" /> : null}
+              </li>
+            ))}
+          </ol>
+          <p className={`mt-3 flex items-center gap-1.5 text-sm ${auth.canApprove ? 'text-good' : 'text-ink-soft'}`}>
+            <Icon name={auth.canApprove ? 'check-circle' : 'lock'} size={14} className="shrink-0" />
+            {auth.canApprove ? pick(lang, 'You can approve this.', 'आप इसे स्वीकृत कर सकते हैं।') : pick(lang, 'A higher level has to approve this.', 'इसे उच्च स्तर स्वीकृत करेगा।')}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-line bg-white p-4 sm:p-5">
+          <p className="flex items-baseline justify-between gap-2">
+            <span className="label">{pick(lang, 'How long, and what it costs', 'कितना समय, कितनी लागत')}</span>
+            <span className="text-xs text-ink-faint"><span className="tnum kpi-num mr-1 text-ink">{weeks || '—'}</span>{pick(lang, 'weeks', 'सप्ताह')}</span>
+          </p>
+          <div className="mt-4 grid gap-1" style={{ gridTemplateColumns: 'repeat(12, minmax(0, 1fr))' }} role="img" aria-label={`${weeks} ${pick(lang, 'weeks', 'सप्ताह')}`}>
+            {Array.from({ length: Math.max(12, Math.ceil(weeks / 12) * 12) }, (_, w) => (
+              <span key={w} className={`h-3 rounded-sm ${w < weeks ? 'bg-brand/60' : 'bg-paper-deep'}`} />
+            ))}
+          </div>
+          <p className="mt-3 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+            <span className="tnum text-xl font-semibold text-ink">{fmtInr(i.cost_basis.amount_inr)}</span>
+            <span className="text-xs text-ink-faint">/ {i.cost_basis.unit}</span>
+            <Illustrative lang={lang} />
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-line bg-white p-4 sm:p-5">
+          <p className="flex items-baseline justify-between gap-2">
+            <span className="label">{pick(lang, 'How it fared in this ledger', 'इस पंजी में परिणाम')}</span>
+            <span className="text-xs text-ink-faint"><span className="tnum font-semibold text-ink">{hist.plans}</span> {pick(lang, 'plans', 'योजनाएँ')} · <span className="tnum font-semibold text-ink">{hist.evaluated}</span> {pick(lang, 'checked', 'जाँची')}</span>
+          </p>
+          {hist.evaluated > 0 ? (
+            <>
+              <div className="mt-4 flex h-4 overflow-hidden rounded-full bg-paper-deep" role="img" aria-label={outcomes.map((o) => `${pick(lang, o.en, o.hi)} ${o.n}`).join(', ')}>
+                {outcomes.map((o) => (o.n ? <span key={o.en} className={`h-full ${o.cls}`} style={{ width: `${(100 * o.n) / hist.evaluated}%` }} /> : null))}
+              </div>
+              <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-soft">
+                {outcomes.map((o) => <li key={o.en} className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-sm ${o.cls}`} />{pick(lang, o.en, o.hi)} <span className="tnum font-semibold text-ink">{o.n}</span></li>)}
+              </ul>
+              <p className="mt-2 text-2xs text-ink-faint">{hist.confirmed} {pick(lang, 'confirmed (interval above zero). Aggregate only; not a causal estimate.', 'पुष्ट (अंतराल शून्य से ऊपर)। केवल कुल योग; कारण का अनुमान नहीं।')}</p>
+            </>
+          ) : <p className="mt-4 text-sm text-ink-faint">{pick(lang, 'Never evaluated in this ledger.', 'इस पंजी में कभी जाँचा नहीं गया।')}</p>}
+        </div>
+      </section>
+
       <Card>
         <CardHead title={pick(lang, 'At a glance', 'एक नज़र में')} />
         <div className="card-pad">
           <Facts cols={4}>
-            <Field label={pick(lang, 'Category', 'श्रेणी')}>{i.category.replace(/_/g, ' ')}</Field>
+            <Field label={pick(lang, 'Category', 'श्रेणी')}>{CATEGORY[i.category] ? pick(lang, CATEGORY[i.category].en, CATEGORY[i.category].hi) : i.category}</Field>
             <Field label={pick(lang, 'Classes', 'कक्षाएँ')}>{i.grades.join(', ')}</Field>
             <Field label={pick(lang, 'Runs for', 'अवधि')}>{i.duration_weeks} {pick(lang, 'weeks', 'सप्ताह')}</Field>
             <Field label={pick(lang, 'Cost', 'लागत')} hint={i.cost_basis.note}>
@@ -149,8 +226,6 @@ export default async function InterventionPage({ params, searchParams }: { param
         </div>
       </Card>
 
-      <HistoryPanel h={hist} />
-
       <FeasibilityPanel id={i.id} caseId={caseId} values={wfValues} checks={wf.checks} totalCost={wf.totalCost} verdict={wf.verdict} />
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -197,35 +272,27 @@ export default async function InterventionPage({ params, searchParams }: { param
           title={pick(lang, 'What proof it has to produce', 'कौन सा सबूत देना होगा')}
           hint={pick(lang, 'Approving this intervention creates these tasks, each with its own proof requirement.', 'स्वीकृति पर ये काम बनते हैं, हर एक के लिए सबूत आवश्यक।')}
         />
-        <div className="overflow-x-auto">
-          <table className="table">
-            <thead>
-              <tr>
-                <th scope="col">{pick(lang, 'Task', 'काम')}</th>
-                <th scope="col">{pick(lang, 'Owner', 'ज़िम्मेदार')}</th>
-                <th scope="col">{pick(lang, 'Per school?', 'प्रति विद्यालय?')}</th>
-                <th scope="col">{pick(lang, 'Days', 'दिन')}</th>
-                <th scope="col">{pick(lang, 'Proof', 'सबूत')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {i.task_templates.map((t) => (
-                <tr key={t.key}>
-                  <td className="max-w-md">
-                    {pick(lang, t.title_en, t.title_hi)}
-                    {t.cross_source ? (
-                      <span className="ml-1.5"><Pill tone="active">{pick(lang, 'independent check', 'स्वतंत्र जाँच')}</Pill></span>
-                    ) : null}
-                  </td>
-                  <td className="text-sm"><RoleName role={t.owner_role} lang={lang} /></td>
-                  <td className="text-sm">{t.per_school ? pick(lang, 'yes', 'हाँ') : pick(lang, 'once', 'एक बार')}</td>
-                  <td className="tnum text-sm">{t.duration_days}</td>
-                  <td className="text-sm">{t.proof_count} × <EvidenceTypeName type={t.proof_type} lang={lang} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ol className="divide-y divide-line" aria-label={pick(lang, 'Task timeline', 'काम की समय-रेखा')}>
+          {i.task_templates.map((t) => (
+            <li key={t.key} className="grid items-center gap-x-4 gap-y-1.5 px-4 py-3 sm:px-5 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">
+                  {pick(lang, t.title_en, t.title_hi)}
+                  {t.cross_source ? <span className="ml-1.5"><Pill tone="active">{pick(lang, 'independent check', 'स्वतंत्र जाँच')}</Pill></span> : null}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-faint">
+                  <RoleName role={t.owner_role} lang={lang} /> · {t.per_school ? pick(lang, 'per school', 'प्रति विद्यालय') : pick(lang, 'once', 'एक बार')} · {t.proof_count} × <EvidenceTypeName type={t.proof_type} lang={lang} />
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-3 flex-1 overflow-hidden rounded-full bg-paper-deep">
+                  <span className={`block h-full rounded-full ${ROLE_BAR[t.owner_role] ?? 'bg-brand/50'}`} style={{ width: `${Math.max(4, (100 * t.duration_days) / dayMax)}%` }} />
+                </span>
+                <span className="tnum w-16 shrink-0 text-right text-xs text-ink-soft">{t.duration_days} {pick(lang, 'days', 'दिन')}</span>
+              </div>
+            </li>
+          ))}
+        </ol>
         <div className="border-t border-line px-4 py-3 sm:px-5">
           <h3 className="h-section mb-1">{pick(lang, 'Accepted as proof', 'सबूत के रूप में स्वीकार्य')}</h3>
           <ul className="list-disc space-y-0.5 pl-5 text-sm text-ink">
