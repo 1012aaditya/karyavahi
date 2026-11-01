@@ -17,7 +17,57 @@ import { FeedbackThumbs } from './Feedback';
  * drawer share it. Starter questions are optional — any question can be typed.
  */
 
-interface ToolStep { id: string; label: string; status: 'running' | 'done' | 'failed'; records?: number }
+interface ToolStep { id: string; name?: string; label: string; status: 'running' | 'done' | 'failed'; records?: number }
+type Lang = 'en' | 'hi';
+
+/** What each tool is doing, in Hindi (the server sends the English label with the tool's name). */
+const TOOL_LABEL_HI: Record<string, string> = {
+  get_dashboard_summary: 'आपका डैशबोर्ड सार पढ़ रहा है',
+  get_learning_hotspots: 'अधिगम हॉटस्पॉट खोज रहा है',
+  get_area_performance: 'क्षेत्र का प्रदर्शन देख रहा है',
+  get_open_cases: 'प्रकरणों की सूची बना रहा है',
+  get_case_details: 'प्रकरण का अभिलेख खोल रहा है',
+  get_case_timeline: 'प्रकरण का क्रम पढ़ रहा है',
+  get_overdue_tasks: 'विलंबित काम देख रहा है',
+  get_blockers: 'दर्ज बाधाएँ पढ़ रहा है',
+  get_pending_approvals: 'लंबित स्वीकृतियाँ देख रहा है',
+  get_intervention_options: 'उपयुक्त हस्तक्षेप मिला रहा है',
+  compare_interventions: 'हस्तक्षेपों की तुलना कर रहा है',
+  get_outcome_evaluation: 'परिणाम जाँच पढ़ रहा है',
+  get_similar_cases: 'मिलते-जुलते पुराने प्रकरण खोज रहा है',
+  get_data_quality_issues: 'डेटा गुणवत्ता जाँच रहा है',
+  get_report_data: 'रिपोर्ट का डेटा जुटा रहा है',
+  get_review_meeting_agenda: 'समीक्षा बैठक का एजेंडा बना रहा है',
+  search_evidence_library: 'साक्ष्य-पुस्तकालय में खोज रहा है',
+  search_records: 'अभिलेखों में खोज रहा है',
+  get_complaints: 'शिकायतें पढ़ रहा है',
+};
+
+/** Messages the server and this panel write, in Hindi. Anything else is shown as sent. */
+const ERROR_HI: [RegExp, string][] = [
+  [/^Karyavahi AI is not connected[\s\S]*$/, 'कार्यवाही AI जुड़ा नहीं है: सर्वर पर मॉडल API कुंजी नहीं है। बाकी ऐप सामान्य रूप से चलता है।'],
+  [/^The model declined to answer this request\.$/, 'मॉडल ने इस अनुरोध का उत्तर देने से मना किया।'],
+  [/^The AI service could not complete this request\.$/, 'AI सेवा यह अनुरोध पूरा नहीं कर सकी।'],
+  [/^The configured model API key was rejected\.$/, 'सर्वर की मॉडल API कुंजी अस्वीकार हुई।'],
+  [/^The API key does not have access to the configured model\.$/, 'इस API कुंजी से चुने गए मॉडल तक पहुँच नहीं है।'],
+  [/^The configured model \((.+)\) was not found\.$/, 'चुना गया मॉडल ($1) नहीं मिला।'],
+  [/^The AI service is rate-limited right now[\s\S]*$/, 'AI सेवा पर अभी सीमा लगी है। थोड़ी देर में फिर कोशिश करें।'],
+  [/^The AI service rejected the request\.$/, 'AI सेवा ने अनुरोध अस्वीकार किया।'],
+  [/^Could not reach the AI service[\s\S]*$/, 'AI सेवा तक नहीं पहुँच सके (नेटवर्क या समय-सीमा)।'],
+  [/^The AI service returned an error \((.+)\)\.$/, 'AI सेवा ने त्रुटि लौटाई ($1)।'],
+  [/^Sign in first\.$/, 'पहले साइन इन करें।'],
+  [/^Your role cannot use the assistant\.$/, 'आपकी भूमिका सहायक का उपयोग नहीं कर सकती।'],
+  [/^Request too large\.$/, 'अनुरोध बहुत बड़ा है।'],
+  [/^Too many questions in a short time[\s\S]*$/, 'कम समय में बहुत सारे प्रश्न। कुछ मिनट रुककर फिर पूछें।'],
+  [/^Request failed \((\d+)\)\.$/, 'अनुरोध विफल ($1)।'],
+  [/^Stopped\.$/, 'रोक दिया गया।'],
+  [/^Connection lost before the answer finished\.$/, 'उत्तर पूरा होने से पहले कनेक्शन टूट गया।'],
+];
+const errorText = (msg: string, lang: Lang): string => {
+  if (lang !== 'hi') return msg;
+  for (const [re, hi] of ERROR_HI) if (re.test(msg)) return msg.replace(re, hi);
+  return msg;
+};
 interface Msg {
   role: 'user' | 'assistant';
   content: string;
@@ -104,7 +154,8 @@ export function Markdown({ text }: { text: string }) {
 interface Convo { id: string; title: string; updated: number; msgs: Msg[] }
 interface Store { active: string; convos: Convo[] }
 const storeKey = (user?: string) => `${STORE}:${user ?? 'anon'}`;
-const newConvo = (): Convo => ({ id: `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title: 'New conversation', updated: Date.now(), msgs: [] });
+const NEW_TITLE = 'New conversation';
+const newConvo = (): Convo => ({ id: `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title: NEW_TITLE, updated: Date.now(), msgs: [] });
 function loadStore(user?: string): Store {
   try {
     const raw = sessionStorage.getItem(storeKey(user));
@@ -118,11 +169,14 @@ function loadStore(user?: string): Store {
 }
 
 // ---------------------------------------------------------------- the panel
-export function ChatPanel({ context, starters, compact = false, configured = true, userKey, withHistory = false, scopeLabel, ask }: {
+export function ChatPanel({ context, starters, compact = false, configured = true, userKey, withHistory = false, scopeLabel, ask, lang = 'en' }: {
   context?: ChatContext; starters: string[]; compact?: boolean; configured?: boolean; userKey?: string; withHistory?: boolean; scopeLabel?: string;
   /** A question asked from elsewhere on the page (askClaude); sent once per new `n`. */
   ask?: { q: string; n: number };
+  /** The page language, from the server, so the first render is already in it. */
+  lang?: Lang;
 }) {
+  const t = (en: string, hi: string) => (lang === 'hi' ? hi : en);
   const [store, setStore] = useState<Store | null>(null);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -144,7 +198,7 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
           if (c.id !== id) return c;
           const next = typeof upd === 'function' ? upd(c.msgs) : upd;
           const firstQ = next.find((m) => m.role === 'user')?.content;
-          return { ...c, msgs: next, updated: Date.now(), title: firstQ ? firstQ.slice(0, 70) : 'New conversation' };
+          return { ...c, msgs: next, updated: Date.now(), title: firstQ ? firstQ.slice(0, 70) : NEW_TITLE };
         }),
       };
     });
@@ -216,7 +270,7 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
           const e = JSON.parse(line);
           if (e.type === 'meta') patchLast((m) => ({ ...m, model: e.model }));
           else if (e.type === 'text') patchLast((m) => ({ ...m, content: m.content + e.delta }));
-          else if (e.type === 'tool_start') patchLast((m) => ({ ...m, tools: [...(m.tools ?? []), { id: e.id, label: e.label, status: 'running' }] }));
+          else if (e.type === 'tool_start') patchLast((m) => ({ ...m, tools: [...(m.tools ?? []), { id: e.id, name: e.name, label: e.label, status: 'running' }] }));
           else if (e.type === 'tool_end') patchLast((m) => ({ ...m, tools: (m.tools ?? []).map((t) => (t.id === e.id ? { ...t, status: e.ok ? 'done' : 'failed', records: e.records } : t)) }));
           else if (e.type === 'done') patchLast((m) => ({ ...m, streaming: false, sources: e.sources, unverified: e.citedNotRetrieved, unchecked: e.unsupportedFigures ?? [], followUps: e.followUps, interactionId: e.interactionId }));
           else if (e.type === 'error') patchLast((m) => ({ ...m, streaming: false, error: { message: e.message, retryable: e.retryable } }));
@@ -246,22 +300,22 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
 
   const sorted = store ? [...store.convos].sort((a, b) => b.updated - a.updated) : [];
   const history = withHistory ? (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-line pr-3 md:flex" aria-label="Conversation history">
-      <button type="button" onClick={startNew} className="btn-quiet btn-sm mb-3 w-full justify-center"><Icon name="plus" size={14} />New conversation</button>
-      <p className="mb-1 px-2 text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">This session</p>
+    <aside className="hidden w-60 shrink-0 flex-col border-r border-line pr-3 md:flex" aria-label={t('Conversation history', 'बातचीत का इतिहास')}>
+      <button type="button" onClick={startNew} className="btn-quiet btn-sm mb-3 w-full justify-center"><Icon name="plus" size={14} />{t('New conversation', 'नई बातचीत')}</button>
+      <p className="mb-1 px-2 text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{t('This session', 'इस सत्र में')}</p>
       <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
         {sorted.map((c) => (
           <li key={c.id} className="group relative">
             <button type="button" onClick={() => switchTo(c.id)} aria-current={c.id === active?.id ? 'true' : undefined}
               className={`block w-full rounded-lg px-2 py-1.5 pr-7 text-left ${c.id === active?.id ? 'bg-brand-light/70 text-ink' : 'text-ink-soft hover:bg-paper-sunk hover:text-ink'}`}>
-              <span className="block truncate text-sm">{c.title}</span>
-              <span className="block text-2xs text-ink-faint">{c.msgs.filter((m) => m.role === 'user').length} question{c.msgs.filter((m) => m.role === 'user').length === 1 ? '' : 's'} · {new Date(c.updated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+              <span className="block truncate text-sm">{c.title === NEW_TITLE ? t(NEW_TITLE, 'नई बातचीत') : c.title}</span>
+              <span className="block text-2xs text-ink-faint">{lang === 'hi' ? `${c.msgs.filter((m) => m.role === 'user').length} प्रश्न` : `${c.msgs.filter((m) => m.role === 'user').length} question${c.msgs.filter((m) => m.role === 'user').length === 1 ? '' : 's'}`} · {new Date(c.updated).toLocaleTimeString(lang === 'hi' ? 'hi-IN' : 'en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
             </button>
-            <button type="button" onClick={() => remove(c.id)} aria-label={`Delete conversation ${c.title}`} className="absolute right-1 top-1.5 hidden rounded p-1 text-ink-faint hover:bg-white hover:text-crit group-hover:block"><Icon name="x" size={13} /></button>
+            <button type="button" onClick={() => remove(c.id)} aria-label={t(`Delete conversation ${c.title}`, `बातचीत हटाएँ: ${c.title}`)} className="absolute right-1 top-1.5 hidden rounded p-1 text-ink-faint hover:bg-white hover:text-crit group-hover:block"><Icon name="x" size={13} /></button>
           </li>
         ))}
       </ul>
-      <p className="mt-3 px-2 text-2xs leading-snug text-ink-faint">Kept only for this browser session, and only for you.</p>
+      <p className="mt-3 px-2 text-2xs leading-snug text-ink-faint">{t('Kept only for this browser session, and only for you.', 'केवल इस ब्राउज़र सत्र तक, और केवल आपके लिए रखी जाती है।')}</p>
     </aside>
   ) : null;
 
@@ -277,20 +331,20 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-paper-sunk/60 px-3 py-2 text-xs text-ink-soft">
         <Icon name="target" size={13} className="text-brand" />
-        <span>Context: <span className="font-medium text-ink">{context?.label ?? 'All records in your scope'}</span></span>
-        {scopeLabel ? <span className="text-ink-faint">· scope {scopeLabel}</span> : null}
-        {withHistory ? <button type="button" onClick={startNew} className="ml-auto text-brand hover:text-brand-dark md:hidden">New</button> : null}
+        <span>{t('Context:', 'संदर्भ:')} <span className="font-medium text-ink">{context?.label ?? t('All records in your scope', 'आपके दायरे के सभी अभिलेख')}</span></span>
+        {scopeLabel ? <span className="text-ink-faint">· {t('scope', 'दायरा')} {scopeLabel}</span> : null}
+        {withHistory ? <button type="button" onClick={startNew} className="ml-auto text-brand hover:text-brand-dark md:hidden">{t('New', 'नई')}</button> : null}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-4" aria-live="polite">
         {msgs.length === 0 ? (
           <div className="mx-auto max-w-2xl pt-6 text-center">
             <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-brand-light text-brand"><Icon name="sparkles" size={24} /></span>
-            <p className="mt-4 font-display text-xl font-semibold text-ink">Ask anything about your cases, schools and outcomes</p>
+            <p className="mt-4 font-display text-xl font-semibold text-ink">{t('Ask anything about your cases, schools and outcomes', 'अपने प्रकरणों, विद्यालयों और परिणामों के बारे में कुछ भी पूछें')}</p>
             <p className="mx-auto mt-1.5 max-w-lg text-sm leading-relaxed text-ink-soft">
-              Answers are built from records you are allowed to see, with the record ids cited. The assistant advises — it cannot approve, assign or close anything.
+              {t('Answers are built from records you are allowed to see, with the record ids cited. The assistant advises — it cannot approve, assign or close anything.', 'उत्तर केवल उन्हीं अभिलेखों से बनते हैं जिन्हें आप देख सकते हैं, और उनकी आईडी साथ में दी जाती है। सहायक केवल सलाह देता है — वह कुछ स्वीकृत, आवंटित या बंद नहीं कर सकता।')}
             </p>
             {!configured ? (
-              <p className="mx-auto mt-4 max-w-md rounded-lg border border-warn/30 bg-warn-light px-3 py-2 text-sm text-warn">AI is not connected: no model API key is configured on the server.</p>
+              <p className="mx-auto mt-4 max-w-md rounded-lg border border-warn/30 bg-warn-light px-3 py-2 text-sm text-warn">{t('AI is not connected: no model API key is configured on the server.', 'AI जुड़ा नहीं है: सर्वर पर मॉडल API कुंजी नहीं है।')}</p>
             ) : null}
             <div className={`mx-auto mt-6 grid gap-2 text-left ${compact ? '' : 'sm:grid-cols-2'}`}>
               {starters.map((q) => (
@@ -318,7 +372,7 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
                           {m.tools.map((t) => (
                             <li key={t.id} className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs ${t.status === 'failed' ? 'border-crit/30 bg-crit-light text-crit' : 'border-line bg-paper-sunk text-ink-soft'}`}>
                               {t.status === 'running' ? <span className="h-2.5 w-2.5 animate-spin rounded-full border-[1.5px] border-brand border-t-transparent" /> : <Icon name={t.status === 'done' ? 'check' : 'alert'} size={12} />}
-                              {t.label}{t.status === 'done' && t.records ? ` · ${t.records}` : ''}
+                              {lang === 'hi' && t.name && TOOL_LABEL_HI[t.name] ? TOOL_LABEL_HI[t.name] : t.label}{t.status === 'done' && t.records ? ` · ${t.records}` : ''}
                             </li>
                           ))}
                         </ul>
@@ -326,34 +380,34 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
                       {m.content ? (
                         <div className="text-base leading-relaxed text-ink-soft"><Markdown text={m.content} />{m.streaming ? <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-brand align-middle" /> : null}</div>
                       ) : m.streaming && !(m.tools?.length) ? (
-                        <p className="flex items-center gap-2 text-sm text-ink-faint"><span className="flex gap-1"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-faint" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-faint [animation-delay:120ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-faint [animation-delay:240ms]" /></span>Thinking…</p>
+                        <p className="flex items-center gap-2 text-sm text-ink-faint"><span className="flex gap-1"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-faint" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-faint [animation-delay:120ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-faint [animation-delay:240ms]" /></span>{t('Thinking…', 'सोच रहा है…')}</p>
                       ) : null}
                       {m.error ? (
                         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-crit/30 bg-crit-light px-3 py-2 text-sm text-crit" role="alert">
-                          <Icon name="alert" size={15} />{m.error.message}
-                          {m.error.retryable && i === msgs.length - 1 ? <button type="button" onClick={retry} className="btn-quiet btn-sm ml-auto">Retry</button> : null}
+                          <Icon name="alert" size={15} />{errorText(m.error.message, lang)}
+                          {m.error.retryable && i === msgs.length - 1 ? <button type="button" onClick={retry} className="btn-quiet btn-sm ml-auto">{t('Retry', 'फिर पूछें')}</button> : null}
                         </div>
                       ) : null}
                       {!m.streaming && !m.error && m.content ? (
                         <div className="mt-2.5 space-y-2">
                           {m.sources && m.sources.length > 0 ? (
                             <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-faint">
-                              <span className="font-medium">Sources:</span>{m.sources.slice(0, 14).map((id) => <SourceChip key={id} id={id} />)}
+                              <span className="font-medium">{t('Sources:', 'स्रोत:')}</span>{m.sources.slice(0, 14).map((id) => <SourceChip key={id} id={id} />)}
                             </div>
                           ) : (
-                            <p className="text-xs text-ink-faint">No record ids were cited in this answer.</p>
+                            <p className="text-xs text-ink-faint">{t('No record ids were cited in this answer.', 'इस उत्तर में किसी अभिलेख की आईडी नहीं दी गई।')}</p>
                           )}
                           {m.unchecked && m.unchecked.length > 0 ? (
-                            <p className="flex items-center gap-1.5 text-xs text-warn"><Icon name="alert" size={13} />Figures not found in the records Claude read — check before relying on: {m.unchecked.join(', ')}</p>
+                            <p className="flex items-center gap-1.5 text-xs text-warn"><Icon name="alert" size={13} />{t('Figures not found in the records Claude read — check before relying on:', 'ये आँकड़े Claude के पढ़े अभिलेखों में नहीं मिले — भरोसा करने से पहले जाँचें:')} {m.unchecked.join(', ')}</p>
                           ) : null}
                           {m.unverified && m.unverified.length > 0 ? (
-                            <p className="flex items-center gap-1.5 text-xs text-warn"><Icon name="alert" size={13} />Mentioned but not retrieved in this answer — check before relying on: {m.unverified.join(', ')}</p>
+                            <p className="flex items-center gap-1.5 text-xs text-warn"><Icon name="alert" size={13} />{t('Mentioned but not retrieved in this answer — check before relying on:', 'उत्तर में उल्लेख है पर अभिलेख खोला नहीं गया — भरोसा करने से पहले जाँचें:')} {m.unverified.join(', ')}</p>
                           ) : null}
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <button type="button" onClick={() => copy(i)} className="btn-ghost btn-sm px-2 text-xs"><Icon name={copied === i ? 'check' : 'copy'} size={13} />{copied === i ? 'Copied' : 'Copy'}</button>
-                            {i === msgs.length - 1 ? <button type="button" onClick={retry} disabled={busy} className="btn-ghost btn-sm px-2 text-xs"><Icon name="refresh" size={13} />Retry</button> : null}
+                            <button type="button" onClick={() => copy(i)} className="btn-ghost btn-sm px-2 text-xs"><Icon name={copied === i ? 'check' : 'copy'} size={13} />{copied === i ? t('Copied', 'कॉपी हुआ') : t('Copy', 'कॉपी करें')}</button>
+                            {i === msgs.length - 1 ? <button type="button" onClick={retry} disabled={busy} className="btn-ghost btn-sm px-2 text-xs"><Icon name="refresh" size={13} />{t('Retry', 'फिर पूछें')}</button> : null}
                             <SpeakButton text={speakable(m.content)} size="sm" />
-                            {m.model ? <span className="text-2xs text-ink-faint">{m.model} · AI-generated, verify before acting</span> : null}
+                            {m.model ? <span className="text-2xs text-ink-faint">{m.model} · {t('AI-generated, verify before acting', 'AI द्वारा बना, कार्रवाई से पहले जाँचें')}</span> : null}
                           </div>
                           {m.interactionId ? <FeedbackThumbs kind="claude_answer" target={m.interactionId} /> : null}
                           {i === msgs.length - 1 && m.followUps && m.followUps.length > 0 ? (
@@ -380,21 +434,21 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
           <textarea
             ref={taRef} value={input} onChange={(e) => setInput(e.target.value)} rows={1} maxLength={2000}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(input); } }}
-            placeholder={configured ? 'Ask a question… (Enter to send, Shift+Enter for a new line)' : 'AI is not connected'}
+            placeholder={configured ? t('Ask a question… (Enter to send, Shift+Enter for a new line)', 'प्रश्न पूछें… (भेजने के लिए Enter, नई पंक्ति के लिए Shift+Enter)') : t('AI is not connected', 'AI जुड़ा नहीं है')}
             disabled={!configured}
-            aria-label="Ask Claude"
+            aria-label={t('Ask Claude', 'Claude से पूछें')}
             className="max-h-40 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-base text-ink placeholder:text-ink-faint focus:outline-none"
           />
-          <MicButton onText={(t) => setInput((v) => appendDictation(v, t))} disabled={!configured || busy} />
+          <MicButton onText={(x) => setInput((v) => appendDictation(v, x))} disabled={!configured || busy} />
           {busy ? (
-            <button type="button" onClick={() => abortRef.current?.abort()} className="btn-quiet h-10 px-3" aria-label="Stop generating"><Icon name="stop" size={15} />Stop</button>
+            <button type="button" onClick={() => abortRef.current?.abort()} className="btn-quiet h-10 px-3" aria-label={t('Stop generating', 'उत्तर रोकें')}><Icon name="stop" size={15} />{t('Stop', 'रोकें')}</button>
           ) : (
-            <button type="submit" disabled={!input.trim() || !configured} className="btn-primary h-10 px-3" aria-label="Send"><Icon name="send" size={16} /></button>
+            <button type="submit" disabled={!input.trim() || !configured} className="btn-primary h-10 px-3" aria-label={t('Send', 'भेजें')}><Icon name="send" size={16} /></button>
           )}
         </div>
         <div className="mt-1.5 flex items-center justify-between text-2xs text-ink-faint">
-          <span>Scoped to your records · fictional demo data</span>
-          {msgs.length > 0 ? <button type="button" onClick={() => { abortRef.current?.abort(); setMsgs([]); }} className="hover:text-ink">Clear conversation</button> : null}
+          <span>{t('Scoped to your records · fictional demo data', 'केवल आपके अभिलेख · काल्पनिक डेमो डेटा')}</span>
+          {msgs.length > 0 ? <button type="button" onClick={() => { abortRef.current?.abort(); setMsgs([]); }} className="hover:text-ink">{t('Clear conversation', 'बातचीत साफ़ करें')}</button> : null}
         </div>
       </form>
     </div>
@@ -403,37 +457,44 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
 }
 
 // ---------------------------------------------------------------- the drawer
-function useChatContext(): ChatContext {
+function useChatContext(lang: Lang): ChatContext {
   const path = usePathname();
   const sp = useSearchParams();
   const ctx: ChatContext = { path };
+  const hi = lang === 'hi';
   const caseMatch = path.match(/^\/cases\/(CASE-\d{4})/);
-  if (caseMatch) { ctx.caseId = caseMatch[1]; ctx.label = `Case ${caseMatch[1]}`; }
+  if (caseMatch) { ctx.caseId = caseMatch[1]; ctx.label = hi ? `प्रकरण ${caseMatch[1]}` : `Case ${caseMatch[1]}`; }
   if (path.startsWith('/hotspots')) {
     // The map selection lives in ?sel=; the level follows from the id prefix. The server
     // re-checks that the area is inside the user's scope before using it.
     const sel = sp.get('sel');
     const level = sel ? ({ DST: 'district', BLK: 'block', CLU: 'cluster', SCH: 'school' } as Record<string, string>)[sel.slice(0, 3)] : undefined;
-    if (sel && level) { ctx.area = { level, id: sel }; ctx.label = `Selected ${level} ${sel}`; }
-    else ctx.label = 'Learning hotspots';
+    const levelHi: Record<string, string> = { district: 'ज़िला', block: 'खंड', cluster: 'संकुल', school: 'विद्यालय' };
+    if (sel && level) { ctx.area = { level, id: sel }; ctx.label = hi ? `चुना गया ${levelHi[level]} ${sel}` : `Selected ${level} ${sel}`; }
+    else ctx.label = hi ? 'अधिगम हॉटस्पॉट' : 'Learning hotspots';
   }
   const rep = path.match(/^\/reports\/(RPT-\d{5})/);
-  if (rep) { ctx.reportId = rep[1]; ctx.label = `Report ${rep[1]}`; }
+  if (rep) { ctx.reportId = rep[1]; ctx.label = hi ? `रिपोर्ट ${rep[1]}` : `Report ${rep[1]}`; }
   if (!ctx.label) ctx.label = undefined;
   return ctx;
 }
 
-const STARTERS_FOR = (ctx: ChatContext): string[] =>
-  ctx.caseId ? ['Explain this case in simple terms', 'What is missing before this case can close?', 'Why was this intervention selected, and what are the alternatives?', 'Have similar cases worked before?']
+const STARTERS_FOR = (ctx: ChatContext, lang: Lang): string[] => lang === 'hi'
+  ? (ctx.caseId ? ['इस प्रकरण को सरल शब्दों में समझाएँ', 'यह प्रकरण बंद होने से पहले क्या बाकी है?', 'यह हस्तक्षेप क्यों चुना गया, और विकल्प क्या हैं?', 'क्या ऐसे प्रकरणों में पहले सुधार हुआ है?']
+    : ctx.area ? ['इस क्षेत्र में अधिगम क्यों गिर रहा है?', 'यहाँ किन विद्यालयों का सबसे अधिक योगदान है?', 'क्या इस क्षेत्र के प्रकरण खुले हैं?']
+    : ctx.reportId ? ['इस रिपोर्ट का सार बताएँ', 'यह रिपोर्ट किन निर्णयों की माँग करती है?']
+    : ['इस सप्ताह किसे प्राथमिकता दूँ?', 'किन प्रकरणों को मेरी स्वीकृति चाहिए?', 'काम विलंबित क्यों हैं, और क्या रुकावट है?', 'कल की समीक्षा बैठक का एजेंडा बनाएँ'])
+  : ctx.caseId ? ['Explain this case in simple terms', 'What is missing before this case can close?', 'Why was this intervention selected, and what are the alternatives?', 'Have similar cases worked before?']
   : ctx.area ? ['Why is learning falling in this area?', 'Which schools contribute most here?', 'Are there open cases for this area?']
   : ctx.reportId ? ['Summarise this report', 'What decisions does this report call for?']
   : ['What should I prioritise this week?', 'Which cases need my approval?', 'Why are tasks overdue, and what is blocking them?', 'Prepare an agenda for tomorrow’s review meeting'];
 
-export function AssistantDrawer({ configured, userKey, label = 'Ask Claude', hint = 'Ask Claude about this page' }: { configured: boolean; userKey?: string; label?: string; hint?: string }) {
+export function AssistantDrawer({ configured, userKey, label = 'Ask Claude', hint = 'Ask Claude about this page', lang = 'en' }: { configured: boolean; userKey?: string; label?: string; hint?: string; lang?: Lang }) {
   const [open, setOpen] = useState(false);
   const [ask, setAsk] = useState<{ q: string; n: number } | undefined>();
   const path = usePathname();
-  const ctx = useChatContext();
+  const ctx = useChatContext(lang);
+  const t = (en: string, hi: string) => (lang === 'hi' ? hi : en);
   useEffect(() => {
     const onAsk = (e: Event) => {
       const q = (e as CustomEvent<string>).detail;
@@ -459,15 +520,15 @@ export function AssistantDrawer({ configured, userKey, label = 'Ask Claude', hin
         <header className="flex items-center justify-between border-b border-line bg-white px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white"><Icon name="sparkles" size={16} /></span>
-            <div><p className="text-base font-semibold text-ink">Claude</p><p className="text-xs text-ink-faint">Reads only the records you can see</p></div>
+            <div><p className="text-base font-semibold text-ink">Claude</p><p className="text-xs text-ink-faint">{t('Reads only the records you can see', 'केवल वही अभिलेख पढ़ता है जो आप देख सकते हैं')}</p></div>
           </div>
           <div className="flex items-center gap-1">
-            <Link href="/assistant" className="btn-ghost btn-sm" title="Open full page"><Icon name="arrow-up-right" size={15} /></Link>
-            <SheetClose className="btn-ghost btn-sm" aria-label="Close"><Icon name="x" size={17} /></SheetClose>
+            <Link href="/assistant" className="btn-ghost btn-sm" title={t('Open full page', 'पूरा पृष्ठ खोलें')}><Icon name="arrow-up-right" size={15} /></Link>
+            <SheetClose className="btn-ghost btn-sm" aria-label={t('Close', 'बंद करें')}><Icon name="x" size={17} /></SheetClose>
           </div>
         </header>
         <div className="min-h-0 flex-1 px-4 pb-3 pt-3">
-          <ChatPanel compact context={ctx} starters={STARTERS_FOR(ctx)} configured={configured} userKey={userKey} ask={ask} />
+          <ChatPanel compact context={ctx} starters={STARTERS_FOR(ctx, lang)} configured={configured} userKey={userKey} ask={ask} lang={lang} />
         </div>
       </SheetContent>
     </Sheet>

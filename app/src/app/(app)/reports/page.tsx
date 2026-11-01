@@ -10,7 +10,8 @@ import { Pill, AiDrafted } from '@/components/labels';
 import { FilterChips } from '@/components/lists';
 import { Icon } from '@/components/Icon';
 import { REPORT_TYPES } from '@/lib/reports';
-import { REPORT_ICON } from '@/components/ReportsRail';
+import { REPORT_ICON, REPORT_HI } from '@/components/ReportsRail';
+import { reportText } from '@/components/report-text';
 
 /** Generated reports: action-taken reports, review packs, escalations and briefs. */
 
@@ -44,6 +45,7 @@ export default async function ReportsPage({
   const q = (sp.q ?? '').trim().toLowerCase().slice(0, 80);
   const reports = listReports(session, { type: sp.type || undefined, limit: q ? 600 : 120 }).filter((r) => !q || r.title.toLowerCase().includes(q) || r.id.toLowerCase().includes(q)).slice(0, 120);
   const users = userNames(reports.map((r) => r.generated_by));
+  const tx = reportText(lang);
 
   return (
     <div>
@@ -54,8 +56,8 @@ export default async function ReportsPage({
           'Built from the case ledger, so a report cannot say something the records do not.',
           'प्रकरण-पंजी से बनी, अतः रिपोर्ट वह नहीं कह सकती जो रिकॉर्ड में नहीं है।',
         )}
-        meta={<>{scopeName(session.scope_type, session.scope_id)} · {Object.values(counts).reduce((a, b) => a + b, 0)} saved</>}
-        right={<div className="flex gap-2"><Link href="/impact" className="btn-quiet"><Icon name="target" size={15} />Outcome verification</Link><Link href="/reports/new" className="btn-primary"><Icon name="plus" size={15} />New report</Link></div>}
+        meta={<>{scopeName(session.scope_type, session.scope_id)} · {Object.values(counts).reduce((a, b) => a + b, 0)} {pick(lang, 'saved', 'सहेजी')}</>}
+        right={<div className="flex gap-2"><Link href="/impact" className="btn-quiet"><Icon name="target" size={15} />{pick(lang, 'Outcome verification', 'परिणाम सत्यापन')}</Link><Link href="/reports/new" className="btn-primary"><Icon name="plus" size={15} />{pick(lang, 'New report', 'नई रिपोर्ट')}</Link></div>}
       />
       {/* Make a report: every kind, as a picture you can pick, instead of a menu down the side. */}
       <section aria-label={pick(lang, 'Make a report', 'रिपोर्ट बनाएँ')}>
@@ -63,11 +65,11 @@ export default async function ReportsPage({
         <ul className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {REPORT_TYPES.map((r, i) => (
             <li key={r.key}>
-              <Link href={`/reports/new?type=${r.key}`} title={r.blurb}
+              <Link href={`/reports/new?type=${r.key}`} title={pick(lang, r.blurb, REPORT_HI[r.key]?.blurb ?? r.blurb)}
                 className="group flex h-full flex-col rounded-2xl border border-line bg-white p-4 transition-colors hover:border-brand/40 hover:bg-brand-light/40">
                 <span className={`grid h-10 w-10 place-items-center rounded-xl ${['bg-brand-light text-brand', 'bg-good-light text-good', 'bg-crit-light text-crit', 'bg-amber-light text-warn'][i % 4]}`}><Icon name={REPORT_ICON[r.key] ?? 'file'} size={19} /></span>
-                <span className="mt-3 text-sm font-semibold leading-snug text-ink group-hover:text-brand">{r.label}</span>
-                <span className="mt-1 line-clamp-2 text-xs text-ink-faint">{r.blurb}</span>
+                <span className="mt-3 text-sm font-semibold leading-snug text-ink group-hover:text-brand">{pick(lang, r.label, REPORT_HI[r.key]?.label ?? r.label)}</span>
+                <span className="mt-1 line-clamp-2 text-xs text-ink-faint">{pick(lang, r.blurb, REPORT_HI[r.key]?.blurb ?? r.blurb)}</span>
                 {counts[r.key] ? <span className="tnum mt-auto pt-2 text-2xs text-ink-soft">{counts[r.key]} {pick(lang, 'saved', 'सहेजी')}</span> : null}
               </Link>
             </li>
@@ -80,7 +82,7 @@ export default async function ReportsPage({
         <form method="get" action="/reports" className="relative">
           {sp.type ? <input type="hidden" name="type" value={sp.type} /> : null}
           <Icon name="search" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
-          <input type="search" name="q" defaultValue={sp.q ?? ''} placeholder="Search report titles or ids" aria-label="Search reports" className="input h-9 w-64 pl-9 text-sm" />
+          <input type="search" name="q" defaultValue={sp.q ?? ''} placeholder={pick(lang, 'Search report titles or ids', 'रिपोर्ट का शीर्षक या आईडी खोजें')} aria-label={pick(lang, 'Search reports', 'रिपोर्ट खोजें')} className="input h-9 w-64 pl-9 text-sm" />
         </form>
         <FilterChips
           base="/reports" param="type" current={sp.type} lang={lang}
@@ -104,16 +106,16 @@ export default async function ReportsPage({
                 <span className="truncate">{pick(lang, TYPE_LABEL[r.report_type]?.en ?? REPORT_TYPES.find((x) => x.key === r.report_type)?.label ?? r.report_type, TYPE_LABEL[r.report_type]?.hi ?? r.report_type)}</span>
                 <span className="ml-auto font-mono">{r.id}</span>
               </span>
-              <Link href={`/reports/${r.id}`} className="mt-2 line-clamp-2 text-md font-semibold leading-snug text-ink hover:text-brand">{r.title}</Link>
+              <Link href={`/reports/${r.id}`} className="mt-2 line-clamp-2 text-md font-semibold leading-snug text-ink hover:text-brand">{tx(r.title)}</Link>
               <span className="mt-1 text-xs text-ink-soft">{scopeName(r.scope_type, r.scope_id)} · <span className="tnum">{r.period_start} → {r.period_end}</span></span>
               <span className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
                 <Pill>{r.case_ids.length} {pick(lang, 'cases', 'प्रकरण')}</Pill>
                 {r.narrative_model ? <AiDrafted lang={lang} model={r.narrative_model} /> : null}
               </span>
               <span className="mt-auto flex items-center gap-2 border-t border-line pt-3 text-xs">
-                <span className="min-w-0 truncate text-ink-faint"><span className="tnum">{fmtDate(r.generated_at)}</span> · {users.get(r.generated_by) ?? r.generated_by}</span>
-                <a href={`/api/reports/${r.id}/export?format=xlsx`} className="btn-ghost btn-sm ml-auto" title="Download Excel"><Icon name="download" size={14} />XLSX</a>
-                <a href={`/api/reports/${r.id}/export?format=csv`} className="btn-ghost btn-sm" title="Download CSV">CSV</a>
+                <span className="min-w-0 truncate text-ink-faint"><span className="tnum">{fmtDate(r.generated_at, false, lang)}</span> · {users.get(r.generated_by) ?? r.generated_by}</span>
+                <a href={`/api/reports/${r.id}/export?format=xlsx`} className="btn-ghost btn-sm ml-auto" title={pick(lang, 'Download Excel', 'एक्सेल डाउनलोड करें')}><Icon name="download" size={14} />XLSX</a>
+                <a href={`/api/reports/${r.id}/export?format=csv`} className="btn-ghost btn-sm" title={pick(lang, 'Download CSV', 'CSV डाउनलोड करें')}>CSV</a>
               </span>
             </li>
           ))}

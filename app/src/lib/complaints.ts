@@ -44,6 +44,30 @@ export const STATUS_HI: Record<string, string> = {
 };
 export const OPEN_STATUSES = Object.entries(STATUS).filter(([, v]) => v.open).map(([k]) => k);
 
+/** Complaint categories in Hindi (the table holds the English), by key. */
+export const CATEGORY_HI: Record<string, { label: string; description: string }> = {
+  material_shortage: { label: 'शिक्षण सामग्री की कमी', description: 'किट, कार्यपुस्तिकाएँ या पठन सामग्री उपलब्ध नहीं।' },
+  teacher_availability: { label: 'शिक्षक उपलब्धता', description: 'पद खाली है, शिक्षक कहीं और प्रतिनियुक्त है, या लंबे समय से अनुपस्थित है।' },
+  infrastructure: { label: 'अवसंरचना की समस्या', description: 'कक्षाएँ, शौचालय, पानी या बिजली। सीधे खंड कार्यालय को, जिसके पास बजट है।' },
+  academic_support_delay: { label: 'शैक्षिक सहयोग में देरी', description: 'वादा किए गए सहयोग भ्रमण या शैक्षिक सहायता नहीं हुई।' },
+  training_requirement: { label: 'प्रशिक्षण की आवश्यकता', description: 'किसी गतिविधि से पहले शिक्षकों को प्रशिक्षण चाहिए।' },
+  assessment_issue: { label: 'आकलन की समस्या', description: 'आकलन दौर के संचालन या दर्ज करने में गड़बड़ी।' },
+  resource_allocation: { label: 'संसाधन आवंटन', description: 'विद्यालयों या संकुलों में धन या कर्मचारी असमान बँटे।' },
+  administrative_delay: { label: 'प्रशासनिक देरी', description: 'कोई स्वीकृति या निर्णय लंबित है।' },
+  conduct: { label: 'अधिकारी का आचरण', description: 'किसी अधिकारी पर आरोप। हमेशा गोपनीय; संबंधित व्यक्ति को छोड़कर भेजा जाता है।' },
+  other: { label: 'अन्य', description: 'कुछ और।' },
+};
+export const categoryLabel = (key: string, en: string | undefined, lang: 'en' | 'hi' = 'en'): string =>
+  (lang === 'hi' ? CATEGORY_HI[key]?.label : undefined) ?? en ?? key;
+
+/** The complaint actions in Hindi, by their English label. */
+export const ACTION_HI: Record<string, string> = {
+  'Acknowledge': 'पावती दें', 'Request information': 'जानकारी माँगें', 'Reject with reason': 'कारण सहित अस्वीकार करें',
+  'Start investigation': 'जाँच शुरू करें', 'Propose resolution': 'समाधान प्रस्तावित करें', 'Ask the complainant to verify': 'शिकायतकर्ता से पुष्टि माँगें',
+  'Confirm it is resolved': 'पुष्टि करें कि हल हो गई', 'Not resolved — reopen': 'हल नहीं हुई — फिर खोलें', 'Close': 'बंद करें', 'Reopen': 'फिर खोलें',
+  'Appeal — reopen': 'अपील — फिर खोलें', 'Resume investigation': 'जाँच फिर शुरू करें', 'Send the information': 'जानकारी भेजें', 'Investigate again': 'फिर से जाँच करें',
+};
+
 /** Who may do what from which status. 'assignee' = current authority; 'reporter' = complainant. */
 type Actor = 'assignee' | 'reporter';
 const T: Record<string, { action: string; label: string; to: string; by: Actor; needsNote?: boolean }[]> = {

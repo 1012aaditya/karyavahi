@@ -62,8 +62,8 @@ const KIND_ICON: Record<ProgressItem['kind'], { icon: string; cls: string }> = {
   reopened: { icon: 'refresh', cls: 'text-warn' }, verified: { icon: 'target', cls: 'text-good' }, resolved: { icon: 'check', cls: 'text-good' }, other: { icon: 'activity', cls: 'text-ink-faint' },
 };
 
-export function ProgressTimeline({ items }: { items: ProgressItem[] }) {
-  if (items.length === 0) return <p className="px-5 py-6 text-sm text-ink-faint">No recent progress.</p>;
+export function ProgressTimeline({ items, lang = 'en' }: { items: ProgressItem[]; lang?: 'en' | 'hi' }) {
+  if (items.length === 0) return <p className="px-5 py-6 text-sm text-ink-faint">{lang === 'hi' ? 'हाल में कोई प्रगति नहीं।' : 'No recent progress.'}</p>;
   return (
     <ol className="grid gap-x-8 px-5 py-2 sm:grid-cols-2">
       {items.map((a) => (
@@ -71,7 +71,7 @@ export function ProgressTimeline({ items }: { items: ProgressItem[] }) {
           <Icon name={KIND_ICON[a.kind].icon} size={15} className={`mt-0.5 ${KIND_ICON[a.kind].cls}`} />
           <div className="min-w-0">
             <Link href={a.href} className="block truncate text-sm text-ink hover:text-brand">{a.text}</Link>
-            <p className="text-xs text-ink-faint">{fmtDate(a.ts, true)}</p>
+            <p className="text-xs text-ink-faint">{fmtDate(a.ts, true, lang)}</p>
           </div>
         </li>
       ))}

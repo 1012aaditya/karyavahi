@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Map as MLMap, Marker, MapLayerMouseEvent, ExpressionSpecification } from 'maplibre-gl';
-import { SEVERITY_COLORS, SEVERITY_LABEL } from '@/lib/maplayers';
+import { SEVERITY_COLORS, severityLabel } from '@/lib/maplayers';
 import { PALETTE } from '@/lib/tokens';
 import { Icon } from './Icon';
 import { loadGoogleMaps, onKeyRefused, GoogleMapView, type Refusal } from './google-map-view';
@@ -43,10 +43,14 @@ export const STATUS_LAYERS = [
   { key: 'improving', label: 'Improving areas', hi: 'सुधरते क्षेत्र', sev: ['improving'], color: SEVERITY_COLORS.improving },
 ] as const;
 export const OVERLAYS = [
-  { key: 'complaints', label: 'Open complaints', prop: 'complaints', icon: 'inbox', cls: 'bg-pend text-white' },
-  { key: 'overdue', label: 'Overdue actions', prop: 'overdue', icon: 'clock', cls: 'bg-amber text-ink' },
-  { key: 'cases', label: 'Active cases', prop: 'openCases', icon: 'briefcase', cls: 'bg-navy text-white' },
+  { key: 'complaints', label: 'Open complaints', hi: 'खुली शिकायतें', prop: 'complaints', icon: 'inbox', cls: 'bg-pend text-white' },
+  { key: 'overdue', label: 'Overdue actions', hi: 'विलंबित काम', prop: 'overdue', icon: 'clock', cls: 'bg-amber text-ink' },
+  { key: 'cases', label: 'Active cases', hi: 'सक्रिय प्रकरण', prop: 'openCases', icon: 'briefcase', cls: 'bg-navy text-white' },
 ] as const;
+/** The one-letter badge of an overlay; in Hindi, the first letter of its Hindi word. */
+const badgeLetter = (key: string, lang: 'en' | 'hi') => (lang === 'hi'
+  ? (key === 'complaints' ? 'शि' : key === 'overdue' ? 'वि' : 'प्र')
+  : (key === 'complaints' ? 'C' : key === 'overdue' ? 'O' : 'A'));
 const DEFAULT_LAYERS = ['critical', 'decline', 'stable', 'improving'];
 
 /**
@@ -55,17 +59,17 @@ const DEFAULT_LAYERS = ['critical', 'decline', 'stable', 'improving'];
  * larger area by the share of its schools in a serious condition.
  */
 export const COLOUR_BY = [
-  { key: 'learning', prop: 'severity', label: 'Learning change', hint: 'Against the district, between two assessment rounds.' },
-  { key: 'teachers', prop: 'teacherLevel', label: 'Teacher shortage', hint: 'Sanctioned posts not filled, or a teacher who left without a replacement.' },
-  { key: 'visits', prop: 'visitLevel', label: 'Visit gaps', hint: 'Days since anyone from the cluster or block visited.' },
-  { key: 'attendance', prop: 'attendanceLevel', label: 'Attendance trend', hint: 'Average attendance in the last 3 months against the 3 before.' },
+  { key: 'learning', prop: 'severity', label: 'Learning change', hint: 'Against the district, between two assessment rounds.', hi: 'अधिगम में बदलाव', hintHi: 'दो आकलन दौरों के बीच, ज़िले की तुलना में।' },
+  { key: 'teachers', prop: 'teacherLevel', label: 'Teacher shortage', hint: 'Sanctioned posts not filled, or a teacher who left without a replacement.', hi: 'शिक्षकों की कमी', hintHi: 'स्वीकृत पद खाली, या कोई शिक्षक गया और उसकी जगह कोई नहीं आया।' },
+  { key: 'visits', prop: 'visitLevel', label: 'Visit gaps', hint: 'Days since anyone from the cluster or block visited.', hi: 'भ्रमण में अंतराल', hintHi: 'संकुल या खंड से आखिरी भ्रमण के बाद बीते दिन।' },
+  { key: 'attendance', prop: 'attendanceLevel', label: 'Attendance trend', hint: 'Average attendance in the last 3 months against the 3 before.', hi: 'उपस्थिति का रुझान', hintHi: 'पिछले 3 महीनों की औसत उपस्थिति, उससे पहले के 3 महीनों से तुलना।' },
 ] as const;
 export type ColourBy = (typeof COLOUR_BY)[number]['key'];
 /** The four steps of the "right now" scales, worst first, with what each means for one school. */
-const NOW_STEPS: Record<Exclude<ColourBy, 'learning'>, [string, string][]> = {
-  teachers: [['critical', '2+ posts empty, or half'], ['significant', '1 post empty'], ['moderate', 'A teacher left, not replaced'], ['stable', 'Fully staffed']],
-  visits: [['critical', 'Over 90 days, or never'], ['significant', '61–90 days'], ['moderate', '31–60 days'], ['stable', '30 days or less']],
-  attendance: [['critical', 'Down 10+ points'], ['significant', 'Down 5–10 points'], ['moderate', 'Down 2–5 points'], ['stable', 'Steady or rising']],
+const NOW_STEPS: Record<Exclude<ColourBy, 'learning'>, [string, string, string][]> = {
+  teachers: [['critical', '2+ posts empty, or half', '2+ पद खाली, या आधे'], ['significant', '1 post empty', '1 पद खाली'], ['moderate', 'A teacher left, not replaced', 'शिक्षक गया, जगह खाली'], ['stable', 'Fully staffed', 'पूरा स्टाफ़']],
+  visits: [['critical', 'Over 90 days, or never', '90 दिन से अधिक, या कभी नहीं'], ['significant', '61–90 days', '61–90 दिन'], ['moderate', '31–60 days', '31–60 दिन'], ['stable', '30 days or less', '30 दिन या कम']],
+  attendance: [['critical', 'Down 10+ points', '10+ अंक नीचे'], ['significant', 'Down 5–10 points', '5–10 अंक नीचे'], ['moderate', 'Down 2–5 points', '2–5 अंक नीचे'], ['stable', 'Steady or rising', 'स्थिर या बढ़ती']],
 };
 /** "Fine" reads better in green than in the grey the learning scale uses for "stable". */
 const NOW_COLOUR: Record<string, string> = {
@@ -97,23 +101,25 @@ function fillExpr(active: Set<string>, by: ColourBy = 'learning'): ExpressionSpe
 }
 
 /** The figure written on an area or beside a school for the current colouring. */
-function figureOf(p: Record<string, unknown>, by: ColourBy, isPoint: boolean): string {
+function figureOf(p: Record<string, unknown>, by: ColourBy, isPoint: boolean, lang: 'en' | 'hi' = 'en'): string {
+  const hi = lang === 'hi';
   if (by === 'learning') {
     const hot = Number(p.hotChildren ?? 0);
-    return p.severity === 'insufficient' ? 'insufficient data' : `${pp(p.relPp)}${hot ? ` · ${hot} hot` : ''}`;
+    return p.severity === 'insufficient' ? (hi ? 'अपर्याप्त डेटा' : 'insufficient data') : `${pp(p.relPp)}${hot ? (hi ? ` · ${hot} हॉट` : ` · ${hot} hot`) : ''}`;
   }
   if (isPoint) {
-    if (by === 'teachers') return Number(p.teachersShort) > 0 ? `${p.teachersShort} post${Number(p.teachersShort) > 1 ? 's' : ''} empty` : Number(p.netTransfersOut) > 0 ? 'teacher left' : 'staffed';
-    if (by === 'visits') return p.daysSinceVisit === null || p.daysSinceVisit === undefined ? 'never visited' : `${p.daysSinceVisit} days`;
-    return p.attChange === null || p.attChange === undefined ? 'no data' : `${Number(p.attChange) > 0 ? '+' : ''}${Number(p.attChange).toFixed(1)} pts`;
+    if (by === 'teachers') return Number(p.teachersShort) > 0 ? (hi ? `${p.teachersShort} पद खाली` : `${p.teachersShort} post${Number(p.teachersShort) > 1 ? 's' : ''} empty`) : Number(p.netTransfersOut) > 0 ? (hi ? 'शिक्षक गया' : 'teacher left') : (hi ? 'पूरा स्टाफ़' : 'staffed');
+    if (by === 'visits') return p.daysSinceVisit === null || p.daysSinceVisit === undefined ? (hi ? 'कभी भ्रमण नहीं' : 'never visited') : `${p.daysSinceVisit} ${hi ? 'दिन' : 'days'}`;
+    return p.attChange === null || p.attChange === undefined ? (hi ? 'डेटा नहीं' : 'no data') : `${Number(p.attChange) > 0 ? '+' : ''}${Number(p.attChange).toFixed(1)} ${hi ? 'अंक' : 'pts'}`;
   }
   const n = by === 'teachers' ? p.schoolsShort : by === 'visits' ? p.schoolsUnvisited : p.schoolsAttendanceDown;
   if (p.schoolsCounted === undefined) return '';
-  return `${Number(n ?? 0)} of ${Number(p.schoolsCounted)} schools`;
+  return hi ? `${Number(p.schoolsCounted)} में से ${Number(n ?? 0)} विद्यालय` : `${Number(n ?? 0)} of ${Number(p.schoolsCounted)} schools`;
 }
 
 /** A label element: name (when there is room), the figure, and any overlay badges. */
-function labelEl(p: Record<string, unknown>, o: { isPoint: boolean; isSel: boolean; many: boolean; by: ColourBy; layers: Set<string> }): HTMLElement | null {
+function labelEl(p: Record<string, unknown>, o: { isPoint: boolean; isSel: boolean; many: boolean; by: ColourBy; layers: Set<string>; lang?: 'en' | 'hi' }): HTMLElement | null {
+  const lang = o.lang ?? 'en';
   if (Number(p.noData)) return null;
   const el = document.createElement('div');
   el.className = `pointer-events-none select-none rounded-md text-center leading-tight ${o.isSel ? 'bg-navy text-white shadow' : 'bg-white/90 text-ink'}`;
@@ -121,7 +127,7 @@ function labelEl(p: Record<string, unknown>, o: { isPoint: boolean; isSel: boole
   if (!o.many || o.isSel) { const n = document.createElement('div'); n.style.fontWeight = '600'; n.textContent = String(p.name); el.appendChild(n); }
   const v = document.createElement('div');
   v.style.fontVariantNumeric = 'tabular-nums';
-  v.textContent = figureOf(p, o.by, o.isPoint);
+  v.textContent = figureOf(p, o.by, o.isPoint, lang);
   if (v.textContent) el.appendChild(v);
   const badges = OVERLAYS.filter((b) => o.layers.has(b.key) && Number(p[b.prop] ?? 0) > 0);
   if (badges.length) {
@@ -131,8 +137,8 @@ function labelEl(p: Record<string, unknown>, o: { isPoint: boolean; isSel: boole
       const s = document.createElement('span');
       s.className = `${b.cls} rounded-full`;
       s.style.cssText = 'font-size:10px;padding:0 5px;font-weight:600';
-      s.textContent = `${b.key === 'complaints' ? 'C' : b.key === 'overdue' ? 'O' : 'A'} ${Number(p[b.prop])}`;
-      s.title = `${Number(p[b.prop])} ${b.label.toLowerCase()}`;
+      s.textContent = `${badgeLetter(b.key, lang)} ${Number(p[b.prop])}`;
+      s.title = `${Number(p[b.prop])} ${lang === 'hi' ? b.hi : b.label.toLowerCase()}`;
       row.appendChild(s);
     }
     el.appendChild(row);
@@ -154,6 +160,13 @@ function hatchImage(): { width: number; height: number; data: Uint8Array } {
 }
 
 export const LEVEL_NAME: Record<string, string> = { state: 'State', district: 'District', city: 'City', block: 'Block', cluster: 'Cluster', school: 'School' };
+export const LEVEL_NAME_HI: Record<string, string> = { state: 'राज्य', district: 'ज़िला', city: 'शहर', block: 'खंड', cluster: 'संकुल', school: 'विद्यालय' };
+/** A level's name, one or many, in the page language. */
+export const levelName = (level: string, lang: 'en' | 'hi' = 'en', many = false): string => {
+  if (lang === 'hi') return many && level === 'district' ? 'ज़िले' : LEVEL_NAME_HI[level] ?? level;
+  const n = LEVEL_NAME[level] ?? level;
+  return many ? `${n}s` : n;
+};
 const pp = (v: unknown) => (v === null || v === undefined ? '—' : `${Number(v) > 0 ? '+' : Number(v) < 0 ? '−' : ''}${Math.abs(Number(v)).toFixed(1)} pp`);
 
 function Popover({ label, icon, children, open, setOpen }: { label: string; icon: string; children: React.ReactNode; open: boolean; setOpen: (v: boolean) => void }) {
@@ -170,7 +183,7 @@ function Popover({ label, icon, children, open, setOpen }: { label: string; icon
 export function GeoMap({ height = 560, compact = false, selectedId: selectedProp = null, basePath = '/hotspots', onData, rounds = [], competencies = [], lang = 'en', basemap = 'plain', bare = false, reserve }: {
   height?: number | string; compact?: boolean; selectedId?: string | null; basePath?: string;
   onData?: (d: MapPayload | null) => void; rounds?: { id: string; label: string }[]; competencies?: { id: string; label: string }[];
-  /** The compact map's own words (legend, loading, footnote) follow this; the full workspace is English for now. */
+  /** The map's own words (legend, tools, labels, loading, footnote) follow this. */
   lang?: 'en' | 'hi';
   /** 'auto' draws a compact map on Google Maps too, when a key is set (the home page does). */
   basemap?: 'auto' | 'plain';
@@ -237,10 +250,10 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
       if (workspace) for (const k of ['grade', 'comp', 'subject', 'round']) { const v = sp.get(k); if (v) qs.set(k, v); }
       const r = await fetch(`/api/geo/map?${qs}`, { cache: 'no-store' });
       const j = await r.json();
-      if (!r.ok) { setError(j.error ?? 'The map could not be loaded.'); setData(null); onData?.(null); return; }
+      if (!r.ok) { setError(L('The map could not be loaded.', 'नक्शा लोड नहीं हो सका।')); setData(null); onData?.(null); return; }
       setData(j); onData?.(j);
     } catch {
-      setError('Could not reach the server for map data.');
+      setError(L('Could not reach the server for map data.', 'नक्शे के डेटा के लिए सर्वर तक नहीं पहुँच सके।'));
     } finally { setLoading(false); }
   }, [parent, hierarchy, filterKey, workspace]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { void load(); }, [load]);
@@ -265,7 +278,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
         map.addControl(new lib.NavigationControl({ showCompass: false }), 'top-right');
         map.addControl(new lib.AttributionControl({ compact: true, customAttribution: 'MapLibre' }), 'bottom-right');
         map.touchZoomRotate.disableRotation();
-        map.on('error', (e) => { if (String(e?.error?.message ?? '').includes('WebGL')) setMapError('This browser cannot draw the interactive map (WebGL unavailable).'); });
+        map.on('error', (e) => { if (String(e?.error?.message ?? '').includes('WebGL')) setMapError(L('This browser cannot draw the interactive map (WebGL unavailable).', 'यह ब्राउज़र इंटरैक्टिव नक्शा नहीं बना सकता (WebGL उपलब्ध नहीं)।')); });
         map.on('load', () => {
           if (cancelled) return;
           map.addImage('hatch', hatchImage());
@@ -378,7 +391,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
       const lon = isPoint ? (f.geometry as import('geojson').Point).coordinates[0] : Number(p.lon);
       const lat = isPoint ? (f.geometry as import('geojson').Point).coordinates[1] : Number(p.lat);
       if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
-      const el = labelEl(p, { isPoint, isSel: p.id === selectedId, many, by, layers });
+      const el = labelEl(p, { isPoint, isSel: p.id === selectedId, many, by, layers, lang });
       if (!el) continue;
       // MapLibre positions a marker with its own transform, so a school's label is lifted above
       // its dot with the marker's offset rather than a transform of ours (which would be lost).
@@ -410,7 +423,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
     v.draw(data.features, data.outline, {
       colourOf: (p) => colourOf(p, layers, by),
       faint: (p) => Number(p.noData) === 1,
-      labelOf: (p, isPoint) => labelEl(p, { isPoint, isSel: p.id === selectedId, many, by, layers }),
+      labelOf: (p, isPoint) => labelEl(p, { isPoint, isSel: p.id === selectedId, many, by, layers, lang }),
       dotSize, selectedId: selectedId ?? null, ink: PALETTE.ink.DEFAULT,
     });
   }, [useGoogle, ready, data, layersKey, by, selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -431,47 +444,47 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
     <div className={bare ? 'h-full' : compact ? 'space-y-2' : ''}>
       <div className={`relative overflow-hidden bg-map ${bare ? '' : 'rounded-xl border border-line'}`} style={{ height }}>
         {/* MapLibre forces position:relative on its container, so the sizing lives on a wrapper. */}
-        <div className="absolute inset-0"><div ref={box} className="h-full w-full" role="application" aria-label={`Map of ${data?.parent.name ?? 'your area'}`} /></div>
+        <div className="absolute inset-0"><div ref={box} className="h-full w-full" role="application" aria-label={L(`Map of ${data?.parent.name ?? 'your area'}`, `${data?.parent.name ?? 'आपके क्षेत्र'} का नक्शा`)} /></div>
 
         {workspace ? (
-          <div className="absolute left-3 top-3 z-20 flex flex-wrap items-center gap-0.5 rounded-lg border border-line bg-white/95 p-1 shadow-lift backdrop-blur" role="toolbar" aria-label="Map tools">
-            <Popover label="Layers" icon="layers" open={pop === 'layers'} setOpen={(v) => setPop(v ? 'layers' : null)}>
-              <p className="mb-1.5 text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">Colour areas by</p>
+          <div className="absolute left-3 top-3 z-20 flex flex-wrap items-center gap-0.5 rounded-lg border border-line bg-white/95 p-1 shadow-lift backdrop-blur" role="toolbar" aria-label={L('Map tools', 'नक्शा उपकरण')}>
+            <Popover label={L('Layers', 'परतें')} icon="layers" open={pop === 'layers'} setOpen={(v) => setPop(v ? 'layers' : null)}>
+              <p className="mb-1.5 text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{L('Colour areas by', 'क्षेत्रों का रंग')}</p>
               {COLOUR_BY.map((c) => (
                 <label key={c.key} className="flex cursor-pointer items-start gap-2 rounded px-1 py-1 text-sm text-ink hover:bg-paper-sunk">
                   <input type="radio" name="colour-by" checked={by === c.key} onChange={() => push({ by: c.key === 'learning' ? null : c.key })} className="mt-0.5 h-3.5 w-3.5 accent-brand" />
-                  <span><span className="block">{c.label}</span><span className="block text-2xs leading-snug text-ink-faint">{c.hint}</span></span>
+                  <span><span className="block">{L(c.label, c.hi)}</span><span className="block text-2xs leading-snug text-ink-faint">{L(c.hint, c.hintHi)}</span></span>
                 </label>
               ))}
-              <p className="mb-1.5 mt-3 text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">Learning status</p>
+              <p className="mb-1.5 mt-3 text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{L('Learning status', 'अधिगम स्थिति')}</p>
               {STATUS_LAYERS.map((l) => (
                 <label key={l.key} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-ink hover:bg-paper-sunk">
                   <input type="checkbox" checked={layers.has(l.key)} onChange={() => toggleLayer(l.key)} className="h-3.5 w-3.5 accent-brand" />
-                  <span className="h-3 w-3 rounded-sm border border-line" style={{ background: l.color }} />{l.label}
+                  <span className="h-3 w-3 rounded-sm border border-line" style={{ background: l.color }} />{L(l.label, l.hi)}
                 </label>
               ))}
-              <p className="mb-1.5 mt-3 text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">Overlays</p>
+              <p className="mb-1.5 mt-3 text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{L('Overlays', 'ऊपर दिखाएँ')}</p>
               {OVERLAYS.map((o) => (
                 <label key={o.key} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-ink hover:bg-paper-sunk">
                   <input type="checkbox" checked={layers.has(o.key)} onChange={() => toggleLayer(o.key)} className="h-3.5 w-3.5 accent-brand" />
-                  <span className={`rounded-full px-1.5 text-2xs font-semibold ${o.cls}`}>{o.key === 'complaints' ? 'C' : o.key === 'overdue' ? 'O' : 'A'}</span>{o.label}
+                  <span className={`rounded-full px-1.5 text-2xs font-semibold ${o.cls}`}>{badgeLetter(o.key, lang)}</span>{L(o.label, o.hi)}
                 </label>
               ))}
-              <p className="mt-2 text-2xs leading-snug text-ink-faint">Areas with too few students are always hatched — unknown, not stable.</p>
+              <p className="mt-2 text-2xs leading-snug text-ink-faint">{L('Areas with too few students are always hatched — unknown, not stable.', 'बहुत कम विद्यार्थियों वाले क्षेत्र हमेशा धारीदार दिखते हैं — स्थिति अज्ञात, स्थिर नहीं।')}</p>
             </Popover>
-            <Popover label="Filters" icon="filter" open={pop === 'filters'} setOpen={(v) => setPop(v ? 'filters' : null)}>
+            <Popover label={L('Filters', 'छाँटें')} icon="filter" open={pop === 'filters'} setOpen={(v) => setPop(v ? 'filters' : null)}>
               <div className="space-y-2">
-                <label className="block text-xs text-ink-soft">Class<select className={sel} value={sp.get('grade') ?? ''} onChange={(e) => setFilter('grade', e.target.value)}><option value="">All classes</option><option value="1">Class 1</option><option value="2">Class 2</option><option value="3">Class 3</option></select></label>
-                <label className="block text-xs text-ink-soft">Subject<select className={sel} value={sp.get('subject') ?? ''} onChange={(e) => setFilter('subject', e.target.value)}><option value="">Both</option><option value="N">Numeracy</option><option value="L">Literacy</option></select></label>
-                <label className="block text-xs text-ink-soft">Competency<select className={sel} value={sp.get('comp') ?? ''} onChange={(e) => setFilter('comp', e.target.value)}><option value="">All</option>{competencies.filter((c) => !sp.get('subject') || c.id.startsWith(`CMP-${sp.get('subject')}`)).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>
-                <label className="block text-xs text-ink-soft">Assessment period<select className={sel} value={sp.get('round') ?? ''} onChange={(e) => setFilter('round', e.target.value)}><option value="">Latest</option>{rounds.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select></label>
-                {filterKey !== 'grade=&comp=&subject=&round=' ? <button type="button" onClick={() => push({ grade: null, comp: null, subject: null, round: null })} className="text-xs font-medium text-brand hover:underline">Clear filters</button> : null}
+                <label className="block text-xs text-ink-soft">{L('Class', 'कक्षा')}<select className={sel} value={sp.get('grade') ?? ''} onChange={(e) => setFilter('grade', e.target.value)}><option value="">{L('All classes', 'सभी कक्षाएँ')}</option><option value="1">{L('Class 1', 'कक्षा 1')}</option><option value="2">{L('Class 2', 'कक्षा 2')}</option><option value="3">{L('Class 3', 'कक्षा 3')}</option></select></label>
+                <label className="block text-xs text-ink-soft">{L('Subject', 'विषय')}<select className={sel} value={sp.get('subject') ?? ''} onChange={(e) => setFilter('subject', e.target.value)}><option value="">{L('Both', 'दोनों')}</option><option value="N">{L('Numeracy', 'गणित')}</option><option value="L">{L('Literacy', 'भाषा')}</option></select></label>
+                <label className="block text-xs text-ink-soft">{L('Competency', 'दक्षता')}<select className={sel} value={sp.get('comp') ?? ''} onChange={(e) => setFilter('comp', e.target.value)}><option value="">{L('All', 'सभी')}</option>{competencies.filter((c) => !sp.get('subject') || c.id.startsWith(`CMP-${sp.get('subject')}`)).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>
+                <label className="block text-xs text-ink-soft">{L('Assessment period', 'आकलन अवधि')}<select className={sel} value={sp.get('round') ?? ''} onChange={(e) => setFilter('round', e.target.value)}><option value="">{L('Latest', 'नवीनतम')}</option>{rounds.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select></label>
+                {filterKey !== 'grade=&comp=&subject=&round=' ? <button type="button" onClick={() => push({ grade: null, comp: null, subject: null, round: null })} className="text-xs font-medium text-brand hover:underline">{L('Clear filters', 'छँटाई हटाएँ')}</button> : null}
               </div>
             </Popover>
-            <button type="button" onClick={() => setLegend((v) => !v)} aria-pressed={legend} className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium ${legend ? 'bg-paper-deep text-ink' : 'text-ink-soft hover:bg-paper-deep hover:text-ink'}`}><Icon name="info" size={14} /><span className="sr-only sm:not-sr-only">Legend</span></button>
-            <button type="button" onClick={() => { if (!data?.parent.bbox) return; if (gview.current) gview.current.fit(data.parent.bbox, fitPadding()); else mapRef.current?.fitBounds(data.parent.bbox as [number, number, number, number], { padding: 56, duration: 500 }); }} className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-ink-soft hover:bg-paper-deep hover:text-ink"><Icon name="refresh" size={14} /><span className="sr-only sm:not-sr-only">Reset</span></button>
+            <button type="button" onClick={() => setLegend((v) => !v)} aria-pressed={legend} className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium ${legend ? 'bg-paper-deep text-ink' : 'text-ink-soft hover:bg-paper-deep hover:text-ink'}`}><Icon name="info" size={14} /><span className="sr-only sm:not-sr-only">{L('Legend', 'संकेत')}</span></button>
+            <button type="button" onClick={() => { if (!data?.parent.bbox) return; if (gview.current) gview.current.fit(data.parent.bbox, fitPadding()); else mapRef.current?.fitBounds(data.parent.bbox as [number, number, number, number], { padding: 56, duration: 500 }); }} className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-ink-soft hover:bg-paper-deep hover:text-ink"><Icon name="refresh" size={14} /><span className="sr-only sm:not-sr-only">{L('Reset', 'पूरा क्षेत्र')}</span></button>
             <span className="mx-1 h-5 w-px bg-line" aria-hidden />
-            <button type="button" onClick={() => push({ view: 'list' })} className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-ink-soft hover:bg-paper-deep hover:text-ink"><Icon name="list" size={14} /><span className="sr-only sm:not-sr-only">List</span></button>
+            <button type="button" onClick={() => push({ view: 'list' })} className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-ink-soft hover:bg-paper-deep hover:text-ink"><Icon name="list" size={14} /><span className="sr-only sm:not-sr-only">{L('List', 'सूची')}</span></button>
           </div>
         ) : null}
 
@@ -494,17 +507,17 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
         {hover ? (
           <div className="pointer-events-none absolute z-20 w-56 rounded-lg border border-line bg-white p-2.5 text-xs shadow-pop" style={{ left: Math.min(hover.x + 14, (box.current?.clientWidth ?? 600) - 236), top: Math.max(8, hover.y - 10) }}>
             <p className="text-sm font-semibold text-ink">{String(hover.p.name)}</p>
-            <p className="text-2xs text-ink-faint">{LEVEL_NAME[String(hover.p.level)] ?? String(hover.p.level)}</p>
-            {Number(hover.p.noData) ? <p className="mt-1 text-ink-soft">No demo data in this district.</p> : <>
-            <p className="mt-1 flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SEVERITY_COLORS[String(hover.p.severity)] }} />{SEVERITY_LABEL[String(hover.p.severity)]}{hover.p.severity !== 'insufficient' ? ` · ${pp(hover.p.relPp)}` : ''}</p>
+            <p className="text-2xs text-ink-faint">{levelName(String(hover.p.level), lang)}</p>
+            {Number(hover.p.noData) ? <p className="mt-1 text-ink-soft">{L('No demo data in this district.', 'इस ज़िले में डेमो डेटा नहीं।')}</p> : <>
+            <p className="mt-1 flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SEVERITY_COLORS[String(hover.p.severity)] }} />{severityLabel(String(hover.p.severity), lang)}{hover.p.severity !== 'insufficient' ? ` · ${pp(hover.p.relPp)}` : ''}</p>
             <p className="mt-1 text-ink-faint">{L(`${String(hover.p.openCases)} cases · ${String(hover.p.complaints)} complaints · ${String(hover.p.overdue)} overdue`, `${String(hover.p.openCases)} प्रकरण · ${String(hover.p.complaints)} शिकायतें · ${String(hover.p.overdue)} विलंबित`)}</p>
             {hover.p.teacherLevel !== undefined ? (
               <ul className="mt-1.5 space-y-0.5 border-t border-line pt-1.5 text-ink-soft">
                 {hover.p.level === 'school' ? (
                   <>
-                    <li>{L('Teachers', 'शिक्षक')}: {Number(hover.p.teachersSanctioned) - Number(hover.p.teachersShort)} / {String(hover.p.teachersSanctioned)}{Number(hover.p.netTransfersOut) > 0 ? ` · ${String(hover.p.netTransfersOut)} left recently` : ''}</li>
+                    <li>{L('Teachers', 'शिक्षक')}: {Number(hover.p.teachersSanctioned) - Number(hover.p.teachersShort)} / {String(hover.p.teachersSanctioned)}{Number(hover.p.netTransfersOut) > 0 ? L(` · ${String(hover.p.netTransfersOut)} left recently`, ` · हाल में ${String(hover.p.netTransfersOut)} गए`) : ''}</li>
                     <li>{L('Last visit', 'पिछला भ्रमण')}: {hover.p.daysSinceVisit === null ? L('never', 'कभी नहीं') : `${String(hover.p.daysSinceVisit)} ${L('days ago', 'दिन पहले')}`}</li>
-                    <li>{L('Attendance', 'उपस्थिति')}: {hover.p.attChange === null ? '—' : `${Number(hover.p.attChange) > 0 ? '+' : ''}${Number(hover.p.attChange).toFixed(1)} pts, 3 months`}</li>
+                    <li>{L('Attendance', 'उपस्थिति')}: {hover.p.attChange === null ? '—' : `${Number(hover.p.attChange) > 0 ? '+' : ''}${Number(hover.p.attChange).toFixed(1)} ${L('pts, 3 months', 'अंक, 3 महीने')}`}</li>
                   </>
                 ) : (
                   <>
@@ -515,7 +528,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
                 )}
               </ul>
             ) : null}
-            <p className="mt-1 text-2xs text-ink-faint">{compact ? L('Click to open', 'खोलने के लिए क्लिक करें') : `Click to select${Number(hover.p.canDrill) ? ' · double-click to zoom in' : ''}`}</p>
+            <p className="mt-1 text-2xs text-ink-faint">{compact ? L('Click to open', 'खोलने के लिए क्लिक करें') : L(`Click to select${Number(hover.p.canDrill) ? ' · double-click to zoom in' : ''}`, `चुनने के लिए क्लिक करें${Number(hover.p.canDrill) ? ' · अंदर देखने के लिए डबल-क्लिक' : ''}`)}</p>
             </>}
           </div>
         ) : null}
@@ -529,22 +542,22 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
           </div>
         ) : null}
         {(workspace || bare) && data?.sources.geometry === 'osm' ? (
-          <div className="pointer-events-none absolute bottom-1 right-14 z-10 rounded bg-white/80 px-1.5 text-2xs text-ink-soft">Boundaries © OpenStreetMap contributors</div>
+          <div className="pointer-events-none absolute bottom-1 right-14 z-10 rounded bg-white/80 px-1.5 text-2xs text-ink-soft">{L('Boundaries © OpenStreetMap contributors', 'सीमाएँ © OpenStreetMap योगदानकर्ता')}</div>
         ) : null}
         {workspace && legend ? (
           <div className="absolute bottom-3 left-3 z-10 max-w-[260px] rounded-lg border border-line bg-white/95 p-2.5 text-xs shadow-lift">
             {by === 'learning' ? (
               <ul className="space-y-0.5">
-                {STATUS_LAYERS.map((l) => <li key={l.key} className={`flex items-center gap-1.5 ${layers.has(l.key) ? 'text-ink-soft' : 'text-ink-faint line-through'}`}><span className="h-2.5 w-3.5 rounded-sm border border-line" style={{ background: l.color }} />{l.label}</li>)}
-                <li className="flex items-center gap-1.5 text-ink-soft"><span className="h-2.5 w-3.5 rounded-sm border border-line bg-[repeating-linear-gradient(45deg,rgba(69,82,106,.6)_0_2px,theme(colors.sev.insufficient)_2px_6px)]" />Insufficient data</li>
+                {STATUS_LAYERS.map((l) => <li key={l.key} className={`flex items-center gap-1.5 ${layers.has(l.key) ? 'text-ink-soft' : 'text-ink-faint line-through'}`}><span className="h-2.5 w-3.5 rounded-sm border border-line" style={{ background: l.color }} />{L(l.label, l.hi)}</li>)}
+                <li className="flex items-center gap-1.5 text-ink-soft"><span className="h-2.5 w-3.5 rounded-sm border border-line bg-[repeating-linear-gradient(45deg,rgba(69,82,106,.6)_0_2px,theme(colors.sev.insufficient)_2px_6px)]" />{L('Insufficient data', 'अपर्याप्त डेटा')}</li>
               </ul>
             ) : (
               <>
-                <p className="mb-1 font-semibold text-ink">{COLOUR_BY.find((c) => c.key === by)!.label}</p>
+                <p className="mb-1 font-semibold text-ink">{L(COLOUR_BY.find((c) => c.key === by)!.label, COLOUR_BY.find((c) => c.key === by)!.hi)}</p>
                 <ul className="space-y-0.5">
-                  {NOW_STEPS[by].map(([k, t]) => <li key={k} className="flex items-center gap-1.5 text-ink-soft"><span className="h-2.5 w-3.5 rounded-sm border border-line" style={{ background: NOW_COLOUR[k] }} />{t}</li>)}
+                  {NOW_STEPS[by].map(([k, t, th]) => <li key={k} className="flex items-center gap-1.5 text-ink-soft"><span className="h-2.5 w-3.5 rounded-sm border border-line" style={{ background: NOW_COLOUR[k] }} />{L(t, th)}</li>)}
                 </ul>
-                <p className="mt-1.5 leading-snug text-ink-faint">{data?.childLevel === 'school' ? 'Each dot is one school.' : 'An area takes the worst colour that half (red), 30% (orange) or 15% (yellow) of its schools reach.'}</p>
+                <p className="mt-1.5 leading-snug text-ink-faint">{data?.childLevel === 'school' ? L('Each dot is one school.', 'हर बिंदु एक विद्यालय है।') : L('An area takes the worst colour that half (red), 30% (orange) or 15% (yellow) of its schools reach.', 'क्षेत्र को वह सबसे खराब रंग मिलता है जो उसके आधे (लाल), 30% (नारंगी) या 15% (पीले) विद्यालयों तक पहुँचे।')}</p>
               </>
             )}
             {data?.sources.geometry === 'osm' ? <p className="mt-1.5 border-t border-line pt-1.5 leading-snug text-ink-faint">{data.sources.attribution}</p> : null}

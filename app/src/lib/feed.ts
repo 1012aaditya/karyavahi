@@ -20,6 +20,15 @@ export function listNotifications(s: Session, opts: { unreadOnly?: boolean; limi
   );
 }
 
+/** The English and Hindi titles of the tasks these notifications are about, by task id. */
+export function notificationTaskTitles(rows: NotificationRow[]): Map<string, { en: string; hi: string | null }> {
+  const ids = [...new Set(rows.filter((r) => r.entity_type === 'task' && r.entity_id).map((r) => r.entity_id as string))];
+  if (ids.length === 0) return new Map();
+  return new Map(all<{ id: string; title_en: string; title_hi: string | null }>(
+    `select id, title_en, title_hi from tasks where id in (${ids.map(() => '?').join(',')})`, ...ids,
+  ).map((t) => [t.id, { en: t.title_en, hi: t.title_hi }]));
+}
+
 export const countUnread = (s: Session): number =>
   Number(one<{ c: number }>('select count(*) c from notifications where user_id = ? and read_at is null', s.user_id)?.c ?? 0);
 

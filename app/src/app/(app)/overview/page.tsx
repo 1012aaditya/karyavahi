@@ -71,9 +71,9 @@ export default async function CommandCentre() {
   const h = headline(session);
   const pa = priorityActions(session, 5);
   const trend = learningTrend(session);
-  const progress = recentProgress(session, 6);
+  const progress = recentProgress(session, 6, lang);
   const sys = systemStatus();
-  const brief = plainBrief(session);
+  const brief = plainBrief(session, lang);
   const hot = topHotspots(session, 4);
   const stages = stageStrip(session);
   const proof = may(session, 'evidence.verify') ? countEvidenceToCheck(session) : 0;
@@ -202,7 +202,7 @@ export default async function CommandCentre() {
       {/* On a phone and a small screen, the cards follow the map. */}
       <div className="grid gap-3 sm:grid-cols-2 lg:hidden">{cards}</div>
 
-      {briefing ? <div id="claude-briefing" className="scroll-mt-24"><AiBriefing fallback={brief} /></div> : null}
+      {briefing ? <div id="claude-briefing" className="scroll-mt-24"><AiBriefing fallback={brief} lang={lang} /></div> : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <section className="rounded-2xl border border-line bg-white p-5" aria-labelledby="lp-title">
@@ -213,7 +213,7 @@ export default async function CommandCentre() {
               { key: 'scope', label: trend.scopeLabel, color: SERIES.one, points: trend.scope },
               ...(session.scope_type !== 'state' ? [{ key: 'state', label: pick(lang, 'Whole state', 'पूरा राज्य'), color: SERIES.two, points: trend.state, dashed: true }] : []),
             ]}
-            yMax={70} height={220} caption={`Percent of assessed students at grade benchmark, ${trend.scopeLabel}`}
+            yMax={70} height={220} caption={pick(lang, `Percent of assessed students at grade benchmark, ${trend.scopeLabel}`, `${trend.scopeLabel}: ग्रेड स्तर तक पहुँचे आकलित विद्यार्थियों का प्रतिशत`)}
           />
           <p className="mt-2 text-xs text-ink-faint">{pick(lang, 'Endline rounds run higher than baselines each year, so compare a round with the same round a year earlier.', 'हर वर्ष अंतिम दौर आधार से ऊँचे रहते हैं, इसलिए किसी दौर की तुलना पिछले वर्ष के उसी दौर से करें।')}</p>
         </section>
@@ -222,7 +222,7 @@ export default async function CommandCentre() {
             <h2 id="pr-title" className="text-md font-semibold tracking-tight text-ink">{pick(lang, 'What moved recently', 'हाल में क्या हुआ')}</h2>
             {may(session, 'audit.view') ? <Link href="/audit" className="text-sm font-medium text-brand hover:underline">{pick(lang, 'Full history', 'पूरा इतिहास')}</Link> : null}
           </header>
-          <ProgressTimeline items={progress} />
+          <ProgressTimeline items={progress} lang={lang} />
         </section>
       </div>
     </div>
