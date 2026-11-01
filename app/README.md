@@ -54,6 +54,30 @@ Also: public landing page (`/`), email sign-in (`/login`, honestly passwordless)
 
 All new tables are created by the app beside the seed's (never altering seed tables) and re-created automatically after a demo reset.
 
+### v4 — round import with a live detection run, and case discussion threads
+
+| Area | Where | Notes |
+|---|---|---|
+| Round import | `/import`, `src/components/RoundImport.tsx`, `src/lib/write-import.ts`, `src/lib/import-csv.ts` | Upload a CSV of `assessment_results` rows → **Check the file** (preview; nothing saved) → **Commit** → detection runs. Rows are refused with the seed's own codes (`missing_required`, `non_numeric`, `unknown_school_id`, `invalid_date`, `proficient_exceeds_assessed`, `duplicate_row`) and stored with the batch. Only roles holding `data.import` (BEO, DEO, state team, demo admin) may import; refusals are audited as `import.refused`. Each officer can import only schools in their own area — a BEO their block, a DEO their district. |
+| Same file twice | `import_file_hashes` (ext table) | The file's sha256 (ignoring BOM and line endings) is remembered per round and area. A second commit of the same file adds nothing and is audited as `import.duplicate_ignored`; a different file with rows already on record has those rows refused as `duplicate_row`. |
+| Live detection run | `runDetection()` in `src/lib/write-import.ts` | `src/domain/detect.ts` on the previous round against the new one, with the settings version in force on the demo date (`setting_versions`), exactly as the seed does. New hotspots become findings and **cases owned by the block's BEO**, scoped to the cluster, with a rule-based diagnosis (the seed's teacher-transfer / visit-gap / attendance / PTR rules) and a notification. A flagged drop where a case is already open is monitored on that case instead. Re-running adds only what is new. Until every block has reported, the "district change" is the change across the schools that have reported so far. |
+| The demo clock | `roundIsOpen()` | A round can be imported once its assessment **window has opened** on the demo clock (results arrive school by school), and rows dated after "today" are refused as `invalid_date`. R4 opens 16 Nov 2026 and the seed's clock is 24 Oct, so the demo admin moves the clock to 20 Nov first — there is a button for it on `/import`. |
+| R4 sample generator | `scripts/gen-r4.mts`, `samples/` | `npm run gen:r4` writes a realistic R4 CSV from the R3 rows: same cohorts, a small midline gain, binomial sampling, a treatment effect for schools whose plan is judged on R4, and a few planted cluster drops so detection has something to find. `-- --errors` adds one row of each mistake; `-- --scope DST-01` or `-- --scope all` for bigger files. `samples/R4_midline_BLK-01_with_errors.csv` and `samples/R4_midline_BLK-01.csv` are committed. |
+| Case threads | `/cases/[id]` → **Discussion**, `src/components/CaseThread.tsx`, `CaseThreadComposer.tsx`, `src/lib/threads.ts`, `src/lib/write-threads.ts` | Post and edit your own comments (edits are version-checked; the old text stays in the audit chain). Type `@` to mention someone — the picker offers **only people who can open the case**, and the server refuses (and audits) a comment that mentions anyone else, so nobody is notified about a case they cannot see. Follow / unfollow; the case owner follows by default. Mentioned people and followers are notified; followers are re-checked against scope every time. A BEO, DEO or state officer can flag a comment as a **decision**: it also writes a `decision_recorded` case event and cannot be edited afterwards. |
+| Tables | `src/lib/ext/collab-schema.ts` | `import_file_hashes`, `case_comments`, `case_comment_mentions`, `case_watchers` — created beside the seed's tables, each feature with its own version marker in `ext_meta` (`round_import_version`, `threads_version`). |
+| Tests | `scripts/import-test.mts`, `scripts/threads-test.mts`, `scripts/e2e-import-threads.cjs` | `npm run test:import` (57 checks: validation, clock, roles, scope, preview writes nothing, the same file twice, detection opens the planted hotspots as cases, audit chain). `npm run test:threads` (51 checks: picker, mentions in and out of scope, followers, edits, stale edits, decisions, audit chain). Both run on a scratch copy — stop the server first. `KV_BASE=http://localhost:3000 node scripts/e2e-import-threads.cjs` drives both features in Chrome (mutates the DB; reset afterwards). |
+
+#### Try it
+
+1. Sign in as `admin@demo.karyavahi.test`, open **Administration → Data import**, press **Move the demo clock to 20 Nov 2026**.
+2. Sign in as `beo.blk-01@demo.karyavahi.test` (switch to English from the account menu if you like), open **Data import**.
+3. **Choose file** → `app/samples/R4_midline_BLK-01_with_errors.csv` → **Check the file**. The preview shows 2,340 good rows and 9 refused, grouped by reason.
+4. **Commit 2,340 rows and run detection**. The result lists the batch (IMP-0042) and the new cases detection opened — CASE-0216 (Class 1 number recognition, Sonagaon cluster) and CASE-0217 (Class 2 word reading, Kusumgarh cluster).
+5. Choose the same file again and check it: "Already imported", and the commit button stays off.
+6. Open CASE-0216, scroll to **Discussion**. Type `@Sim` and pick Simran Shukla (the DEO), post. Tick **Record this as a decision** on a second comment — it appears in the timeline too. Use **Edit** on your first comment, and **Unfollow / Follow**.
+7. Sign in as `deo.rmp@demo.karyavahi.test` → the bell / **Notifications** shows "Vikas Qureshi mentioned you on CASE-0216".
+8. Reset afterwards with `npm run db:init -- --force` (server stopped) or the demo admin's reset.
+
 ### AI configuration
 
 Copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY` (server-side only). Model defaults to
@@ -210,10 +234,12 @@ Reading "today" from the system clock would make the demo drift — tasks would 
 overdue and escalation counts would climb on their own. Everything date-dependent reads
 `clock.ts` instead. The demo administrator can move it from `/admin`.
 
-To reach the November round: move the clock to 20 Nov 2026, then import
-`samples/assessment_R4_midline_BLK-01_SIMULATED.csv`. **Uploading is not wired up in this
-build** — the import pages show the seeded batches and their real rejected rows, and say so
-plainly rather than faking an upload.
+To reach the November round: move the clock to 20 Nov 2026 (the button on `/import` or the
+admin page), then import `app/samples/R4_midline_BLK-01_with_errors.csv` on `/import`. A round can
+be imported once its assessment window has opened on the demo clock, and rows dated after the
+demo date are refused. (The seed's own `samples/assessment_R4_midline_*_SIMULATED.csv` files
+record almost every child as not proficient, so they would flood the detector; use
+`npm run gen:r4` instead.)
 
 ## Honesty, as a feature
 
@@ -398,9 +424,12 @@ What changed:
 
 ## Known limits
 
-- **Uploading a data file is not implemented.** The import wizard's validation behaviour is
-  visible through the seeded batches and their rejected rows; the upload itself is deliberately
-  not faked. (Proof photos are real uploads; see My day.)
+- **Only assessment rounds can be uploaded.** Attendance and staff-movement batches are still
+  the seeded ones. A committed batch cannot be withdrawn from the UI; a correction is a new
+  upload (rows already on record are refused as duplicates).
+- **Outcome checks are not re-run automatically when a round arrives.** The cases whose plan
+  is judged on R4 still need an evaluation run against it (`recomputeOutcome(..., { followupRoundId:
+  'RND-2026-11' })` in `write.ts`); the case page does not yet offer that as a button.
 - **My day has no offline queue yet.** A proof handed in without signal fails with a message and
   has to be sent again. The location on proof is still the worker's own statement, not GPS.
 - **No real language model.** The assistant answers from the database and says so. Generated

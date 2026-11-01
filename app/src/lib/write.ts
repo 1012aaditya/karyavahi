@@ -96,7 +96,7 @@ export function appendAudit(o: {
   return id;
 }
 
-function addCaseEvent(o: {
+export function addCaseEvent(o: {
   caseId: string; actorUserId: string | null; actorLabel: string; kind: string; summary: string;
   fromStatus?: CaseStatus | null; toStatus?: CaseStatus | null; related?: string | null;
 }): void {
@@ -122,7 +122,7 @@ export function notify(o: {
   );
 }
 
-function recordJob(type: string, status: string, summary: unknown, error: string | null = null): void {
+export function recordJob(type: string, status: string, summary: unknown, error: string | null = null): void {
   const n = nextSeq('job');
   run(
     `insert into system_jobs (id, job_type, started_at, finished_at, status, summary, error)
@@ -139,7 +139,7 @@ interface CaseCore {
   grade: number; competency_id: string; finding_id: string | null; version: number;
 }
 
-function loadCaseForWrite(s: Session, caseId: string): CaseCore {
+export function loadCaseForWrite(s: Session, caseId: string): CaseCore {
   // Scope first, then the row — a refusal must not reveal anything about a case out of scope
   // beyond the fact that it exists, which is what the Postgres function also leaks.
   const p = casesPred(s, 'c');

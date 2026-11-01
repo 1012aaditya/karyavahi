@@ -5,6 +5,7 @@ import {
   generateGeography, generateInsideReal, unionUnit, toMultiPolygon, circleRing, insideGeometry,
   type GenUnit, type Geometry,
 } from './geogen';
+import { ensureCollabTables } from './collab-schema';
 
 /**
  * Extension schema: geography, organisational hierarchy, complaints, onboarding and sign-in sessions.
@@ -114,6 +115,8 @@ export function ensureExtensions(c: DatabaseSync): void {
   c.exec(DDL);
   // First, so deriving the demo content below can use the indexes too.
   migratePerf(c);
+  // Round import and case threads keep their own version markers (see collab-schema.ts).
+  ensureCollabTables(c);
   const v = one<{ value: string }>(c, `select value from ext_meta where key = 'version'`)?.value;
   if (v !== EXT_VERSION) {
     c.exec('begin immediate');

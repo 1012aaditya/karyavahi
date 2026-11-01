@@ -51,6 +51,12 @@ npx tsx --conditions=react-server scripts/map-test.mts 2>&1 | grep -vE 'Experime
 step 'sign-in sessions and request checks'
 npx tsx --conditions=react-server scripts/session-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
 
+step 'round import and the live detection run'
+npx tsx --conditions=react-server scripts/import-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
+
+step 'case threads, mentions and followers'
+npx tsx --conditions=react-server scripts/threads-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
+
 if [ "$FULL" = "--full" ]; then
   step 'production build'
   npm run build 2>&1 | tail -4

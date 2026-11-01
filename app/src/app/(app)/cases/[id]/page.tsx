@@ -21,6 +21,7 @@ import {
   type Names,
 } from '@/components/case-panels';
 import { ActionForm, ReasonBox, Disclose } from '@/components/ActionForm';
+import { CaseThread } from '@/components/CaseThread';
 import {
   decidePlanAction, transitionAction, setConclusionAction, recomputeOutcomeAction, reviewOutcomeAction,
 } from '@/lib/actions';
@@ -488,6 +489,8 @@ export default async function CasePage({
           </ul>
         </Card>
       ) : null}
+
+      <div className="scroll-mt-36"><CaseThread session={session} caseId={c.id} lang={lang} /></div>
 
       <div id="history" className="scroll-mt-36"><TimelinePanel events={timeline} names={names} lang={lang} /></div>
 
