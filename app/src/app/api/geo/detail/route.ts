@@ -79,6 +79,7 @@ export async function GET(req: Request) {
       ...(unit.geometry_source === 'osm' ? ['Real boundary from OpenStreetMap; the figures inside it are simulated.']
         : unit.geometry_source === 'simulated' ? ['Simulated boundary drawn inside a real district; not a real boundary.']
         : unit.geometry_source === 'approximate' ? ['Approximate city area: a circle around the real city centre.']
+        : unit.geometry_source === 'udise' ? ['Real school (UDISE+), name withheld; pin moved a few hundred metres. Its learning results are simulated.']
         : unit.geometry_source !== 'verified' ? ['Boundary is illustrative, not a verified boundary.'] : []),
     ],
   });

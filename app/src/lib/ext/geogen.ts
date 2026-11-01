@@ -315,6 +315,12 @@ export interface RealInput extends GenInput {
   outlines: Map<string, Geometry>;
   /** Cell size in degrees of latitude; about 0.005 (≈ 550 m) gives smooth block lines. */
   cell?: number;
+  /**
+   * Real school positions (UDISE+, moved a few hundred metres). When a district's schools have
+   * them, each cell goes to the cluster of its nearest school, so blocks and clusters are drawn
+   * around where the schools really are, and each school is pinned at its own position.
+   */
+  points?: Map<string, [number, number]>;
 }
 
 /**
@@ -351,12 +357,52 @@ export function generateInsideReal(input: RealInput): Omit<GenOutput, 'state'> &
     }
     hexOf.set(d.id, pool);
     const bs = input.blocks.filter((b) => b.district_id === d.id);
-    const bParts = partition(pool, bs.map((b) => b.id), bs.map((b) => Math.max(1, b.schools)), d.id, g);
-    for (const [bid, bh] of bParts) {
-      hexOf.set(bid, bh);
-      const cs = input.clusters.filter((c) => c.block_id === bid);
-      const cParts = partition(bh, cs.map((c) => c.id), cs.map((c) => Math.max(1, c.schools)), bid, g);
-      for (const [cid, ch] of cParts) hexOf.set(cid, ch);
+    const blockIds = new Set(bs.map((b) => b.id));
+    const placed = input.schools
+      .filter((s) => input.points?.has(s.id) && input.clusters.some((c) => c.id === s.cluster_id && blockIds.has(c.block_id)))
+      .map((s) => ({ cluster: s.cluster_id, p: input.points!.get(s.id)! }));
+    if (placed.length) {
+      // Real positions: every cell joins the cluster of its nearest school (a Voronoi split on the grid).
+      const near = (c: [number, number]) => {
+        let best = placed[0], bd = Infinity;
+        for (const x of placed) {
+          const dx = (x.p[0] - c[0]) / g.lonScale, dy = x.p[1] - c[1];
+          const dd = dx * dx + dy * dy;
+          if (dd < bd) { bd = dd; best = x; }
+        }
+        return best.cluster;
+      };
+      const byCluster = new Map<string, string[]>();
+      for (const k of pool) {
+        const [q, r] = k.split(',').map(Number);
+        const cid = near(center(q, r, g));
+        byCluster.set(cid, [...(byCluster.get(cid) ?? []), k]);
+      }
+      // A cluster whose schools all sit next to another cluster's still gets the cell nearest its first school.
+      for (const x of placed) {
+        if (byCluster.get(x.cluster)?.length) continue;
+        let bk = pool[0], bd = Infinity;
+        for (const k of pool) {
+          const [q, r] = k.split(',').map(Number); const c = center(q, r, g);
+          const dd = ((c[0] - x.p[0]) / g.lonScale) ** 2 + (c[1] - x.p[1]) ** 2;
+          if (dd < bd) { bd = dd; bk = k; }
+        }
+        for (const [cid, ks] of byCluster) { const i = ks.indexOf(bk); if (i >= 0) { ks.splice(i, 1); byCluster.set(cid, ks); } }
+        byCluster.set(x.cluster, [bk]);
+      }
+      for (const b of bs) {
+        const cs = input.clusters.filter((c) => c.block_id === b.id);
+        hexOf.set(b.id, cs.flatMap((c) => byCluster.get(c.id) ?? []));
+        for (const c of cs) hexOf.set(c.id, byCluster.get(c.id) ?? []);
+      }
+    } else {
+      const bParts = partition(pool, bs.map((b) => b.id), bs.map((b) => Math.max(1, b.schools)), d.id, g);
+      for (const [bid, bh] of bParts) {
+        hexOf.set(bid, bh);
+        const cs = input.clusters.filter((c) => c.block_id === bid);
+        const cParts = partition(bh, cs.map((c) => c.id), cs.map((c) => Math.max(1, c.schools)), bid, g);
+        for (const [cid, ch] of cParts) hexOf.set(cid, ch);
+      }
     }
 
     const unitOf = (id: string, hexes: string[]): GenUnit => {
@@ -379,6 +425,8 @@ export function generateInsideReal(input: RealInput): Omit<GenOutput, 'state'> &
     for (const [cid, sids] of byCluster) {
       const hexes = hexOf.get(cid) ?? [];
       sids.forEach((sid, i) => {
+        const real = input.points?.get(sid);
+        if (real) { schoolPoints.set(sid, real); return; }
         // Spread a cluster's schools over its cells rather than stacking them in the first few.
         const hk = hexes[Math.floor(((i + h(sid, 'pick')) / sids.length) * hexes.length) % Math.max(1, hexes.length)];
         if (!hk) return;

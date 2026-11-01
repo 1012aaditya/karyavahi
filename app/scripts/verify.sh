@@ -66,6 +66,9 @@ npx tsx --conditions=react-server scripts/reminders-test.mts 2>&1 | grep -vE 'Ex
 step 'API keys for state dashboards'
 npx tsx --conditions=react-server scripts/api-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
 
+step 'real data: anonymised schools, calibration to PRS 2024, PAB costs, the fallback'
+npx tsx --conditions=react-server scripts/realdata-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
+
 if [ "$FULL" = "--full" ]; then
   step 'production build'
   npm run build 2>&1 | tail -4
@@ -81,6 +84,8 @@ if [ "$FULL" = "--full" ]; then
 
   step 'the read-only API over HTTP: keys, scope, pagination, rate limit'
   npx tsx --conditions=react-server scripts/api-test.mts http://localhost:3000 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
+  step 'no real school name or UDISE code in pages and API answers'
+  npx tsx --conditions=react-server scripts/realdata-test.mts http://localhost:3000 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -8
 
   step 'the demo story through the browser'
   node scripts/e2e.cjs 2>&1 | tail -6

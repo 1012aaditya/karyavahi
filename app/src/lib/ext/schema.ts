@@ -7,6 +7,7 @@ import {
 } from './geogen';
 import { ensureCollabTables } from './collab-schema';
 import { ensureApiTables } from './api-schema';
+import { ensureRealData, realDataVersion } from './realdata';
 
 /**
  * Extension schema: geography, organisational hierarchy, complaints, onboarding and sign-in sessions.
@@ -118,6 +119,8 @@ export function ensureExtensions(c: DatabaseSync): void {
   migratePerf(c);
   // Round import and case threads keep their own version markers (see collab-schema.ts).
   ensureCollabTables(c);
+  // Real schools, calibrated results and PAB costs (data/real/), before anything is derived from the schools.
+  ensureRealData(c);
   // The read-only API for state dashboards: keys and the call log (see api-schema.ts).
   ensureApiTables(c);
   const v = one<{ value: string }>(c, `select value from ext_meta where key = 'version'`)?.value;
@@ -418,7 +421,9 @@ function seedGeography(c: DatabaseSync) {
  * simulated, and every unit records where its shape came from (geometry_source).
  */
 export const GEO_FILE = join(process.cwd(), 'data', 'up-geo.json');
-const REAL_GEO_VERSION = 'up-osm-v2';
+const REAL_GEO_VERSION = 'up-osm-v3';
+/** The geography is redrawn whenever the real-data files change, because school positions come from them. */
+const geoVersion = () => `${REAL_GEO_VERSION}${realDataVersion() ? `+${realDataVersion()}` : ''}`;
 /** Which real district each demo district is placed in, in district id order. */
 const REAL_DISTRICTS = ['Rampur', 'Lucknow', 'Varanasi'];
 
@@ -431,12 +436,12 @@ interface UpGeo {
 
 function ensureRealGeography(c: DatabaseSync) {
   if (!existsSync(GEO_FILE)) return;
-  if (one<{ value: string }>(c, `select value from ext_meta where key = 'geo'`)?.value === REAL_GEO_VERSION) return;
+  if (one<{ value: string }>(c, `select value from ext_meta where key = 'geo'`)?.value === geoVersion()) return;
   const up = JSON.parse(readFileSync(GEO_FILE, 'utf8')) as UpGeo;
   c.exec('begin immediate');
   try {
     seedRealGeography(c, up);
-    exec(c, `insert into ext_meta (key, value) values ('geo', ?) on conflict(key) do update set value = excluded.value`, REAL_GEO_VERSION);
+    exec(c, `insert into ext_meta (key, value) values ('geo', ?) on conflict(key) do update set value = excluded.value`, geoVersion());
     c.exec('commit');
   } catch (e) {
     try { c.exec('rollback'); } catch { /* already rolled back */ }
@@ -462,7 +467,12 @@ function seedRealGeography(c: DatabaseSync, up: UpGeo) {
   const schools = q<{ id: string; name: string; cluster_id: string }>(c, 'select id, name, cluster_id from schools order by id');
   const outlines = new Map<string, Geometry>();
   districts.forEach((d, i) => { const real = up.districts.find((x) => x.name === REAL_DISTRICTS[i]); if (real) outlines.set(d.id, real.geometry); });
-  const g = generateInsideReal({ districts, blocks, clusters, schools, outlines });
+  // Real school positions (UDISE+, moved a few hundred metres) when the real-data layer is on.
+  const hasProfile = !!one(c, `select 1 from sqlite_master where type = 'table' and name = 'school_profile'`);
+  const points = new Map<string, [number, number]>(hasProfile
+    ? q<{ school_id: string; lon: number; lat: number }>(c, 'select school_id, lon, lat from school_profile where lon is not null').map((r) => [r.school_id, [r.lon, r.lat]])
+    : []);
+  const g = generateInsideReal({ districts, blocks, clusters, schools, outlines, points });
 
   exec(c, 'delete from geo_units'); exec(c, 'delete from geo_relationships'); exec(c, 'delete from geo_levels'); exec(c, 'delete from geo_hierarchies');
   exec(c, `insert into geo_hierarchies values ('admin', 'Administrative', 'Country → State → District → Block → Cluster → School')`);
@@ -500,13 +510,17 @@ function seedRealGeography(c: DatabaseSync, up: UpGeo) {
     putReal(id, 'district', x.name, null, x.geometry, [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2], `${OSM_NOTE} No demo data in this district.`);
     rel.run(id, state.id, 'admin'); rel.run(id, state.id, 'urban');
   }
-  const SIM_NOTE = 'Simulated subdivision drawn inside the real district outline. Not a real boundary.';
+  const SIM_NOTE = points.size
+    ? 'Demo grouping drawn around the real positions of its schools (UDISE+). Not a real boundary.'
+    : 'Simulated subdivision drawn inside the real district outline. Not a real boundary.';
   for (const b of blocks) { putSim(b.id, 'block', b.name, b.code, g.units.get(b.id), SIM_NOTE); rel.run(b.id, b.district_id, 'admin'); }
   for (const cl of clusters) { putSim(cl.id, 'cluster', cl.name, null, g.units.get(cl.id), SIM_NOTE); rel.run(cl.id, cl.block_id, 'admin'); }
   for (const s of schools) {
     const p = g.schoolPoints.get(s.id);
-    ins.run(s.id, 'school', s.name, null, p ? 'simulated' : 'none', p?.[0] ?? null, p?.[1] ?? null, null, p ? JSON.stringify({ type: 'Point', coordinates: p }) : null,
-      'Simulated position inside its cluster. Not a real school or location.');
+    const real = points.has(s.id);
+    ins.run(s.id, 'school', s.name, null, p ? (real ? 'udise' : 'simulated') : 'none', p?.[0] ?? null, p?.[1] ?? null, null, p ? JSON.stringify({ type: 'Point', coordinates: p }) : null,
+      real ? 'Real school (UDISE+ 2020-21), shown a few hundred metres from its true position; name withheld. Its learning results are simulated.'
+        : 'Simulated position inside its cluster. Not a real school or location.');
     rel.run(s.id, s.cluster_id, 'admin');
     rel.run(s.id, s.cluster_id, 'urban');
   }

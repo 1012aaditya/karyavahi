@@ -19,6 +19,8 @@ import { Pill, ProvenanceChip } from '@/components/labels';
 import { CaseTable, TaskTable } from '@/components/lists';
 import { TrendChart } from '@/components/charts';
 import { SERIES } from '@/lib/viz';
+import { schoolName } from '@/lib/school-label';
+import { schoolProfile } from '@/lib/sources';
 
 /** One school: its numbers, its cases, its visits and what moved its staff. */
 
@@ -45,6 +47,8 @@ export default async function SchoolPage({ params }: { params: Promise<{ id: str
   const completed = rounds().filter((r) => r.status === 'completed');
   const comps = competencies();
   const hm = isHeadmaster(session);
+  const profile = schoolProfile(id);
+  const name = schoolName(s.name, lang);
 
   return (
     <div className="space-y-4">
@@ -55,8 +59,8 @@ export default async function SchoolPage({ params }: { params: Promise<{ id: str
             {' › '}<Mono>{s.id}</Mono>
           </>
         }
-        title={s.name}
-        sub={`${s.village} · ${places.clusters.get(s.cluster_id) ?? s.cluster_id} · ${places.blocks.get(s.block_id) ?? s.block_id} · ${places.districts.get(s.district_id) ?? s.district_id}`}
+        title={name}
+        sub={`${profile ? '' : `${s.village} · `}${places.clusters.get(s.cluster_id) ?? s.cluster_id} · ${places.blocks.get(s.block_id) ?? s.block_id} · ${places.districts.get(s.district_id) ?? s.district_id}`}
         right={<ProvenanceChip provenance={s.provenance} lang={lang} />}
       />
 
@@ -65,17 +69,50 @@ export default async function SchoolPage({ params }: { params: Promise<{ id: str
         <Stat label={pick(lang, 'Class 1–3', 'कक्षा 1–3')} value={fmtInt(s.enrolment_g1 + s.enrolment_g2 + s.enrolment_g3)}
           sub={`${s.enrolment_g1} · ${s.enrolment_g2} · ${s.enrolment_g3}`} />
         <Stat label={pick(lang, 'Teachers', 'शिक्षक')} value={`${s.teachers_in_position}/${s.teachers_sanctioned}`}
-          tone={s.teachers_in_position < s.teachers_sanctioned ? 'warn' : 'neutral'} />
+          tone={s.teachers_in_position < s.teachers_sanctioned ? 'warn' : 'neutral'}
+          sub={profile ? pick(lang, 'in position / posts by RTE norm', 'कार्यरत / RTE मानक अनुसार पद') : undefined} />
         <Stat label={pick(lang, 'Pupil–teacher ratio', 'छात्र-शिक्षक अनुपात')} value={s.ptr}
           tone={s.ptr > 35 ? 'warn' : 'neutral'} sub={s.ptr > 35 ? pick(lang, 'above the 35 threshold', '35 की सीमा से अधिक') : undefined} />
         <Stat label={pick(lang, 'Cases naming this school', 'इसके प्रकरण')} value={cases.length}
           tone={cases.length > 0 ? 'crit' : 'neutral'} />
       </Grid>
 
+      {profile ? (
+        <Card>
+          <CardHead
+            title={pick(lang, 'School profile (UDISE+)', 'विद्यालय प्रोफ़ाइल (यू-डाइस+)')}
+            hint={pick(lang, 'A real government school, from UDISE+ about 2020-21 via the India Data Portal. Its name and code are withheld because the learning results on this page are simulated.', 'यू-डाइस+ (लगभग 2020-21, इंडिया डेटा पोर्टल) से एक वास्तविक सरकारी विद्यालय। इसका नाम और कोड गोपनीय है क्योंकि इस पृष्ठ के अधिगम परिणाम काल्पनिक हैं।')}
+            right={<Link href="/sources" className="link text-sm">{pick(lang, 'Sources', 'स्रोत')}</Link>}
+          />
+          <div className="card-pad space-y-4">
+            <Facts cols={4}>
+              <Field label={pick(lang, 'Management', 'प्रबंधन')}>{profile.management === 'local_body' ? pick(lang, 'Local body', 'स्थानीय निकाय') : pick(lang, 'State government (Department of Education)', 'राज्य सरकार (शिक्षा विभाग)')}</Field>
+              <Field label={pick(lang, 'Category', 'श्रेणी')}>{profile.category === 'primary' ? pick(lang, 'Primary (Classes 1–5)', 'प्राथमिक (कक्षा 1–5)') : pick(lang, 'Primary with upper primary (Classes 1–8)', 'प्राथमिक सहित उच्च प्राथमिक (कक्षा 1–8)')}</Field>
+              <Field label={pick(lang, 'Area', 'क्षेत्र')}>{profile.location === 'urban' ? pick(lang, 'Urban', 'शहरी') : pick(lang, 'Rural', 'ग्रामीण')}</Field>
+              <Field label={pick(lang, 'Classrooms', 'कक्षा-कक्ष')}>{fmtInt(profile.classrooms)}</Field>
+            </Facts>
+            <div>
+              <p className="label mb-1.5">{pick(lang, 'Enrolment by class', 'कक्षावार नामांकन')}</p>
+              <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-8">
+                {profile.enrolment.map((n, i) => (n || i < 5 ? (
+                  <div key={i} className="rounded-lg border border-line bg-paper-sunk/60 px-2 py-1.5 text-center">
+                    <span className="block text-2xs text-ink-faint">{pick(lang, 'Class', 'कक्षा')} {i + 1}</span>
+                    <span className="tnum block text-sm font-semibold text-ink">{n}</span>
+                  </div>
+                ) : null))}
+              </div>
+            </div>
+            <p className="text-xs leading-snug text-ink-faint">{pick(lang, 'The map pin is a few hundred metres from the real building. Assessment rows below keep their own simulated 2025–26 counts, so they can differ from this enrolment.', 'मानचित्र पिन वास्तविक भवन से कुछ सौ मीटर दूर है। नीचे की आकलन पंक्तियाँ अपनी काल्पनिक 2025–26 संख्याएँ रखती हैं, इसलिए वे इस नामांकन से भिन्न हो सकती हैं।')}</p>
+          </div>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHead
           title={pick(lang, 'Learning, round by round', 'दौर-दर-दौर सीखना')}
-          hint={pick(lang, 'Share of assessed children reaching the grade benchmark. Literacy and numeracy are shown separately — one scale per chart.', 'ग्रेड मानक तक पहुँचने वाले बच्चों का प्रतिशत। भाषा और गणित अलग-अलग।')}
+          hint={profile
+            ? pick(lang, 'Simulated. Share of assessed children reaching the grade benchmark; Class 3 is calibrated so the district average matches PRS 2024. Literacy and numeracy are shown separately — one scale per chart.', 'काल्पनिक। ग्रेड मानक तक पहुँचने वाले बच्चों का प्रतिशत; कक्षा 3 का अंशांकन ऐसा कि ज़िले का औसत परख 2024 से मेल खाए। भाषा और गणित अलग-अलग।')
+            : pick(lang, 'Share of assessed children reaching the grade benchmark. Literacy and numeracy are shown separately — one scale per chart.', 'ग्रेड मानक तक पहुँचने वाले बच्चों का प्रतिशत। भाषा और गणित अलग-अलग।')}
         />
         <div className="card-pad space-y-5">
           {[1, 2, 3].map((grade) => {

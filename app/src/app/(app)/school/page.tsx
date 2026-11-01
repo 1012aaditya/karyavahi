@@ -8,6 +8,7 @@ import {
 } from '@/lib/repo';
 import { today } from '@/lib/clock';
 import { pick } from '@/lib/i18n';
+import { schoolName } from '@/lib/school-label';
 import { Card, CardHead, PageHead, Grid, Stat, Callout, Facts, Field, Empty, Mono, fmtDate, fmtPct, fmtInt } from '@/components/ui';
 import { ComplaintsPanel, MapPanel } from '@/components/role-panels';
 import { TaskTable } from '@/components/lists';
@@ -60,7 +61,7 @@ export default async function SchoolHome() {
   return (
     <div className="space-y-4">
       <PageHead
-        title={s?.name ?? schoolId}
+        title={s?.name ? schoolName(s.name, lang) : schoolId}
         sub={s ? `${s.village} · ${pick(lang, 'Class 1–3 enrolment', 'कक्षा 1–3 नामांकन')} ${fmtInt(s.enrolment_g1 + s.enrolment_g2 + s.enrolment_g3)}` : undefined}
         right={<Mono>{schoolId}</Mono>}
       />

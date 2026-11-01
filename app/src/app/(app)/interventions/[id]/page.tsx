@@ -7,11 +7,13 @@ import { pick } from '@/lib/i18n';
 import {
   Card, CardHead, PageHead, Callout, Facts, Field, Mono, fmtInr, fmtDate,
 } from '@/components/ui';
-import { Pill, Illustrative, EvidenceStrength, EvidenceTypeName, RoleName } from '@/components/labels';
+import { Pill, EvidenceStrength, EvidenceTypeName, RoleName } from '@/components/labels';
 import { matchForCase, feasibility, interventionHistory, authorityFor } from '@/lib/studio';
 import { getCase } from '@/lib/cases';
+import { planCounts } from '@/lib/plans';
 import { FitPanel, FeasibilityPanel } from '@/components/studio';
 import { Icon } from '@/components/Icon';
+import { CostSource, costNote, unitLabel, isRealCost } from '@/components/cost';
 
 /**
  * One intervention card, in full, including the parts that argue against using it. It leads with
@@ -49,7 +51,10 @@ export default async function InterventionPage({ params, searchParams }: { param
   const caseId = sp.case && getCase(session, sp.case.toUpperCase()) ? sp.case.toUpperCase() : undefined;
   const ctx = caseId ? matchForCase(session, caseId) : null;
   const fit = ctx?.matches.find((m) => m.intervention.id === i.id) ?? null;
-  const caseSchools = caseId ? getCase(session, caseId)?.school_ids.length ?? 1 : 1;
+  const theCase = caseId ? getCase(session, caseId) : null;
+  const caseSchools = theCase?.school_ids.length ?? 1;
+  // The case's own schools give the real child and teacher counts, while the school count is theirs.
+  const counts = theCase && !sp.schools ? planCounts(theCase.school_ids, theCase.grade) : {};
 
   const wfValues = {
     schools: numOr(sp.schools, 1, 500) ?? Math.max(1, caseSchools),
@@ -60,7 +65,7 @@ export default async function InterventionPage({ params, searchParams }: { param
     schools: wfValues.schools,
     budgetInr: numOr(sp.budget, 0, 1e9), teachersAvailable: numOr(sp.teachers, 0, 2000),
     weeksAvailable: numOr(sp.weeks, 0, 52), attendancePct: numOr(sp.attendance, 0, 100),
-    trainingComplete: wfValues.training, connectivity: wfValues.connectivity,
+    trainingComplete: wfValues.training, connectivity: wfValues.connectivity, ...counts,
   });
   const hist = interventionHistory(i.id).get(i.id) ?? { plans: 0, evaluated: 0, improved: 0, confirmed: 0, notImproved: 0, inconclusive: 0 };
 
@@ -138,9 +143,11 @@ export default async function InterventionPage({ params, searchParams }: { param
           </div>
           <p className="mt-3 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
             <span className="tnum text-xl font-semibold text-ink">{fmtInr(i.cost_basis.amount_inr)}</span>
-            <span className="text-xs text-ink-faint">/ {i.cost_basis.unit}</span>
-            <Illustrative lang={lang} />
+            <span className="text-xs text-ink-faint">/ {unitLabel(i.cost_basis.unit, lang)}</span>
+            {i.cost_basis.amount_composite_inr ? <span className="text-xs text-ink-faint">· {pick(lang, 'composite school', 'कंपोज़िट विद्यालय')} {fmtInr(i.cost_basis.amount_composite_inr)}</span> : null}
+            <CostSource cost={i.cost_basis} lang={lang} />
           </p>
+          {isRealCost(i.cost_basis) ? <p className="mt-1.5 text-xs leading-snug text-ink-soft">{costNote(i.cost_basis, lang)}</p> : null}
         </div>
 
         <div className="rounded-2xl border border-line bg-white p-4 sm:p-5">
@@ -169,10 +176,10 @@ export default async function InterventionPage({ params, searchParams }: { param
             <Field label={pick(lang, 'Category', 'श्रेणी')}>{CATEGORY[i.category] ? pick(lang, CATEGORY[i.category].en, CATEGORY[i.category].hi) : i.category}</Field>
             <Field label={pick(lang, 'Classes', 'कक्षाएँ')}>{i.grades.join(', ')}</Field>
             <Field label={pick(lang, 'Runs for', 'अवधि')}>{i.duration_weeks} {pick(lang, 'weeks', 'सप्ताह')}</Field>
-            <Field label={pick(lang, 'Cost', 'लागत')} hint={i.cost_basis.note}>
+            <Field label={pick(lang, 'Cost', 'लागत')} hint={costNote(i.cost_basis, lang)}>
               <span className="tnum">{fmtInr(i.cost_basis.amount_inr)}</span>
-              <span className="text-xs text-ink-faint"> / {i.cost_basis.unit}</span>
-              <span className="ml-1.5"><Illustrative lang={lang} /></span>
+              <span className="text-xs text-ink-faint"> / {unitLabel(i.cost_basis.unit, lang)}</span>
+              <span className="ml-1.5"><CostSource cost={i.cost_basis} lang={lang} /></span>
             </Field>
             <Field label={pick(lang, 'Competencies', 'दक्षताएँ')} >
               {i.competency_ids.map((c) => comps.get(c) ?? c).join(', ')}
@@ -219,14 +226,16 @@ export default async function InterventionPage({ params, searchParams }: { param
             {!i.evidence.source_title ? <p className="text-sm text-ink-soft">{i.evidence.summary}</p> : null}
             <ul className="list-disc space-y-1 pl-5 text-sm text-ink-soft">
               <li>{pick(lang, 'It will work here only if:', 'यहाँ तभी काम करेगा जब:')} {i.delivery_conditions.join('; ')}.</li>
-              <li>{pick(lang, 'Cost', 'लागत')} {fmtInr(i.cost_basis.amount_inr)} / {i.cost_basis.unit} {pick(lang, 'is an illustrative card figure', 'एक उदाहरणार्थ आँकड़ा है')}{i.cost_basis.note ? ` — ${i.cost_basis.note.replace(/\.$/, '')}` : ''}.</li>
+              {isRealCost(i.cost_basis)
+                ? <li>{pick(lang, 'Cost', 'लागत')} {fmtInr(i.cost_basis.amount_inr)} / {unitLabel(i.cost_basis.unit, lang)} {i.cost_basis.basis === 'pab' ? pick(lang, 'is the UP PAB 2025-26 unit cost', 'उ.प्र. PAB 2025-26 की इकाई लागत है') : pick(lang, 'is borrowed from the nearest UP PAB 2025-26 line', 'उ.प्र. PAB 2025-26 की निकटतम पंक्ति से ली गई दर है')} ({pick(lang, 'PDF page', 'PDF पृष्ठ')} {i.cost_basis.citation?.pdf_page}). {pick(lang, 'What a district actually spends can differ.', 'ज़िले का वास्तविक व्यय भिन्न हो सकता है।')}</li>
+                : <li>{pick(lang, 'Cost', 'लागत')} {fmtInr(i.cost_basis.amount_inr)} / {unitLabel(i.cost_basis.unit, lang)} {pick(lang, 'is an illustrative card figure', 'एक उदाहरणार्थ आँकड़ा है')}{i.cost_basis.note ? ` — ${costNote(i.cost_basis, lang).replace(/\.$/, '')}` : ''}.</li>}
               <li>{pick(lang, 'Whether it worked here is decided by the next assessment round, not by delivery.', 'यहाँ काम आया या नहीं, यह अगला आकलन तय करेगा।')}</li>
             </ul>
           </div>
         </div>
       </Card>
 
-      <FeasibilityPanel id={i.id} caseId={caseId} values={wfValues} checks={wf.checks} totalCost={wf.totalCost} verdict={wf.verdict} />
+      <FeasibilityPanel id={i.id} caseId={caseId} values={wfValues} checks={wf.checks} totalCost={wf.totalCost} verdict={wf.verdict} costSource={isRealCost(i.cost_basis) ? (i.cost_basis.basis ?? 'pab') : 'illustrative'} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

@@ -9,6 +9,10 @@ try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require(
 const SHOTS = process.env.KARYAVAHI_SHOTS ?? '/tmp/karyavahi-shots';
 require('node:fs').mkdirSync(SHOTS, { recursive: true });
 const BASE = process.env.KV_BASE ?? 'http://localhost:3000';
+// With the real-data layer (data/real/) Class 3 results are calibrated to PRS 2024, which raises
+// CASE-0184's levels and moves its z-test a little; the drop itself stays the same.
+const REAL = require('node:fs').existsSync(require('node:path').join(__dirname, '..', 'data', 'real', 'figures.json'));
+const F184 = REAL ? { before: '65.7%', after: '47.7%', z: '3.72' } : { before: '42.3%', after: '24.4%', z: '3.92' };
 
 let fails = 0;
 const ok = (label, cond, extra = '') => {
@@ -51,9 +55,9 @@ const ok = (label, cond, extra = '') => {
   await page.goto(`${BASE}/cases/CASE-0184`, { waitUntil: 'networkidle' });
   const caseText = await page.locator('body').innerText();
   ok('the case title matches the seed', caseText.includes('Class 3 subtraction fell 17.9 pts in Rampur cluster'));
-  ok('it shows the before and after figures', caseText.includes('42.3%') && caseText.includes('24.4%'));
+  ok('it shows the before and after figures', caseText.includes(F184.before) && caseText.includes(F184.after));
   ok('it shows the drop beyond the district', caseText.includes('11.3'));
-  ok('it shows the z score', caseText.includes('3.92'));
+  ok('it shows the z score', caseText.includes(F184.z));
   ok('it says the factors are associations, not causes', caseText.includes('Association, not cause'));
   ok('the AI hypothesis is labelled as AI-drafted', caseText.includes('AI-drafted'));
   ok('the cost is labelled illustrative', caseText.includes('Illustrative'));

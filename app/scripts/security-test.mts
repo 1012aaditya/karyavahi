@@ -55,8 +55,8 @@ try {
 
   console.log('\n— hierarchy and geography —');
   ok('every cluster has an admin parent block', Number(one<{ n: number }>(`select count(*) n from clusters c where not exists (select 1 from geo_relationships r where r.child_id = c.id and r.hierarchy_id = 'admin' and r.parent_id = c.block_id)`)!.n) === 0);
-  // On the real map school positions are 'simulated'; without the boundary file, 'illustrative'.
-  ok('every school has a placed point', Number(one<{ n: number }>(`select count(*) n from geo_units where level = 'school' and (boundary is null or geometry_source not in ('illustrative','simulated'))`)!.n) === 0);
+  // On the real map school positions are 'udise' (real schools) or 'simulated'; without the boundary file, 'illustrative'.
+  ok('every school has a placed point', Number(one<{ n: number }>(`select count(*) n from geo_units where level = 'school' and (boundary is null or geometry_source not in ('illustrative','simulated','udise'))`)!.n) === 0);
   ok('cities form a second hierarchy (city ≠ district)', all(`select 1 from geo_relationships where hierarchy_id = 'urban' and parent_id like 'CTY-%'`).length >= 3);
   ok('India has no drawn outline', one<{ boundary: string | null }>(`select boundary from geo_units where id = 'IN'`)!.boundary === null);
   ok('every non-top user has a designated authority', Number(one<{ n: number }>(`select count(*) n from reporting_lines r join user_roles u on u.user_id = r.user_id where r.manager_user_id is null and u.role not in ('state_admin','demo_admin')`)!.n) === 0);

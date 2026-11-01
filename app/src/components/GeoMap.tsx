@@ -547,7 +547,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
                 <p className="mt-1.5 leading-snug text-ink-faint">{data?.childLevel === 'school' ? 'Each dot is one school.' : 'An area takes the worst colour that half (red), 30% (orange) or 15% (yellow) of its schools reach.'}</p>
               </>
             )}
-            {data?.sources.geometry === 'osm' ? <p className="mt-1.5 border-t border-line pt-1.5 leading-snug text-ink-faint">Real boundaries © OpenStreetMap contributors. Blocks, clusters, schools and all figures are simulated.</p> : null}
+            {data?.sources.geometry === 'osm' ? <p className="mt-1.5 border-t border-line pt-1.5 leading-snug text-ink-faint">{data.sources.attribution}</p> : null}
           </div>
         ) : null}
       </div>

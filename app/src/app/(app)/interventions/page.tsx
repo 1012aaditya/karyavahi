@@ -8,6 +8,7 @@ import { pick } from '@/lib/i18n';
 import { PageHead, fmtInr } from '@/components/ui';
 import { EvidenceStrength } from '@/components/labels';
 import { Icon } from '@/components/Icon';
+import { CostSource, unitLabel, isRealCost } from '@/components/cost';
 import type { Intervention } from '@domain/types';
 import { searchLibrary } from '@/lib/evidence-search';
 
@@ -290,7 +291,7 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
                   {m && m.eligible && m.risks.length ? <p className="mt-1.5 text-xs text-warn"><Icon name="alert" size={12} className="mr-1 inline" />{m.risks[0].text}</p> : null}
                   <span className="mt-auto grid grid-cols-3 gap-2 border-t border-line pt-3 text-xs">
                     <span className="min-w-0"><span className="block text-2xs text-ink-faint">{pick(lang, 'Approval', 'स्वीकृति')}</span><span className="block truncate font-medium text-ink">{lever(iv.lever)}</span>{auth.canApprove ? <span className="block text-2xs text-good">{pick(lang, 'you can approve', 'आप स्वीकृत कर सकते हैं')}</span> : null}</span>
-                    <span className="min-w-0"><span className="block text-2xs text-ink-faint">{pick(lang, 'Cost (illustrative)', 'लागत (उदाहरण)')}</span><span className="tnum block font-medium text-ink">{fmtInr(iv.cost_basis.amount_inr)}</span><span className="block truncate text-2xs text-ink-faint" title={iv.cost_basis.unit}>{iv.cost_basis.unit}</span></span>
+                    <span className="min-w-0"><span className="block text-2xs text-ink-faint">{isRealCost(iv.cost_basis) ? pick(lang, 'Cost (UP PAB 2025-26)', 'लागत (उ.प्र. PAB 2025-26)') : pick(lang, 'Cost (illustrative)', 'लागत (उदाहरण)')}</span><span className="tnum block font-medium text-ink">{fmtInr(iv.cost_basis.amount_inr)}</span><span className="block truncate text-2xs text-ink-faint" title={iv.cost_basis.unit}>{unitLabel(iv.cost_basis.unit, lang)}{isRealCost(iv.cost_basis) ? ` · ${pick(lang, 'p.', 'पृ.')} ${iv.cost_basis.citation?.pdf_page}${iv.cost_basis.basis === 'pab_proxy' ? pick(lang, ' (nearest line)', ' (निकटतम पंक्ति)') : ''}` : ''}</span></span>
                     <span className="min-w-0"><span className="block text-2xs text-ink-faint">{pick(lang, 'Track record', 'पिछला परिणाम')}</span>{h && h.evaluated ? <span className="block font-medium text-ink"><span className="tnum">{h.improved}/{h.evaluated}</span> <span className="font-normal text-ink-faint">{pick(lang, 'gained', 'सुधरे')}</span></span> : <span className="block text-ink-faint">{pick(lang, 'not evaluated', 'जाँचा नहीं')}</span>}<span className="block text-2xs text-ink-faint">{iv.duration_weeks ? `${iv.duration_weeks} ${pick(lang, 'weeks', 'सप्ताह')}` : pick(lang, 'PAB cycle', 'PAB चक्र')}</span></span>
                   </span>
                 </li>
@@ -330,7 +331,7 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
                         {ranked ? <td className="text-right">{m && m.eligible ? <span className="inline-flex flex-col items-end"><span className="tnum whitespace-nowrap rounded bg-navy px-1.5 py-0.5 text-xs font-semibold text-white">{m.points} {pick(lang, 'pts', 'अंक')}</span><span className="mt-0.5 text-2xs text-ink-faint">#{idx + 1}</span></span> : <span className="text-ink-faint">—</span>}</td> : null}
                         <td><EvidenceStrength status={iv.evidence.status} lang={lang} /></td>
                         <td className="text-sm">{lever(iv.lever)}{auth.canApprove ? <span className="block text-xs text-good">{pick(lang, 'you can approve', 'आप स्वीकृत कर सकते हैं')}</span> : null}</td>
-                        <td className="tnum text-right text-sm">{fmtInr(iv.cost_basis.amount_inr)}<span className="block text-2xs text-ink-faint">{iv.cost_basis.unit}</span></td>
+                        <td className="tnum text-right text-sm">{fmtInr(iv.cost_basis.amount_inr)}<span className="block text-2xs text-ink-faint">{unitLabel(iv.cost_basis.unit, lang)}</span><span className="mt-0.5 block"><CostSource cost={iv.cost_basis} lang={lang} /></span></td>
                         <td className="whitespace-nowrap text-sm">{iv.duration_weeks ? `${iv.duration_weeks} ${pick(lang, 'weeks', 'सप्ताह')}` : pick(lang, 'PAB cycle', 'PAB चक्र')}</td>
                         <td className="text-sm">{h && h.evaluated ? <><span className="font-medium text-ink">{h.improved}/{h.evaluated}</span> <span className="text-ink-faint">{pick(lang, 'gained', 'सुधरे')}</span></> : <span className="text-ink-faint">{pick(lang, 'not evaluated', 'जाँचा नहीं')}</span>}</td>
                       </tr>

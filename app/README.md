@@ -1,8 +1,11 @@
 # Karyavahi — the application
 
-**DEMO MODE — FICTIONAL SEED DATA — NOT ACTUAL GOVERNMENT STATISTICS.** Every school, person,
-score, cost and outcome in this app is generated. Nothing is connected to UDISE+, NAS, PRS,
-ASER, a state VSK, WhatsApp or IVR.
+**DEMO MODE — NOT ACTUAL GOVERNMENT STATISTICS.** Schools, enrolment, teachers and locations are
+real (UDISE+ via India Data Portal, about 2020-21; names and codes withheld). Learning results are
+simulated and calibrated to PRS 2024; intervention costs are from the UP PAB 2025-26 minutes where
+a line exists. People, cases, plans, proof and outcomes are fictional. Nothing is connected to a live
+UDISE+, NAS, a state VSK, WhatsApp or IVR. Every source and its terms: `/sources` and
+[Real public data](#real-public-data-real-schools-calibrated-results-pab-costs) below.
 
 This is the Next.js app that sits on top of the seed in the parent directory. The seed supplies
 the data, the domain rules and the Postgres schema; this app is the interface an officer
@@ -294,6 +297,9 @@ not footnotes:
 | **Fictional demo data** | the row's provenance is `synthetic_demo` |
 | **AI-drafted** | produced from a template, with the model named; it carries no authority |
 | **Illustrative figure** | a plausible cost for the demo, never a PAB unit cost |
+| **UP PAB 2025-26 · p. N** | a unit cost from the PAB minutes, with its page; "nearest line" when the rate is borrowed from a neighbouring line |
+| **Real school (UDISE+) · name withheld** | a real government school whose name and code are deliberately not shown |
+| **Context, not cause** | a published district figure (ASER, NFHS) shown beside the data, explaining nothing in particular |
 | **Association, not cause** | a condition observed alongside the drop, nothing more |
 | **Simulated — not sent** | a WhatsApp/IVR/SMS message that was never delivered |
 | **Cites a source — verify before production** | quotes published evidence that still needs checking |
@@ -429,7 +435,10 @@ is present the database is set up with it (`seedRealGeography` in `src/lib/ext/s
   inside them.
 
 Every unit records where its shape came from (`geometry_source`: `osm`, `simulated`,
-`approximate`), and the map, legend and side panel say so. All learning figures remain fictional.
+`approximate`, `udise`), and the map, legend and side panel say so. With the real-data layer (next
+section but one) the schools are real UDISE+ schools at their (slightly moved) positions, tagged
+`udise`, and each block and cluster is drawn around its own schools; the block and cluster names and
+lines stay simulated, and all learning figures remain simulated.
 Without the file the app falls back to the invented honeycomb state.
 
 Who sees what is unchanged and decided on the server: the state team sees all 75 districts, a
@@ -451,6 +460,175 @@ production needs a key with billing. Restrict the key to your site's address. Wi
 if Google refuses it, the same map is drawn without background tiles, and a note says why. The
 small dashboard maps always use the plain map. `npm run test:map` checks the geography, the
 access rules and the thresholds.
+
+## Real public data: real schools, calibrated results, PAB costs
+
+The three demo districts now hold **real schools**. Learning results are still simulated (no public
+source publishes school-level results), but they are calibrated so each district's Class 3 average
+matches its published PRS 2024 figure, and the intervention cards use UP PAB 2025-26 unit costs
+where a line exists. Every source, its year and terms, and the reconciliation table are on
+**`/sources`** (public, English and Hindi), linked from the demo strip on every signed-in page and
+from the footer of the signed-out pages.
+
+| What | Status | Source |
+|---|---|---|
+| Schools: position, management, category, rural/urban, enrolment by class, teachers, classrooms | **real** (names and codes withheld) | UDISE+ via India Data Portal, about 2020-21, ODC-BY |
+| Class 3 learning results | simulated, **calibrated** to the district average | PRS 2024 district reports (NCERT) |
+| Class 1–2 learning results | simulated, not calibrated (no published district figure) | — |
+| Intervention unit costs (9 of 18 cards) and plan cost estimates | **real** where a line exists, with the page | UP Samagra Shiksha PAB minutes 2025-26 |
+| District context (reading, subtraction, enrolment, out of school; women's schooling, stunting, electricity) | **real**, shown as "context, not cause" | ASER 2024 (rural); NFHS-5 2019-21 |
+| District and block codes for joins | real | LGD via India Data Portal, ODC-BY |
+| People, cases, plans, tasks, proof, visits, attendance, staff movements, complaints; block and cluster names | fictional | — |
+
+### How it is wired
+
+- `npm run data:fetch` (`scripts/fetch-real-data.mjs`) downloads the sources into
+  `app/.data/sources/<source>/` (git-ignored, about 14.9 MB): UDISE+ through the portal's CKAN
+  datastore API, one 1,000-row page every 4 s, resumable page by page, backing off on HTTP 429;
+  the PDFs and CSVs whole. Every download is checked (content type, `%PDF` or the expected CSV
+  header, CKAN `success`) and written to a `.part` file first, so an error page never replaces a
+  good file. Nothing is executed from the download folders.
+- `npm run data:build` (`scripts/build-real-data.mjs`) turns them into two small committed files:
+  `data/real/schools.json` (309 KB: per demo school id, the real school's moved position,
+  management, category, rural/urban, enrolment Classes 1–8, teachers, classrooms — **no name, no
+  UDISE code, no village**) and `data/real/figures.json` (31 KB: PRS, ASER, NFHS, PAB lines and the
+  card mapping, each with its page). The PRS and PAB figures were read off the PDFs by position
+  (pypdf with text coordinates; the PRS text layer lists the two overall charts in the opposite
+  order to the page) and the build re-reads every cited page with `scripts/pdf-page-text.py`
+  (`python3 -I`, pypdf) and refuses to write if a figure is not on it — 126 checks.
+- When the database opens, `ensureRealData()` (`src/lib/ext/realdata.ts`) applies the files once
+  (marker `realdata` in `ext_meta`, a fingerprint of both files; a demo reset applies them again):
+  it updates the schools, calibrates Class 3, re-measures the findings and outcome checks that
+  depend on Class 3, and puts the PAB costs on the cards. The map is redrawn from the real
+  positions (`generateInsideReal` gives each grid cell to the cluster of its nearest school).
+- **Without the files** (`data/real/` absent) the app runs on the fictional seed exactly as
+  before. **Without the downloads** nothing changes: the app only ever reads `data/real/`. To
+  rebuild with fresh data: `npm run data:fetch && npm run data:build`, then
+  `npm run db:init -- --force` (server stopped).
+
+### Real schools without breaking the case ledger — the trade-off
+
+Two ways were possible: rebuild the districts' blocks, clusters and schools from UDISE+, or keep
+the demo's ids and give each demo school a real counterpart. Rebuilding would have broken the case
+ledger: 216 cases, their findings, diagnoses ("4 of 5 driver schools lost a teacher"), plans,
+tasks, proof, users scoped to blocks and clusters, and a hash-chained audit trail all point at the
+demo's school, cluster and block ids, and case titles name the demo clusters. So the demo keeps
+its ids, people and cases, and **each demo school stands for a real school**:
+
+1. pool: government schools (Department of Education or local body) teaching Classes 1–5 whose
+   position lies inside the real district outline (Rampur 828, Lucknow 1,293, Varanasi 921; 321,
+   33 and 92 had positions outside the district and were left out);
+2. the largest of them by Class 1–3 enrolment, as many as the demo has (711 / 695 / 703),
+   primary-only and Class 1–8 schools in the demo's proportions;
+3. grouped by position into the demo's blocks (the first block takes the district town) and then
+   clusters, with the demo's own group sizes (capacitated k-means);
+4. inside each cluster, matched on type and Class 1–3 enrolment (mean Class 3 gap 12–13 children;
+   88 / 176 / 100 type mismatches where the district had too few Class 1–8 government schools).
+
+Block names could not be matched through LGD: the demo's block and cluster names are fictional
+and match no LGD block (and UDISE+ carries an LGD block code for only 41–73% of rows), so blocks
+were rebuilt from positions. The cost: the demo's blocks are groupings of real schools, not real
+blocks. Districts are joined by LGD code (Rampur 176, Lucknow 162, Varanasi 187; PRS uses the
+same, IND09176 etc.); ASER has names only, checked against the LGD list.
+
+Assessment rows keep their own simulated 2025–26 enrolled and assessed counts; the school profile
+shows UDISE+ enrolment (about 2020-21), so the two can differ. UDISE+ has no sanctioned posts, so
+`teachers_sanctioned` is estimated from enrolment with the RTE Act's schedule (`rteTeacherPosts`).
+
+### Real names are never shown
+
+The learning results are simulated, so a real school's name or code beside them could make a real
+school look as if it were failing. Names, UDISE codes and villages never leave `.data/sources/`;
+each school is shown as **"School 0412 · Rampur Sadar"** / **"विद्यालय 0412 · रामपुर सदर"**
+(`src/lib/school-label.ts`), pins are moved 300–700 m in a fixed direction per school, and the
+school page shows a "Real school (UDISE+) · name withheld" chip and a UDISE+ profile card.
+`npm run test:realdata -- http://localhost:3000` scans pages and API answers in both languages for
+every real school name and UDISE code in the three districts.
+
+### Calibration to PRS 2024 — reconciliation
+
+One offset per district and subject, the same for every round R0–R3, applied to every Class 3
+result so the district average in R0 (Feb 2025, the round nearest PRS 2024, held Dec 2024) equals
+the PRS figure. Each school moves by the same number of points in every round, so its own changes
+survive; a school near 100% moves only as far as it can and the rest of its cluster a little more,
+so cluster and district totals move by the offset. Counts stay whole and `pct_proficient` is
+`n_proficient / n_assessed`.
+
+| District | Subject | PRS 2024 (PDF p. 15) | Simulated before | Offset | Simulated now (R0) | Gap |
+|---|---|---|---|---|---|---|
+| Rampur | Language | 73% | 41.3% | +31.7 | 73.0% | 0.0 |
+| Rampur | Mathematics | 67% | 43.8% | +23.2 | 67.0% | 0.0 |
+| Lucknow | Language | 72% | 44.3% | +27.7 | 72.0% | 0.0 |
+| Lucknow | Mathematics | 66% | 47.1% | +18.9 | 66.0% | 0.0 |
+| Varanasi | Language | 67% | 51.4% | +15.6 | 67.0% | 0.0 |
+| Varanasi | Mathematics | 61% | 53.8% | +7.2 | 61.0% | 0.0 |
+
+What it does to the ledger (all checked by `npm run test:realdata`):
+
+- every finding keeps its status, case and driver schools; findings on Classes 1–2 are untouched;
+- Class 3 drops move by at most 2.0 pp (155 of 160 by 1 pp or less), so case titles ("fell X
+  pts") still hold, and no case-opened finding falls below the materiality line;
+- the Class 3 findings' figures are re-measured, so they equal what the detector measures on the
+  calibrated rows. Raising the level changes the two-proportion z-test, so 19 of 160 would pass or
+  fail the noise test differently today (5 of them opened cases). The decision stands; the finding
+  page says so ("Re-measured after calibration");
+- Class 3 outcome checks are re-derived exactly as `write.ts` derives them (so re-running one gives
+  the stored answer); 2 of 51 read differently than when they were made (one "improved — indicative"
+  is now "confirmed", one "below target" is now "no change"); the case moves that followed stand,
+  and the case page says so;
+- learning caches, hotspots and the R4 samples follow automatically (`app/samples/` was regenerated
+  from the calibrated R3; the import walkthrough still opens CASE-0216 and CASE-0217).
+
+Caveats: PRS reports average % correct; the demo measures % of children at the grade benchmark. They
+are not the same measure — matching one to the other is a simplification. PRS covers government and
+private schools; the demo's schools are government schools.
+
+### Costs from the UP PAB 2025-26 minutes
+
+| Card | Unit cost | PAB line (PDF page) | Basis |
+|---|---|---|---|
+| INT-08 Place-value manipulatives kit | ₹165 per child | Elementary Head TLM (Grade III), Grades 3–5 (p. 48) | PAB line |
+| INT-16 Library period with graded readers | ₹2,000 per primary school, ₹3,000 per composite school | Library grant (p. 47) | PAB line |
+| INT-05 / INT-06 Structured lesson plans and teacher guides | ₹100 per teacher | Teacher Resource Material, Grades 3–5 (p. 48) | PAB line |
+| INT-10 Parent meeting on learning levels | ₹1,500 per school | Community mobilisation (p. 39) | PAB line |
+| INT-01 / INT-02 Teacher-led remedial hour | ₹500 per child | Learning Enhancement Programme (remedial), Classes 6–8 only (p. 44) | nearest line |
+| INT-14 Multigrade classroom management training | ₹1,500 per teacher | In-service teacher training, 5 days (p. 47) | nearest line |
+| INT-15 Assessment-informed regrouping | ₹65 per child | Student learning assessment, Class 5 and 8 board exams (p. 45) | nearest line |
+
+The other nine cards keep their illustrative cost and label. A plan's estimate multiplies the unit
+cost by its schools' UDISE+ enrolment in the case's class (per child), teachers in position (per
+teacher) or school type (per school); plans drafted before keep their original illustrative
+estimate. Note: the brief listed remedial teaching as Classes I–VIII; the minutes sanction it for
+Classes 6–8 only, hence "nearest line". Also verified: FLN teacher capacity building ₹1,300 per
+teacher (p. 48) and SMC training ₹3,000 per school (p. 39), not mapped to a card.
+
+### District context
+
+On `/hotspots` (every district in the reader's scope) and `/district`, a card labelled **"Context,
+not cause"** shows PRS 2024 Class 3 beside the demo's calibrated R0, ASER 2024 (rural, p. 2) and
+four NFHS-5 indicators:
+
+| | Rampur | Lucknow | Varanasi | UP |
+|---|---|---|---|---|
+| ASER: Std III–V reading a Std II text | 41.8% | 54.7% | 61.0% | 46.5% |
+| ASER: Std III–V doing at least subtraction | 48.4% | 52.8% | 62.6% | 52.7% |
+| ASER: children 6–14 in government schools | 38.6% | 41.8% | 49.6% | 49.1% |
+| ASER: children 6–14 not in school | 5.5% | 4.7% | 2.4% | 3.9% |
+| NFHS-5: women with 10+ years of schooling | 26.9% | 51.9% | 55.0% | |
+| NFHS-5: women literate | 57.0% | 78.4% | 79.0% | |
+| NFHS-5: children under 5 stunted | 40.4% | 32.1% | 37.4% | |
+| NFHS-5: population with electricity | 96.2% | 96.8% | 97.2% | |
+
+(The portal's NFHS file also has "2023-24" rows whose round it does not document; they are not used.)
+
+### Credits
+
+UDISE+, Ministry of Education, via the India Data Portal (ISB), ODC-BY 1.0 · PARAKH Rashtriya
+Sarvekshan 2024, NCERT (reproduced accurately with credit; logos not used) · ASER 2024, ASER
+Centre / Pratham · NFHS-5, IIPS and MoHFW, via the India Data Portal (licence not stated) ·
+Samagra Shiksha UP PAB minutes 2025-26, DoSEL, Ministry of Education (Internet Archive copy) ·
+LGD codes, Ministry of Panchayati Raj, via the India Data Portal, ODC-BY · OpenStreetMap
+contributors, ODbL.
 
 ## Speed, and five loose ends closed (backend hardening)
 

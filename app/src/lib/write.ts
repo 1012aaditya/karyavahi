@@ -511,9 +511,9 @@ export function draftPlan(
     run(
       `insert into case_plans (id, case_id, cycle, version, intervention_id, alternatives, school_ids, rationale,
          drafted_by, ai_model, pre_registration, estimated_cost_inr, cost_is_illustrative, status, created_at, created_by)
-       values (?,?,?,?,?,?,?,?,'officer',null,?,?,1,'draft',?,?)`,
+       values (?,?,?,?,?,?,?,?,'officer',null,?,?,?,'draft',?,?)`,
       planId, c.id, cycle, version, o.interventionId, JSON.stringify(preview.alternatives), JSON.stringify(ordered),
-      rationale, JSON.stringify(pre), preview.estimatedCost, nowIso(), s.user_id,
+      rationale, JSON.stringify(pre), preview.estimatedCost, m.intervention.cost_basis.illustrative === false ? 0 : 1, nowIso(), s.user_id,
     );
     if (cur?.status === 'draft') run(`update case_plans set status = 'superseded' where id = ?`, c.current_plan_id);
     // The intervention's lever decides who approves the plan, so the case takes it on.

@@ -259,13 +259,16 @@ export function mapData(s: Session, opts: { parentId?: string; hierarchy?: Hiera
     childLevel, crumbs: breadcrumbs(s, parent.id, h), hierarchy: h, hasUrban,
     features: { type: 'FeatureCollection', features }, outline, compared,
     sources: realMap()
-      ? { geometry: 'osm', attribution: 'Real boundaries © OpenStreetMap contributors (ODbL). Blocks, clusters, school positions and all figures are simulated.' }
+      ? { geometry: 'osm', attribution: realSchools()
+        ? 'Real boundaries © OpenStreetMap contributors (ODbL). Schools are real (UDISE+ via India Data Portal, ODC-BY; names withheld, pins moved a few hundred metres); blocks, clusters and all learning figures are simulated.'
+        : 'Real boundaries © OpenStreetMap contributors (ODbL). Blocks, clusters, school positions and all figures are simulated.' }
       : { geometry: 'illustrative', attribution: 'Illustrative geography generated for a fictional state — not real boundaries or locations.' },
   };
 }
 
 /** True when the state is drawn from real boundaries rather than the illustrative shapes. */
 const realMap = () => one<{ g: string }>(`select geometry_source g from geo_units where level = 'state' limit 1`)?.g === 'osm';
+const realSchools = () => one<{ g: string }>(`select geometry_source g from geo_units where level = 'school' and geometry_source = 'udise' limit 1`)?.g === 'udise';
 
 /**
  * The "right now" figures for each child on the map: a school's own (teachers, last visit,

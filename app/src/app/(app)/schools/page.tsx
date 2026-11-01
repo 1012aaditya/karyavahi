@@ -3,6 +3,7 @@ import { getLanguage } from '@/lib/session';
 import { pageSession } from '@/lib/page-session';
 import { schoolsIn, schoolCount, scopeName, placeNames } from '@/lib/repo';
 import { pick } from '@/lib/i18n';
+import { schoolName } from '@/lib/school-label';
 import { Card, CardHead, PageHead, Grid, Stat, Empty, Mono, fmtInt } from '@/components/ui';
 import { Pill } from '@/components/labels';
 import { Icon } from '@/components/Icon';
@@ -140,7 +141,7 @@ export default async function SchoolsPage({
                   {schools.map((s) => (
                     <tr key={s.id}>
                       <td>
-                        <Link href={`/schools/${s.id}`} className="link font-medium">{s.name}</Link>
+                        <Link href={`/schools/${s.id}`} className="link font-medium">{schoolName(s.name, lang)}</Link>
                         <p className="text-xs text-ink-faint">
                           {s.village} · <Mono>{s.id}</Mono> · {s.category.replace(/_/g, ' ')}
                         </p>
