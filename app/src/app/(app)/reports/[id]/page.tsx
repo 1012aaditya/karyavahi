@@ -9,20 +9,22 @@ import { Card, CardHead, PageHead, Callout, Facts, Field, Mono, fmtDate } from '
 import { Pill, AiDrafted } from '@/components/labels';
 import { DISCLAIMER } from '@domain/catalog';
 import { ReportView } from '@/components/ReportView';
-import { ReportsRail } from '@/components/ReportsRail';
+import { REPORT_ICON, REPORT_HI } from '@/components/ReportsRail';
+import { ReportPicture } from '@/components/ReportPicture';
 import { PrintButton } from '@/components/PrintButton';
 import { Icon } from '@/components/Icon';
-import type { BuiltReport } from '@/lib/reports';
+import { REPORT_TYPES, type BuiltReport } from '@/lib/reports';
+import type { Language } from '@domain/types';
 
-function ExportBar({ id, type, snapshot }: { id: string; type: string; snapshot: boolean }) {
+function ExportBar({ id, type, snapshot, lang }: { id: string; type: string; snapshot: boolean; lang: Language }) {
   const regen = ['atr', 'learning_impact', 'exceptions', 'review_pack', 'block_performance', 'intervention_effectiveness', 'data_quality', 'executive_summary'].includes(type)
     ? type : type === 'learning_outcome' ? 'learning_impact' : type === 'overdue_tasks' || type === 'district_escalation' ? 'exceptions' : type === 'executive_brief' ? 'executive_summary' : 'atr';
   return (
     <div className="flex flex-wrap items-center gap-2 no-print">
-      <a href={`/api/reports/${id}/export?format=xlsx`} className="btn-quiet btn-sm"><Icon name="download" size={14} />Excel</a>
+      <a href={`/api/reports/${id}/export?format=xlsx`} className="btn-quiet btn-sm"><Icon name="download" size={14} />{pick(lang, 'Excel', 'एक्सेल')}</a>
       <a href={`/api/reports/${id}/export?format=csv`} className="btn-quiet btn-sm"><Icon name="download" size={14} />CSV</a>
-      <PrintButton />
-      <Link href={`/reports/new?type=${regen}`} className="btn-primary btn-sm" title={snapshot ? 'This page is a frozen snapshot; regenerate to use current records' : undefined}><Icon name="refresh" size={14} />Regenerate from current records</Link>
+      <PrintButton label={pick(lang, 'Print / Save as PDF', 'छापें / PDF सहेजें')} />
+      <Link href={`/reports/new?type=${regen}`} className="btn-primary btn-sm" title={snapshot ? pick(lang, 'This page is a frozen snapshot; regenerate to use current records', 'यह स्थिर प्रति है; वर्तमान रिकॉर्ड हेतु दोबारा बनाएँ') : undefined}><Icon name="refresh" size={14} />{pick(lang, 'Regenerate from current records', 'वर्तमान रिकॉर्ड से दोबारा बनाएँ')}</Link>
     </div>
   );
 }
@@ -85,20 +87,27 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
 
   if ((r.content as { builder?: string }).builder === 'v2') {
     const built = r.content as unknown as BuiltReport;
+    const kind = REPORT_TYPES.find((t) => t.key === built.type);
     return (
-      <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <div className="no-print"><ReportsRail session={session} activeReport={r.id} /></div>
-        <article className="min-w-0 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 no-print">
-            <p className="text-sm text-ink-faint">Snapshot <Mono>{r.id}</Mono> · {fmtDate(r.generated_at, true)} · {users.get(r.generated_by) ?? r.generated_by} · figures frozen at that moment</p>
-            <ExportBar id={r.id} type={r.report_type} snapshot />
-          </div>
-          {generated ? <Callout tone="good" title="Report generated">Saved as snapshot {r.id} and recorded in the audit trail. It will not change when the records do.</Callout> : null}
-          <div className="rounded-xl bg-paper-deep/60 p-3 sm:p-6 print:bg-white print:p-0">
-            <ReportView r={built} snapshotId={r.id} />
-          </div>
-        </article>
-      </div>
+      <article className="space-y-5">
+        <div className="no-print">
+          <PageHead
+            breadcrumb={<><Link href="/reports" className="link">{pick(lang, 'Reports', 'रिपोर्ट')}</Link>{' › '}<Mono>{r.id}</Mono></>}
+            title={r.title}
+            sub={<span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="inline-flex items-center gap-1.5"><Icon name={REPORT_ICON[built.type] ?? 'file'} size={15} className="text-brand" />{kind ? pick(lang, kind.label, REPORT_HI[kind.key]?.label ?? kind.label) : built.type}</span>
+              <span className="text-ink-faint">·</span><span>{built.scope}</span>
+            </span>}
+            meta={<>{pick(lang, 'Snapshot', 'स्थिर प्रति')} <Mono>{r.id}</Mono> · <span className="tnum">{fmtDate(r.generated_at, true, lang)}</span> · {users.get(r.generated_by) ?? r.generated_by} · {pick(lang, 'figures frozen at that moment', 'आँकड़े उसी क्षण के')}</>}
+          />
+          <div className="-mt-3"><ExportBar id={r.id} type={r.report_type} snapshot lang={lang} /></div>
+        </div>
+        {generated ? <Callout tone="good" title={pick(lang, 'Report generated', 'रिपोर्ट बनी')}>{pick(lang, `Saved as snapshot ${r.id} and recorded in the audit trail. It will not change when the records do.`, `स्थिर प्रति ${r.id} के रूप में सहेजी गई और लेखा-परीक्षा में दर्ज। रिकॉर्ड बदलने पर यह नहीं बदलेगी।`)}</Callout> : null}
+        <ReportPicture r={built} lang={lang} />
+        <div className="rounded-2xl bg-paper-deep/60 p-3 sm:p-6 print:bg-white print:p-0">
+          <ReportView r={built} snapshotId={r.id} />
+        </div>
+      </article>
     );
   }
 
@@ -111,7 +120,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
         right={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Pill>{r.report_type.replace(/_/g, ' ')}</Pill>
-            <ExportBar id={r.id} type={r.report_type} snapshot />
+            <ExportBar id={r.id} type={r.report_type} snapshot lang={lang} />
             {r.narrative_model ? <AiDrafted lang={lang} model={r.narrative_model} /> : null}
           </div>
         }
