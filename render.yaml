@@ -1,0 +1,32 @@
+# Render blueprint for the Karyavahi demo (https://render.com/docs/blueprint-spec).
+#
+# Free plan: the service sleeps after about 15 minutes without visits (the next visit takes about
+# a minute) and the file system is not kept, so every restart begins again from the demo seed
+# (`npm start` runs db-init first, which copies the pristine database). Uploaded proof photos are
+# lost on a restart too. For a demo that resets itself, that is fine; for a pilot, use a paid plan
+# with a disk, or Postgres (see docs/ROADMAP.md).
+services:
+  - type: web
+    name: karyavahi
+    runtime: node
+    plan: free
+    region: singapore
+    # The app imports the shared domain rules from ../src, so the whole repository is built; the
+    # commands run inside app/.
+    buildCommand: cd app && npm ci && npm run build
+    startCommand: cd app && npm start
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      # node:sqlite needs Node 22.13 or later; the app is developed and tested on Node 24.
+      - key: NODE_VERSION
+        value: "24"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # Secrets: entered in the Render dashboard when the blueprint is created, never committed.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # A browser key, built into the pages at build time. Restrict it to this site's address in
+      # the Google Cloud console (HTTP referrers) before relying on it.
+      - key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+        sync: false

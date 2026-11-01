@@ -6,7 +6,7 @@
     "db:build": "node --experimental-sqlite scripts/build-db.mjs",
     "dev": "next dev -p 3000",
     "build": "next build",
-    "start": "next start -p 3000",
+    "start": "next start -p ${PORT:-3000}",
     "typecheck": "tsc --noEmit",
     "setup": "npm run db:build && npm run typecheck",
     "verify": "bash scripts/verify.sh",
