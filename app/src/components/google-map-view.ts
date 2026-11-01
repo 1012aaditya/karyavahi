@@ -13,19 +13,32 @@ import type { Feature, FeatureCollection, Position } from 'geojson';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type G = any;
 
+/** Why Google Maps is not drawing: the key was refused, its daily quota is spent, or the script never arrived. */
+export type Refusal = 'key' | 'quota' | 'unreachable';
+
 let loading: Promise<G> | null = null;
-let refused = false;
-const refusalListeners = new Set<() => void>();
+let refused: Refusal | null = null;
+const refusalListeners = new Set<(why: Refusal) => void>();
+
+function refuse(why: Refusal): void {
+  if (refused) return;
+  refused = why;
+  for (const cb of refusalListeners) cb(why);
+}
 
 /**
  * Google checks the key after the script has loaded, so a refusal can arrive after "ready".
- * Whoever drew a map is told, and can fall back to another engine.
+ * Whoever drew a map is told why, and falls back to the plain map.
  */
-export function onKeyRefused(cb: () => void): () => void {
-  if (refused) { cb(); return () => {}; }
+export function onKeyRefused(cb: (why: Refusal) => void): () => void {
+  if (refused) { cb(refused); return () => {}; }
   refusalListeners.add(cb);
   return () => { refusalListeners.delete(cb); };
 }
+
+// A key over its daily quota (Google's free "Demo Key" has a small one) is reported by the Maps
+// script as an uncaught error rather than through gm_authFailure. Treat it as a refusal too.
+const QUOTA_RE = /Maps.*(limit reached|quota)|OverQuotaMapError|OverDailyLimit/i;
 
 /** Load the Maps JavaScript API once per page. Rejects when the script cannot be reached. */
 export function loadGoogleMaps(key: string): Promise<G> {
@@ -36,14 +49,16 @@ export function loadGoogleMaps(key: string): Promise<G> {
     w.__kvMapsReady = () => resolve(w.google.maps);
     // Google calls this when the key is missing, wrong, or not allowed for this site.
     w.gm_authFailure = () => {
-      refused = true;
-      for (const cb of refusalListeners) cb();
+      refuse('key');
       reject(new Error('Google Maps refused the API key.'));
     };
+    window.addEventListener('error', (e) => {
+      if (QUOTA_RE.test(String(e.message ?? e.error?.message ?? ''))) { e.preventDefault(); refuse('quota'); reject(new Error('Google Maps refused: daily quota reached.')); }
+    });
     const s = document.createElement('script');
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly&libraries=marker&loading=async&callback=__kvMapsReady`;
     s.async = true;
-    s.onerror = () => reject(new Error('Could not reach Google Maps.'));
+    s.onerror = () => { refuse('unreachable'); reject(new Error('Google Maps refused: could not reach Google.')); };
     document.head.appendChild(s);
   });
   return loading;

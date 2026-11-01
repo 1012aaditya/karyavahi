@@ -8,7 +8,7 @@ import type { Map as MLMap, Marker, MapLayerMouseEvent, ExpressionSpecification 
 import { SEVERITY_COLORS, SEVERITY_LABEL } from '@/lib/maplayers';
 import { PALETTE } from '@/lib/tokens';
 import { Icon } from './Icon';
-import { loadGoogleMaps, onKeyRefused, GoogleMapView } from './google-map-view';
+import { loadGoogleMaps, onKeyRefused, GoogleMapView, type Refusal } from './google-map-view';
 import type { FeatureCollection, Feature } from 'geojson';
 
 /**
@@ -207,7 +207,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
   // for the small dashboard maps, on MapLibre with no background tiles.
   const googleKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
   // If Google refuses the key, the page falls back to the plain map and says why.
-  const [googleRefused, setGoogleRefused] = useState(false);
+  const [googleRefused, setGoogleRefused] = useState<Refusal | null>(null);
   const useGoogle = (workspace || basemap === 'auto') && googleKey.length > 0 && !googleRefused;
   const gview = useRef<GoogleMapView | null>(null);
   const byParam = sp.get('by');
@@ -390,7 +390,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
   useEffect(() => {
     if (!useGoogle) return undefined;
     let cancelled = false;
-    const stop = onKeyRefused(() => { if (!cancelled) { gview.current?.destroy(); gview.current = null; setGoogleRefused(true); } });
+    const stop = onKeyRefused((why) => { if (!cancelled) { gview.current?.destroy(); gview.current = null; setGoogleRefused(why); } });
     loadGoogleMaps(googleKey).then((maps) => {
       if (cancelled || !box.current) return;
       gview.current = new GoogleMapView(maps, box.current, {
@@ -521,7 +521,11 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
         ) : null}
         {googleRefused ? (
           <div className="absolute right-14 top-3 z-20 max-w-xs rounded-lg border border-warn/30 bg-warn-light px-3 py-2 text-xs leading-snug text-warn shadow-lift">
-            Google Maps refused the API key, so this is the plain map. Check NEXT_PUBLIC_GOOGLE_MAPS_API_KEY and that the key allows this site.
+            {googleRefused === 'quota'
+              ? L('Google Maps has used up today’s limit for this key, so this is the plain map.', 'इस कुंजी की Google Maps की आज की सीमा पूरी हो गई, इसलिए यह सादा नक्शा है।')
+              : googleRefused === 'unreachable'
+                ? L('Google Maps could not be reached, so this is the plain map.', 'Google Maps तक पहुँच नहीं हुई, इसलिए यह सादा नक्शा है।')
+                : L('Google Maps refused the API key, so this is the plain map. Check NEXT_PUBLIC_GOOGLE_MAPS_API_KEY and that the key allows this site.', 'Google Maps ने API कुंजी अस्वीकार की, इसलिए यह सादा नक्शा है।')}
           </div>
         ) : null}
         {(workspace || bare) && data?.sources.geometry === 'osm' ? (

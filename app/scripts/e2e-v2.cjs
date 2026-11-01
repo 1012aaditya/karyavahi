@@ -45,6 +45,7 @@ function zipEntries(buf) {
 
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  require('./no-google-maps.cjs').blockGoogleMaps(browser);
   const errors = [];
 
   // ---- public pages

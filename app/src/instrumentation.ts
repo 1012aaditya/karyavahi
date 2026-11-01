@@ -1,11 +1,13 @@
 /**
  * Next's start-up hook. Starts the reminder scheduler (src/lib/scheduler.ts) once per server
  * process: Node runtime only (not the edge runtime) and never while `next build` collects pages.
+ *
+ * The Node-only start-up lives in instrumentation-node.ts and is imported inside the runtime
+ * check, as Next documents: Next compiles this file for the edge runtime too, and only an import
+ * written inside `if (process.env.NEXT_RUNTIME === 'nodejs')` is left out of that bundle.
  */
 export async function register(): Promise<void> {
-  if (process.env.NEXT_RUNTIME !== 'nodejs') return;
-  if (process.env.NEXT_PHASE === 'phase-production-build') return;
-  if (process.env.KV_SCHEDULER === 'off') return;
-  const { startScheduler } = await import('./lib/scheduler');
-  startScheduler();
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    await import('./instrumentation-node');
+  }
 }

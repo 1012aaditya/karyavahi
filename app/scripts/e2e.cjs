@@ -18,11 +18,13 @@ const ok = (label, cond, extra = '') => {
 
 (async () => {
   const browser = await chromium.launch(launchOpts);
+  require('./no-google-maps.cjs').blockGoogleMaps(browser);
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   const errors = [];
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  page.on('pageerror', (e) => errors.push(String(e)));
+  const { isBlockedGoogle } = require('./no-google-maps.cjs');
+  page.on('console', (m) => { if (m.type() === 'error' && !isBlockedGoogle(m)) errors.push(m.text()); });
+  page.on('pageerror', (e) => errors.push(`${page.url()}: ${String(e)}`));
 
   // ---- sign in ----
   await page.goto(`${BASE}/demo`, { waitUntil: 'networkidle' });

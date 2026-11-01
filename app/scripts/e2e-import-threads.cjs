@@ -27,6 +27,7 @@ const ok = (label, cond, extra = '') => {
 
 (async () => {
   const browser = await chromium.launch(launchOpts);
+  require('./no-google-maps.cjs').blockGoogleMaps(browser);
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   const errors = [];

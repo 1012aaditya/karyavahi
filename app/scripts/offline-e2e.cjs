@@ -54,6 +54,7 @@ const photo = (tag) => Buffer.concat([JPEG, Buffer.from(`\n${tag}\n`)]);
   ok('from another site: 403', cross.status === 403, String(cross.status));
 
   const browser = await chromium.launch(launchOpts);
+  require('./no-google-maps.cjs').blockGoogleMaps(browser);
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true,
     permissions: ['geolocation'], geolocation: { latitude: T.lat, longitude: T.lng, accuracy: 15 },
