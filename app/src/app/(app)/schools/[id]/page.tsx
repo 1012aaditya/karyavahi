@@ -61,7 +61,14 @@ export default async function SchoolPage({ params }: { params: Promise<{ id: str
         }
         title={name}
         sub={`${profile ? '' : `${s.village} · `}${places.clusters.get(s.cluster_id) ?? s.cluster_id} · ${places.blocks.get(s.block_id) ?? s.block_id} · ${places.districts.get(s.district_id) ?? s.district_id}`}
-        right={<ProvenanceChip provenance={s.provenance} lang={lang} />}
+        right={
+          <span className="flex flex-wrap items-center gap-1.5">
+            {profile?.pmshri ? (
+              <span data-testid="pmshri-badge"><Pill tone="good" title={pick(lang, 'The real school this demo school stands for is a PM SHRI school (pmshri.education.gov.in).', 'यह डेमो विद्यालय जिस वास्तविक विद्यालय का प्रतिनिधि है, वह पीएम श्री विद्यालय है (pmshri.education.gov.in)।')}>{pick(lang, 'PM SHRI', 'पीएम श्री')}</Pill></span>
+            ) : null}
+            <ProvenanceChip provenance={s.provenance} lang={lang} />
+          </span>
+        }
       />
 
       <Grid cols={5}>
@@ -90,6 +97,9 @@ export default async function SchoolPage({ params }: { params: Promise<{ id: str
               <Field label={pick(lang, 'Category', 'श्रेणी')}>{profile.category === 'primary' ? pick(lang, 'Primary (Classes 1–5)', 'प्राथमिक (कक्षा 1–5)') : pick(lang, 'Primary with upper primary (Classes 1–8)', 'प्राथमिक सहित उच्च प्राथमिक (कक्षा 1–8)')}</Field>
               <Field label={pick(lang, 'Area', 'क्षेत्र')}>{profile.location === 'urban' ? pick(lang, 'Urban', 'शहरी') : pick(lang, 'Rural', 'ग्रामीण')}</Field>
               <Field label={pick(lang, 'Classrooms', 'कक्षा-कक्ष')}>{fmtInt(profile.classrooms)}</Field>
+              <Field label={pick(lang, 'PM SHRI school', 'पीएम श्री विद्यालय')}>{profile.pmshri
+                ? pick(lang, 'Yes, on the PM SHRI list (Ministry of Education)', 'हाँ, पीएम श्री सूची में (शिक्षा मंत्रालय)')
+                : pick(lang, 'No', 'नहीं')}</Field>
             </Facts>
             <div>
               <p className="label mb-1.5">{pick(lang, 'Enrolment by class', 'कक्षावार नामांकन')}</p>

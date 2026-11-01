@@ -10,9 +10,11 @@
  *   npx tsx --conditions=react-server scripts/realdata-test.mts
  *   npx tsx --conditions=react-server scripts/realdata-test.mts http://localhost:3081
  *
- * When the raw downloads are present (.data/sources/udise/), the scan looks for every real
- * school name and UDISE code in the three districts; without them it looks for anything shaped
- * like a UDISE code and checks every school carries the anonymised label.
+ * When the raw downloads are present (.data/sources/udise/, .data/sources/pmshri/), the scan
+ * looks for every real school name and UDISE code in the three districts (and every PM SHRI
+ * school's code); without them it looks for anything shaped like a UDISE code and checks every
+ * school carries the anonymised label. The district context added later (PGI-D, Census 2011, the
+ * NITI aspirational block, PM SHRI) is checked against the raw files when they are present.
  */
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -60,6 +62,16 @@ if (haveSources) {
     }
   }
 }
+const PMSHRI_DIR = join(DATA, 'sources', 'pmshri');
+const havePmshriRaw = existsSync(PMSHRI_DIR) && readdirSync(PMSHRI_DIR).some((f) => /^district-\d+\.json$/.test(f));
+const pmshriCodes = new Set<string>();
+if (havePmshriRaw) {
+  for (const f of readdirSync(PMSHRI_DIR).filter((x) => /^district-\d+\.json$/.test(x))) {
+    for (const s of (JSON.parse(readFileSync(join(PMSHRI_DIR, f), 'utf8')) as { schools: { udise: string }[] }).schools) {
+      for (const c of [s.udise, s.udise.replace(/^0/, '')]) { pmshriCodes.add(c); realCodes.add(c); }
+    }
+  }
+}
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const nameRe = realNames.length ? new RegExp(`(?:^|[^A-Z0-9])(${[...new Set(realNames)].sort((a, b) => b.length - a.length).map(esc).join('|')})(?=$|[^A-Z0-9])`) : null;
 const codeShape = /(?<![0-9])(?:09\d{9}|9\d{9})(?![0-9])/g;
@@ -87,6 +99,7 @@ try {
   console.log(`--- the files (${haveSources ? `downloads present: ${realNames.length} distinctive names, ${realCodes.size / 2} codes to look for` : 'downloads absent: shape checks only'}) ---`);
   ok('data/real/schools.json and figures.json are present', !!rd.realSchools() && !!figures);
   const committed = ['schools.json', 'figures.json'].map((f) => readFileSync(join(APP, 'data', 'real', f), 'utf8')).join('\n');
+  ok(`PM SHRI codes are part of the scan (${pmshriCodes.size / 2} codes)`, !havePmshriRaw || pmshriCodes.size > 0);
   ok('the committed files hold no school name or UDISE code', !leak(committed) && !/"(school_name|udise_school_code|udise_code|village)"\s*:/.test(committed), leak(committed) ?? 'a name or code field');
   ok('no committed file under data/ or samples/ carries a real name or code', (() => {
     for (const dir of ['data', 'samples']) for (const f of readdirSync(join(APP, dir))) {
@@ -119,6 +132,58 @@ try {
   ok('no real school name or UDISE code in the columns the interface reads', !dbLeak, dbLeak ?? '');
   const profileCols = all<{ name: string }>(`select name from pragma_table_info('school_profile')`).map((r) => r.name);
   ok('school_profile stores no name, code or village column', !profileCols.some((c) => /udise|code|village|^name$/.test(c)), profileCols.join(','));
+
+  console.log('\n--- more district context: PGI-D, Census 2011, aspirational block, PM SHRI ---');
+  const D3 = figures!.districts;
+  const PGID_DIR = join(DATA, 'sources', 'pgid');
+  ok('every district carries PGI-D grades for 2022-23 to 2025-26, overall and six categories', Object.values(D3).every((d) => d.pgid?.years.length === 4
+    && d.pgid.years.every((y) => figures!.pgid!.grades.some((g) => g.key === y.overall) && Object.keys(y.domains).length === 6)));
+  ok('PGI-D is cited (title, ministry, portal address, grade bands)', !!figures!.pgid && /PGI-D/.test(figures!.pgid.title) && /Ministry of Education/.test(figures!.pgid.by)
+    && figures!.pgid.url.startsWith('https://dpgi.udiseplus.gov.in') && figures!.pgid.grades.length === 10);
+  ok('PGI-D 2025-26 overall: Rampur and Lucknow Prachesta-2, Varanasi Prachesta-1', D3['DST-01'].pgid!.years[3].overall === 'PRACHESTA-2'
+    && D3['DST-02'].pgid!.years[3].overall === 'PRACHESTA-2' && D3['DST-03'].pgid!.years[3].overall === 'PRACHESTA-1');
+  if (existsSync(PGID_DIR)) {
+    let checked = 0; let bad: string | null = null;
+    const yrs: [number, string][] = [[5, '2022-23'], [6, '2023-24'], [7, '2024-25'], [8, '2025-26']];
+    for (const [yr, label] of yrs) for (let cat = 0; cat <= 6; cat++) {
+      const data = JSON.parse(readFileSync(join(PGID_DIR, `up-${yr}-${cat}.json`), 'utf8')).categorywiseData as Record<string, { grades: Record<string, number> }>;
+      for (const d of Object.values(D3)) {
+        const api = Object.entries(data[d.name.toUpperCase()].grades).filter(([, v]) => Number(v) === 1).map(([k]) => k)[0];
+        const y = d.pgid!.years.find((x) => x.year === label)!;
+        const mine = cat === 0 ? y.overall : y.domains[figures!.pgid!.domains.find((x) => x.cat === cat)!.key];
+        checked++;
+        if (api !== mine) bad = `${d.name} ${label} cat ${cat}: API ${api}, file ${mine}`;
+      }
+    }
+    ok(`PGI-D grades match the API data (${checked} district × year × category values)`, !bad && checked === 84, bad ?? '');
+  } else console.log('  --   PGI-D raw files absent; API comparison skipped');
+  ok('Census 2011 per district: population, literacy, female literacy, SC/ST and rural shares', Object.values(D3).every((d) => !!d.census
+    && d.census.population > 1e6 && d.census.literacy_rate > 0 && d.census.female_literacy_rate < d.census.literacy_rate && d.census.sc_share > 0 && d.census.rural_share > 0));
+  ok('Census 2011 matches the published district figures (population; literacy 53.34 / 77.29 / 75.60)', D3['DST-01'].census!.population === 2335819 && D3['DST-02'].census!.population === 4589838
+    && D3['DST-03'].census!.population === 3676841 && D3['DST-01'].census!.literacy_rate === 53.34 && D3['DST-02'].census!.literacy_rate === 77.29 && D3['DST-03'].census!.literacy_rate === 75.6);
+  ok('Census is cited (Census of India 2011 via the India Data Portal)', !!figures!.census && /Census of India 2011/.test(figures!.census.title) && /India Data Portal/.test(figures!.census.via));
+  const sn = D3['DST-01'].aspirational?.blocks ?? [];
+  ok('Rampur has one NITI aspirational block: Saidnagar (LGD 1487), on both lists', sn.length === 1 && sn[0].name === 'Saidnagar' && sn[0].lgd_block === 1487 && !!sn[0].in_up_abp_plus);
+  ok('Lucknow and Varanasi have none', (D3['DST-02'].aspirational?.blocks.length ?? -1) === 0 && (D3['DST-03'].aspirational?.blocks.length ?? -1) === 0);
+  ok('Saidnagar carries the 11 education indicators (2.1–2.11), each named from NITI’s metadata with a Hindi label', sn[0]?.education.length === 11
+    && sn[0].education.every((e) => typeof e.value === 'number' && !!figures!.aspirational!.indicators[e.code]?.official && /[\u0900-\u097F]/.test(figures!.aspirational!.indicators[e.code].hi)));
+  ok('the aspirational data is cited (UP Planning Department, NITI Aayog, period)', !!figures!.aspirational && /Planning Department/.test(figures!.aspirational.by) && /NITI/.test(figures!.aspirational.by)
+    && /^[A-Z][a-z]+ \d{4}$/.test(figures!.aspirational.period));
+  const sfile = rd.realSchools()!.schools;
+  const flagged = Object.entries(sfile).filter(([, x]) => x.pmshri);
+  const KEYS = new Set(['pos', 'mgmt', 'cat', 'loc', 'enr', 'teachers', 'rooms', 'pmshri', 'kvs', 'nvs']);
+  ok('PM SHRI flags are bare yes/no values: no code, name or other field rides along', Object.values(sfile).every((x) => Object.keys(x).every((k) => KEYS.has(k))
+    && [x.pmshri, x.kvs, x.nvs].every((v) => v === undefined || v === true)));
+  const districtOf = new Map(all<{ id: string; district_id: string }>('select id, district_id from schools').map((r) => [r.id, r.district_id]));
+  ok('PM SHRI per district: counts cited, flagged demo schools add up', !!figures!.pmshri && Object.values(D3).every((d) => !!d.pmshri && d.pmshri.total > 0)
+    && ['DST-01', 'DST-02', 'DST-03'].every((id) => D3[id].pmshri!.demo_schools_flagged === flagged.filter(([sid]) => districtOf.get(sid) === id).length));
+  const dbFlags = sources.pmshriByDistrict();
+  ok(`the database flags the same ${flagged.length} schools (school_profile.pmshri)`, flagged.length > 0 && Object.values(dbFlags).reduce((t, n) => t + n, 0) === flagged.length
+    && flagged.every(([sid]) => sources.schoolProfile(sid)?.pmshri === true));
+  if (havePmshriRaw) {
+    const totals = [176, 162, 187].map((l) => (JSON.parse(readFileSync(join(PMSHRI_DIR, `district-${l}.json`), 'utf8')) as { total: number }).total);
+    ok(`PM SHRI totals match the list read from the portal (${totals.join(' / ')})`, D3['DST-01'].pmshri!.total === totals[0] && D3['DST-02'].pmshri!.total === totals[1] && D3['DST-03'].pmshri!.total === totals[2]);
+  }
 
   console.log('\n--- calibration to PRS 2024 ---');
   const recon = sources.reconciliation();
@@ -221,12 +286,17 @@ try {
 
   if (BASE) {
     console.log(`\n--- over HTTP: ${BASE} ---`);
+    const sjson = JSON.parse(readFileSync(join(APP, 'data', 'real', 'schools.json'), 'utf8')) as { schools: Record<string, { pmshri?: boolean }> };
+    const pmIds = Object.entries(sjson.schools).filter(([, x]) => x.pmshri).map(([id]) => id).sort();
+    const PM_SCHOOL = pmIds[0] ?? 'SCH-00001';
+    const PM_SCHOOL_RMP = pmIds.find((id) => Number(id.slice(4)) <= 711) ?? PM_SCHOOL;
+    const NOT_PM = Object.keys(sjson.schools).sort().find((id) => !sjson.schools[id].pmshri)!;
     const post = (path: string, body: Record<string, string>) => fetch(`${BASE}${path}`, { method: 'POST', body: new URLSearchParams(body), headers: { origin: BASE }, redirect: 'manual' });
     const cookieOf = (r: Response) => /kv_session=([^;]*)/.exec(r.headers.get('set-cookie') ?? '')?.[1] ?? '';
     const pagesFor: Record<string, string[]> = {
-      'state.lead@demo.karyavahi.test': ['/overview', '/hotspots', '/schools', '/schools/SCH-00001', '/schools/SCH-01200', '/cases/CASE-0184', '/interventions', '/interventions/INT-08', '/interventions/INT-16',
+      'state.lead@demo.karyavahi.test': ['/overview', '/hotspots', '/schools', '/schools/SCH-00001', '/schools/SCH-01200', `/schools/${PM_SCHOOL}`, '/cases/CASE-0184', '/interventions', '/interventions/INT-08', '/interventions/INT-16',
         '/findings', '/api/geo/map', '/api/geo/map?parent=DST-01', '/api/geo/map?parent=BLK-01', '/api/geo/map?parent=CLU-001', '/api/geo/detail?id=SCH-00001', '/api/geo/detail?id=DST-02', '/search?q=school', '/reports', '/sources'],
-      'deo.rmp@demo.karyavahi.test': ['/district', '/hotspots', '/cases/CASE-0184', '/schools'],
+      'deo.rmp@demo.karyavahi.test': ['/district', '/hotspots', '/cases/CASE-0184', '/schools', `/schools/${PM_SCHOOL_RMP}`],
       'hm.sch-00002@demo.karyavahi.test': ['/school', '/today'],
     };
     let scanned = 0; let httpLeak: string | null = null; let bad: string | null = null;
@@ -260,6 +330,23 @@ try {
     ok('a school page shows the anonymised label in Hindi and the UDISE+ profile', sp.includes('विद्यालय 0412') && (sp.includes('UDISE+') || sp.includes('यू-डाइस+')));
     const hs = await (await fetch(`${BASE}/hotspots`, { headers: { cookie: `kv_session=${ck}; kv_lang=en` } })).text();
     ok('the hotspot view shows district context labelled "context, not cause"', hs.includes('Context, not cause') && hs.includes('ASER 2024') && hs.includes('NFHS-5'));
+    ok('/sources lists the new sources and the PM SHRI count per district', ['PGI-D', 'Census of India 2011', 'Aspirational Blocks Programme', 'PM SHRI', 'id="more-context"', 'id="pmshri-count"', 'Saidnagar'].every((k) => pub.includes(k)));
+    ok('/sources has the new rows in Hindi', ['पीएम श्री', 'जनगणना 2011', 'आकांक्षी ब्लॉक', 'सैदनगर'].every((k) => pubHi.includes(k)));
+    const deo = cookieOf(await post('/api/sign-in', { email: 'deo.rmp@demo.karyavahi.test' }));
+    for (const [path, lang] of [['/district', 'en'], ['/hotspots', 'en'], ['/district', 'hi']] as const) {
+      const html = await (await fetch(`${BASE}${path}`, { headers: { cookie: `kv_session=${deo}; kv_lang=${lang}` } })).text();
+      const want = lang === 'en'
+        ? ['data-testid="pgid"', 'Outcomes category', 'Prachesta-2', 'Census 2011', '53.3%', '44.4%', 'NITI Aspirational Block in this district: Saidnagar', 'Context, not cause', 'rebuilt groupings']
+        : ['data-testid="pgid"', 'परिणाम श्रेणी', 'प्रचेष्टा-2', 'जनगणना 2011', 'नीति आकांक्षी ब्लॉक: सैदनगर', 'संदर्भ, कारण नहीं'];
+      const missing = want.filter((k) => !html.includes(k));
+      ok(`Rampur ${path} (${lang}): district card shows PGI-D with Outcomes, Census literacy and SC/ST, the Saidnagar note, labelled context not cause`, !missing.length, missing.join(' | '));
+    }
+    const pmPage = await (await fetch(`${BASE}/schools/${PM_SCHOOL}`, { headers: { cookie: `kv_session=${ck}; kv_lang=en` } })).text();
+    const pmPageHi = await (await fetch(`${BASE}/schools/${PM_SCHOOL}`, { headers: { cookie: `kv_session=${ck}; kv_lang=hi` } })).text();
+    const notPm = await (await fetch(`${BASE}/schools/${NOT_PM}`, { headers: { cookie: `kv_session=${ck}; kv_lang=en` } })).text();
+    ok(`a PM SHRI school page (${PM_SCHOOL}) shows the badge in both languages; a non-PM SHRI page (${NOT_PM}) does not`, pmPage.includes('data-testid="pmshri-badge"') && pmPageHi.includes('पीएम श्री')
+      && !notPm.includes('data-testid="pmshri-badge"'));
+    ok('the PM SHRI pages carry no UDISE code or name', !leak(pmPage) && !leak(pmPageHi), leak(pmPage) ?? leak(pmPageHi) ?? '');
     const ov = await (await fetch(`${BASE}/overview`, { headers: { cookie: `kv_session=${ck}; kv_lang=en` } })).text();
     ok('the demo banner says what is real and links to /sources', ov.includes('DEMO MODE') && ov.includes('UDISE+') && ov.includes('PRS 2024') && ov.includes('href="/sources"'));
   }

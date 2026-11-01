@@ -58,13 +58,31 @@ export function pabCosts(): { id: string; name: string; basis: 'pab' | 'pab_prox
   });
 }
 
+const hasPmshriCol = () => !!one(`select 1 from pragma_table_info('school_profile') where name = 'pmshri'`);
+
 /** The UDISE+ facts kept for a real school (no name, no code), or null on the fictional seed. */
-export function schoolProfile(schoolId: string): { management: string; category: string; location: string; enrolment: number[]; teachers: number; classrooms: number } | null {
+export function schoolProfile(schoolId: string): { management: string; category: string; location: string; enrolment: number[]; teachers: number; classrooms: number; pmshri: boolean; kvs: boolean; nvs: boolean } | null {
   if (!one(`select 1 from sqlite_master where type = 'table' and name = 'school_profile'`)) return null;
-  const r = one<{ management: string; category: string; location: string; enrolment: string; teachers: number; classrooms: number }>(
-    'select management, category, location, enrolment, teachers, classrooms from school_profile where school_id = ?', schoolId,
+  const flags = hasPmshriCol() ? 'pmshri, kvs, nvs' : '0 pmshri, 0 kvs, 0 nvs';
+  const r = one<{ management: string; category: string; location: string; enrolment: string; teachers: number; classrooms: number; pmshri: number; kvs: number; nvs: number }>(
+    `select management, category, location, enrolment, teachers, classrooms, ${flags} from school_profile where school_id = ?`, schoolId,
   );
-  return r ? { ...r, enrolment: JSON.parse(r.enrolment) as number[] } : null;
+  return r ? { ...r, enrolment: JSON.parse(r.enrolment) as number[], pmshri: !!r.pmshri, kvs: !!r.kvs, nvs: !!r.nvs } : null;
+}
+
+/** Demo schools whose real counterpart is a PM SHRI school, per district (measured from the database). */
+export function pmshriByDistrict(): Record<string, number> {
+  if (!one(`select 1 from sqlite_master where type = 'table' and name = 'school_profile'`) || !hasPmshriCol()) return {};
+  return Object.fromEntries(all<{ d: string; n: number }>(
+    'select s.district_id d, count(*) n from school_profile p join schools s on s.id = p.school_id where p.pmshri = 1 group by s.district_id',
+  ).map((r) => [r.d, Number(r.n)]));
+}
+
+/** A PGI-D grade's label and band, from the portal's own scale. */
+export function pgidGrade(key: string): { key: string; en: string; hi: string; band: string; rank: number } | null {
+  const g = realFigures()?.pgid?.grades;
+  const i = g?.findIndex((x) => x.key === key) ?? -1;
+  return g && i >= 0 ? { ...g[i], rank: i + 1 } : null;
 }
 
 /** How many schools are real (UDISE+-backed) in the database, and how many seed findings moved a detection gate when calibrated. */
