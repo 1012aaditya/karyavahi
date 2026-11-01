@@ -465,6 +465,62 @@ What changed:
   shows the computed summary (`overview.plainBrief`), which is what it shows today.
   (`authority-test`, `session-test`)
 
+## API for state dashboards
+
+A read-only JSON API at `/api/v1` lets a state dashboard system — a Vidya Samiksha Kendra (VSK) —
+pull the case ledger for one area. The plain-words guide, with a curl example, is the
+**/developers** page in the app; the machine-readable description is `/api/v1/openapi.json`
+(OpenAPI 3.1, public, no key).
+
+```bash
+curl -H "Authorization: Bearer kv_demo_<id>_<secret>" \
+  "http://localhost:3000/api/v1/cases?severity=critical&open=true&limit=20"
+```
+
+| Endpoint | Returns |
+|---|---|
+| `GET /cases` | Cases, oldest change first. Filters `status`, `severity`, `block`, `updated_since`, `open`; cursor pagination (`limit`, `cursor` ← `page.next_cursor`). Each case has its stage, owner **role**, area, schools and task counts. |
+| `GET /cases/{id}` | The case plus its finding (rounds, change, z-score, driver schools), diagnosis factor codes, current plan (intervention, schools, cost, pre-registration), next/overdue due dates and latest outcome check. |
+| `GET /tasks` | Tasks by due date: status, due and original due date, owner **role**, proof required, overdue. Filters `case`, `status`, `block`, `overdue`. |
+| `GET /outcomes` | Outcome checks: treated vs comparison means, DiD, interval, category, rounds compared. Filters `case`, `category`, `evaluated_since`. |
+| `GET /hotspots` | Learning hotspot units one level below the key's area (or below `within=`), with the thresholds used. Filters `round`, `grade`, `subject`. |
+| `GET /summary` | Headline figures: cases by status/stage/severity, overdue and escalated tasks, proof awaiting a check, outcomes by category. |
+
+Every response carries `"demo_data": true` and the `DISCLAIMER` text, the key's `scope`,
+`generated_at` and `as_of` (the demo clock, which "overdue" is judged against).
+
+**Keys.** The state programme team and the demo administrator (permission `api.manage_keys` in
+`src/domain/permissions.ts`) make keys at **/admin/api-keys** for one unit — the state, a
+district or a block — chosen from the hierarchy. A key looks like `kv_demo_<12 hex id>_<43
+character secret>`; it is shown once and only its SHA-256 is stored (`api_keys`, created by
+`lib/ext/api-schema.ts`, marker `api-v1`). A presented key is found by its public id and
+compared to the stored hash in constant time. Creating, revoking, and refused attempts at
+either go on the audit chain (`api_key.create`, `api_key.revoke`). A demo reset deletes every key.
+
+**Scope.** A key reads as a read-only *auditor* of its unit (`apiSession()` in
+`lib/api/keys.ts`): every query goes through the same `scope.ts` predicates and `cases.ts` /
+`dash.ts` / `hotspots.ts` read functions the app uses — there is no API-only scoping. Its user
+id belongs to nobody and owns no tasks, so it sees its area and nothing else. A record outside the
+area answers 404, the same as one that does not exist.
+
+**Safety.** 401 for a missing, malformed, unknown, wrong or revoked key, with one identical body.
+Cookies are never read, so a signed-in browser cannot use the API without a key, and no CORS
+headers are sent (a VSK calls from its server; a page on another site cannot read responses).
+60 requests a minute per key over a sliding window, counted from the call log; over it, 429 with
+`Retry-After`. Each call is logged in `api_calls` — key id, method, path without the query string,
+status, time, duration; never bodies — and moves the key's `last_used_at`. Failed
+authentications are logged without a key id, so nobody can spend a key's allowance by guessing
+at it. Log rows older than 30 days are pruned.
+
+**Left out on purpose.** No people: no names, user ids, phone numbers or emails — owners are
+roles. No free text anyone typed: case discussion, plan rationale, diagnosis hypothesis and
+conclusion, reasons for moves, reassignments and deadline changes, proof and visit notes. A
+manual case's officer-written title is replaced by a generated one. No complaints at all.
+
+Tests: `npm run test:api` (module checks) and `npx tsx --conditions=react-server
+scripts/api-test.mts http://localhost:3000` (also the HTTP checks: 401s, block/district/state
+scope, 404s, pagination, leak scan, cookies, rate limit, OpenAPI coverage, who may make keys).
+
 ## Known limits
 
 - **Only assessment rounds can be uploaded.** Attendance and staff-movement batches are still

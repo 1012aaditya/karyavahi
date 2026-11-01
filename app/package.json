@@ -28,6 +28,7 @@
     "test:import": "tsx --conditions=react-server scripts/import-test.mts",
     "test:threads": "tsx --conditions=react-server scripts/threads-test.mts",
     "test:reminders": "tsx --conditions=react-server scripts/reminders-test.mts",
+    "test:api": "tsx --conditions=react-server scripts/api-test.mts",
     "gen:r4": "tsx scripts/gen-r4.mts",
     "test:ai-guard": "tsx --conditions=react-server scripts/ai-guard-test.mts",
     "crawl": "node scripts/crawl.mjs",

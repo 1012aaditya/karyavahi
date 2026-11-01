@@ -83,6 +83,14 @@ export default async function AdminHub() {
       stat: j ? `${pick(lang, 'Last run', 'अंतिम')} ${fmtDate(j.started_at, true)}` : undefined,
     });
   }
+  if (may(session, 'api.manage_keys')) {
+    const liveKeys = count('select count(*) c from api_keys where revoked_at is null');
+    tiles.push({
+      href: '/admin/api-keys', icon: 'database', title: pick(lang, 'API keys for state dashboards', 'राज्य डैशबोर्ड की API कुंजियाँ'),
+      body: pick(lang, 'Read-only keys that let a Vidya Samiksha Kendra pull the case ledger for one area. Create, watch and revoke them.', 'केवल-पठन कुंजियाँ जिनसे विद्या समीक्षा केंद्र एक क्षेत्र का प्रकरण रजिस्टर पढ़ सकता है। बनाएँ, देखें और रद्द करें।'),
+      stat: `${fmtInt(liveKeys)} ${pick(lang, 'keys in use', 'कुंजियाँ उपयोग में')}`,
+    });
+  }
   if (may(session, 'demo.reset')) {
     tiles.push({
       href: '/admin/outbox', icon: 'inbox', title: pick(lang, 'Message outbox', 'संदेश आउटबॉक्स'),

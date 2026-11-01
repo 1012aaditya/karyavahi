@@ -124,6 +124,7 @@ export function navFor(s: Session): NavSection[] {
   if (can(s, 'manage_geography') || may(s, 'audit.view')) admin.push({ href: '/admin/geography', key: 'navGeography' });
   if (may(s, 'settings.configure')) admin.push({ href: '/settings', key: 'navSettings' });
   if (may(s, 'settings.configure') || may(s, 'demo.reset')) admin.push({ href: '/admin/jobs', key: 'navJobs' });
+  if (may(s, 'api.manage_keys')) admin.push({ href: '/admin/api-keys', key: 'navApiKeys' });
   if (may(s, 'demo.reset')) {
     admin.push({ href: '/admin/outbox', key: 'navOutbox' });
     admin.push({ href: '/admin/demo', key: 'navDemoControls' });
