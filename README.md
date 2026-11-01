@@ -7,7 +7,7 @@ Karyavahi is a case ledger for school education. Each drop in learning becomes a
 | | |
 |---|---|
 | **Live demo** | <https://karyavahi.onrender.com> (no password; pick an account on the sign-in page) |
-| **Demo video (3 min)** | *YouTube link is added here before submission* |
+| **Demo video (3 min)** | <https://youtu.be/gm22MMBSVlg> |
 | **For judges** | [Sign-in and a 10-minute test path](#for-judges-sign-in-and-a-10-minute-test-path) |
 | **Run it locally** | [Setup](#run-it-locally), about 5 minutes |
 | **How AI is used** | [AI services and models](#ai-services-and-models), [How Claude is kept honest](#how-claude-is-kept-honest) |
