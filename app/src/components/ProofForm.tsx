@@ -7,6 +7,7 @@ import { pick } from '@/lib/i18n';
 import { readLocation } from '@/lib/offline/geo';
 import { enqueue, newClientId, sendProof, type QueuedProof } from '@/lib/offline/queue';
 import { gpsText } from './GpsBadge';
+import { NoteMic } from './voice';
 
 const MAX_PHOTO = 5 * 1024 * 1024;
 
@@ -18,7 +19,8 @@ const MAX_PHOTO = 5 * 1024 * 1024;
  * the phone instead (src/lib/offline/queue.ts) and listed as waiting to send; it goes when the
  * signal comes back. Every attempt carries the same client id, so the server records it once.
  *
- * The fields (photo, note) are passed in as children so the page keeps its own words.
+ * The fields (photo, note) are passed in as children so the page keeps its own words. Under
+ * them, where the browser can take dictation, a mic lets the note be spoken (src/components/voice.tsx).
  */
 export function ProofForm({ taskId, schoolId, taskTitle, userId, lang, label, children }: {
   taskId: string; schoolId: string; taskTitle: string; userId: string; lang: Language; label: string; children: ReactNode;
@@ -102,6 +104,7 @@ export function ProofForm({ taskId, schoolId, taskTitle, userId, lang, label, ch
       <input type="hidden" name="school_id" value={schoolId} />
       {/* Remounted after each proof is handed in or saved, so the photo preview clears too. */}
       <div key={gen}>{children}</div>
+      <NoteMic field="note" lang={lang} />
       <p className="mb-3 text-xs leading-snug text-ink-faint">
         {pick(lang,
           'When you press Hand in, the phone’s location is read once to check you are at the school. You are not tracked.',

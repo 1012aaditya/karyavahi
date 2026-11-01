@@ -27,8 +27,13 @@ import { involvement, INVOLVEMENT_MESSAGE, type Involvement } from '@/lib/duty';
 import { reminderTimeline, reachOf, CHANNEL_NAME, type Step, type StepState } from '@/lib/reminders';
 import { LocationField } from '@/components/LocationField';
 import { GpsBadge } from '@/components/GpsBadge';
+import { SpeakButton, NoteMic } from '@/components/voice';
+import { taskSpeech } from '@/lib/voice-text';
 
-/** One task: what it asks for, what proof it needs, and what has been submitted so far. */
+/**
+ * One task: what it asks for, what proof it needs, and what has been submitted so far.
+ * "Listen" reads the task aloud and the proof note can be spoken (src/components/voice.tsx).
+ */
 
 /** The three automatic steps, and who each one reaches. */
 const STEP_LABEL: Record<Step, { en: string; hi: string }> = {
@@ -77,6 +82,15 @@ export default async function TaskPage({
   const timeline = reminderTimeline(t, today());
   const ownerReach = reachOf(t.owner_user_id);
   const ownerChannel = pick(lang, CHANNEL_NAME[ownerReach.channel].en, CHANNEL_NAME[ownerReach.channel].hi);
+  const spokenText = taskSpeech(lang, {
+    title: pick(lang, t.title_en, t.title_hi),
+    school: t.school_id ? schools.get(t.school_id) ?? t.school_id : null,
+    dueIn: -daysAgo(t.due_date), dueDate: fmtDate(t.due_date, false, lang),
+    pieces: evidence.filter((e) => e.status !== 'rejected').length, proofCount: t.proof_count,
+    proofLabel: pick(lang, EVIDENCE_TYPE_LABEL[t.proof_type]?.en ?? t.proof_type, EVIDENCE_TYPE_LABEL[t.proof_type]?.hi ?? t.proof_type),
+    rejection: t.status === 'sent_back' ? evidence.find((e) => e.status === 'rejected')?.rejection_reason ?? null : null,
+    waiting: t.status === 'submitted', crossSource: !!t.cross_source,
+  });
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -97,6 +111,7 @@ export default async function TaskPage({
             {t.is_overdue ? <OverduePill lang={lang} days={overdueDays} /> : null}
             {t.escalated_at ? <EscalatedPill lang={lang} /> : null}
             {t.cross_source ? <CrossSourcePill lang={lang} /> : null}
+            <SpeakButton text={spokenText} lang={lang} subject={pick(lang, t.title_en, t.title_hi)} />
           </div>
         }
       />
@@ -289,6 +304,7 @@ export default async function TaskPage({
                     label={pick(lang, 'What the proof shows', 'सबूत क्या दिखाता है')}
                     placeholder={pick(lang, 'Describe what was done, where and when.', 'क्या किया, कहाँ और कब — लिखें।')}
                   />
+                  <NoteMic field="note" lang={lang} />
                   <LocationField lang={lang} />
                   <p className="text-xs leading-snug text-ink-faint">
                     {pick(

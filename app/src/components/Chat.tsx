@@ -7,6 +7,8 @@ import { Icon } from './Icon';
 import { ASK_CLAUDE_EVENT } from './ask-claude';
 import { SourceChip } from './AiBriefing';
 import { Sheet, SheetClose, SheetContent, SheetTrigger } from './primitives/sheet';
+import { MicButton, SpeakButton } from './voice';
+import { appendDictation, speakable } from '@/lib/voice-text';
 
 /**
  * The Claude conversation UI. Streams from /api/ai/chat, shows which tools ran, renders
@@ -347,6 +349,7 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
                           <div className="flex flex-wrap items-center gap-1.5">
                             <button type="button" onClick={() => copy(i)} className="btn-ghost btn-sm px-2 text-xs"><Icon name={copied === i ? 'check' : 'copy'} size={13} />{copied === i ? 'Copied' : 'Copy'}</button>
                             {i === msgs.length - 1 ? <button type="button" onClick={retry} disabled={busy} className="btn-ghost btn-sm px-2 text-xs"><Icon name="refresh" size={13} />Retry</button> : null}
+                            <SpeakButton text={speakable(m.content)} size="sm" />
                             {m.model ? <span className="text-2xs text-ink-faint">{m.model} · AI-generated, verify before acting</span> : null}
                           </div>
                           {i === msgs.length - 1 && m.followUps && m.followUps.length > 0 ? (
@@ -378,6 +381,7 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
             aria-label="Ask Claude"
             className="max-h-40 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-base text-ink placeholder:text-ink-faint focus:outline-none"
           />
+          <MicButton onText={(t) => setInput((v) => appendDictation(v, t))} disabled={!configured || busy} />
           {busy ? (
             <button type="button" onClick={() => abortRef.current?.abort()} className="btn-quiet h-10 px-3" aria-label="Stop generating"><Icon name="stop" size={15} />Stop</button>
           ) : (

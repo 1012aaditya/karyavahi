@@ -11,6 +11,7 @@ import { pick } from '@/lib/i18n';
 import { PageHead, Callout } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { ActionForm } from '@/components/ActionForm';
+import { NoteMic } from '@/components/voice';
 import { createComplaintAction } from '@/lib/actions';
 
 /**
@@ -76,6 +77,7 @@ export default async function NewComplaint({ searchParams }: { searchParams: Pro
                 <input name="title" required minLength={6} maxLength={160} className="input mt-1" placeholder="One line: what is wrong" /></label>
               <label className="block"><span className="text-sm font-medium text-ink">What is happening</span>
                 <textarea name="description" required minLength={15} rows={5} className="input mt-1 resize-y" placeholder="What happened, since when, and what it is stopping." /></label>
+              <NoteMic field="description" lang={lang} className="!mb-0" />
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="block"><span className="text-sm font-medium text-ink">Priority</span>
                   <select name="priority" defaultValue="medium" className="input mt-1">
