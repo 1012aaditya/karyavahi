@@ -223,7 +223,13 @@ flowchart LR
 | **NFHS-5** | District context |
 | **UP PAB 2025-26 minutes** (Samagra Shiksha) | Intervention unit costs, with page references |
 | **LGD** (Local Government Directory) | District and block codes |
+| **PGI-D** (Performance Grading Index for Districts, Ministry of Education), 2022-23 to 2025-26 | Each district's overall and Outcomes grade, and how it has changed over the years |
+| **Census 2011** Primary Census Abstract, through India Data Portal | District literacy, female literacy, SC/ST share and rural share, shown beside the UP figure |
+| **NITI Aayog Aspirational Blocks Programme** (March 2026) | Saidnagar, Rampur's aspirational block, with its 11 education indicators beside the UP median |
+| **PM SHRI** school list (Ministry of Education) | The 37 demo schools whose real counterpart is a PM SHRI school carry a PM SHRI badge |
 | **OpenStreetMap** contributors (ODbL) | Boundaries |
+
+The district figures appear on the hotspot map and district pages as **context, not cause**.
 
 The full list with licences is on the **/sources** page of the app. How the data is rebuilt and checked is explained in [app/README.md, "Real public data"](app/README.md).
 

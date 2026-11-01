@@ -115,7 +115,7 @@ export function DistrictContext({ districtIds, lang }: { districtIds: string[]; 
                     <summary className="cursor-pointer text-xs font-medium text-brand">{L(`${b.education.length} education indicators`, `${b.education.length} शिक्षा संकेतक`)}</summary>
                     <ul className="mt-1 divide-y divide-pend/20 text-xs">
                       {b.education.map((e) => (
-                        <li key={e.code} className="flex items-baseline justify-between gap-3 py-1" title={ind[e.code]?.official}>
+                        <li key={e.code} className="flex items-baseline justify-between gap-3 py-1" title={lang === 'en' ? ind[e.code]?.official : undefined}>
                           <span className="min-w-0 text-ink-soft"><span className="font-mono text-2xs text-ink-faint">{e.code}</span> {ind[e.code] ? pick(lang, ind[e.code].en, ind[e.code].hi) : e.code}</span>
                           <span className="tnum shrink-0 font-medium text-ink">{e.value === null ? '—' : `${e.value.toFixed(1)}%`}{ind[e.code]?.median_up68 != null ? <span className="ml-1 font-normal text-ink-faint">({ind[e.code].median_up68!.toFixed(1)})</span> : null}</span>
                         </li>

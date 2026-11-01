@@ -65,7 +65,7 @@ const ACCEPTED = new Set(['CRC', 'BRC', 'BEO', 'DEO', 'HM', 'AI', 'PAB', 'GPS', 
   // Keyboard keys, and the model id shown beside "connected" when a Claude key is configured.
   'Enter', 'Shift', 'claude', 'opus']);
 /** Names of more than one word, removed before the words are checked. */
-const PHRASES = ['India Data Portal', 'Meta Cloud API', 'J-PAL', 'API v1', 'UDISE+', 'karyavahi-seed v1.0', 'seed 20261024'];
+const PHRASES = ['PGI-D', 'India Data Portal', 'Meta Cloud API', 'J-PAL', 'API v1', 'UDISE+', 'karyavahi-seed v1.0', 'seed 20261024'];
 /** Record ids ("CASE-0184", "TSK-00412") and assessment round codes ("R4"). */
 const ID = /\b[A-Z]{2,5}-\d{2,}(?:-\d+)?\b|\bR\d\b/g;
 

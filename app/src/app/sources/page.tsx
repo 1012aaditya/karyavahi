@@ -84,7 +84,7 @@ export default async function SourcesPage() {
     }] : []),
     ...(f?.aspirational ? [{
       key: 'abp', name: L('Aspirational Blocks Programme: NITI Aayog indicators for Uttar Pradesh', 'आकांक्षी ब्लॉक कार्यक्रम: उत्तर प्रदेश के लिए नीति आयोग संकेतक'), by: L('Planning Department, Government of Uttar Pradesh (data: NITI Aayog)', 'नियोजन विभाग, उत्तर प्रदेश सरकार (आँकड़े: नीति आयोग)'),
-      year: f.aspirational.period, licence: L('No licence stated; credit UP Planning Department and NITI Aayog', 'कोई लाइसेंस नहीं बताया गया; उ.प्र. नियोजन विभाग व नीति आयोग को श्रेय'), url: f.aspirational.page,
+      year: pick(lang, f.aspirational.period, f.aspirational.period_hi ?? f.aspirational.period), licence: L('No licence stated; credit UP Planning Department and NITI Aayog', 'कोई लाइसेंस नहीं बताया गया; उ.प्र. नियोजन विभाग व नीति आयोग को श्रेय'), url: f.aspirational.page,
       used: L(`Which of the three districts has a NITI aspirational block (Rampur: Saidnagar, also on the state’s ABP+ list of ${f.aspirational.up_abp_plus_blocks}), and that block’s 11 education indicators for ${f.aspirational.period}, with names and sources from NITI’s indicator metadata and the median of UP’s ${f.aspirational.niti_blocks_up} NITI blocks. Shown on the district card, not on a demo block.`,
         `तीनों में से किस ज़िले में नीति आकांक्षी ब्लॉक है (रामपुर: सैदनगर, राज्य की ${f.aspirational.up_abp_plus_blocks} ब्लॉकों वाली ABP+ सूची में भी), और उस ब्लॉक के ${f.aspirational.period_hi ?? f.aspirational.period} के 11 शिक्षा संकेतक, नीति आयोग के संकेतक विवरण से नाम व स्रोत सहित, और उ.प्र. के ${f.aspirational.niti_blocks_up} नीति ब्लॉकों की माध्यिका। ज़िला कार्ड पर दिखाए गए, किसी डेमो ब्लॉक पर नहीं।`),
     }] : []),
