@@ -13,6 +13,8 @@ import { PhotoInput } from '@/components/PhotoInput';
 import { ProofForm } from '@/components/ProofForm';
 import { ProofQueue } from '@/components/ProofQueue';
 import { Icon } from '@/components/Icon';
+import { SpeakButton } from '@/components/voice';
+import { daySpeech, taskSpeech, type SpokenTask } from '@/lib/voice-text';
 import type { Language } from '@domain/types';
 
 /**
@@ -26,6 +28,10 @@ import type { Language } from '@domain/types';
  * Proof works without signal: ProofForm reads the phone's location once and sends the proof, or
  * keeps it on the phone (IndexedDB) when there is no connection, and ProofQueue lists what is
  * still waiting. The service worker (public/sw.js) keeps a copy of this page and its task pages.
+ *
+ * Voice first: "Listen" reads the day and each task aloud (in Hindi for a Hindi user), and the
+ * proof note can be spoken instead of typed (src/components/voice.tsx). Both need a browser
+ * that supports them; elsewhere the buttons simply do not appear.
  */
 
 const GROUP: Record<DayGroupKey, { en: string; hi: string; tone: string }> = {
@@ -53,21 +59,35 @@ export default async function MyDayPage() {
     users: [], schools: [...tasks.map((t) => t.school_id ?? ''), ...day.complaints.map((c) => c.school_id ?? '')],
   });
   const first = session.full_name.split(' ')[0];
+  const summary = day.open === 0
+    ? pick(lang, 'Nothing is waiting on you.', 'अभी आपके पास कोई काम लंबित नहीं है।')
+    : day.urgent === day.open
+      ? pick(lang, day.open === 1 ? 'Your 1 open task needs you today.' : `All ${day.open} of your open tasks need you today.`, `आपके ${day.open} खुले ${day.open === 1 ? 'काम' : 'कामों'} पर आज ध्यान चाहिए।`)
+    : day.urgent > 0
+      ? pick(lang, `${day.urgent} of your ${day.open} open tasks need you today.`, `आपके ${day.open} खुले कामों में से ${day.urgent} पर आज ध्यान चाहिए।`)
+      : pick(lang, `${day.open} open task${day.open === 1 ? '' : 's'}, none due today.`, `${day.open} खुले काम, आज कोई देय नहीं।`);
+  // What "Listen" reads: built here so the words match the page, said by the browser.
+  const spoken = new Map<string, SpokenTask>(day.groups.flatMap((g) => g.tasks.map((t): [string, SpokenTask] => {
+    const ev = EVIDENCE_TYPE_LABEL[t.proof_type as keyof typeof EVIDENCE_TYPE_LABEL];
+    return [t.id, {
+      title: pick(lang, t.title_en, t.title_hi),
+      school: t.school_id ? look.schools.get(t.school_id) ?? t.school_id : null,
+      dueIn: t.dueIn, dueDate: fmtDate(t.due_date, false, lang),
+      pieces: t.pieces, proofCount: t.proof_count,
+      proofLabel: pick(lang, ev?.en ?? t.proof_type, ev?.hi ?? t.proof_type),
+      rejection: t.rejection, waiting: g.key === 'waiting', crossSource: !!t.cross_source,
+    }];
+  })));
+  const dayText = daySpeech(lang, { name: first, date: fmtDate(day.date, false, lang), summary, tasks: [...spoken.values()] });
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <header>
         <p className="text-sm text-ink-soft">{fmtDate(day.date, false, lang)}</p>
         <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-ink">{pick(lang, `Namaste, ${first}`, `नमस्ते, ${first}`)}</h1>
-        <p className="mt-1 text-md text-ink-soft">
-          {day.open === 0
-            ? pick(lang, 'Nothing is waiting on you.', 'अभी आपके पास कोई काम लंबित नहीं है।')
-            : day.urgent === day.open
-              ? pick(lang, day.open === 1 ? 'Your 1 open task needs you today.' : `All ${day.open} of your open tasks need you today.`, `आपके ${day.open} खुले ${day.open === 1 ? 'काम' : 'कामों'} पर आज ध्यान चाहिए।`)
-            : day.urgent > 0
-              ? pick(lang, `${day.urgent} of your ${day.open} open tasks need you today.`, `आपके ${day.open} खुले कामों में से ${day.urgent} पर आज ध्यान चाहिए।`)
-              : pick(lang, `${day.open} open task${day.open === 1 ? '' : 's'}, none due today.`, `${day.open} खुले काम, आज कोई देय नहीं।`)}
-        </p>
+        <p className="mt-1 text-md text-ink-soft">{summary}</p>
+        <SpeakButton text={dayText} lang={lang} size="lg" className="mt-3"
+          label={pick(lang, 'Listen to my day', 'मेरा दिन सुनें')} />
       </header>
 
       {/* Proof saved on this phone without signal, until it is sent. Browser-only; empty renders nothing. */}
@@ -85,7 +105,10 @@ export default async function MyDayPage() {
                   <Link href={`/tasks/${t.id}`} className="min-w-0 text-md font-medium leading-snug text-ink hover:text-brand">
                     {pick(lang, t.title_en, t.title_hi)}
                   </Link>
-                  {t.isNew ? <span className="chip shrink-0 border-brand/30 bg-brand-light text-brand">{pick(lang, 'New', 'नया')}</span> : null}
+                  <span className="flex shrink-0 items-center gap-2">
+                    {t.isNew ? <span className="chip border-brand/30 bg-brand-light text-brand">{pick(lang, 'New', 'नया')}</span> : null}
+                    <SpeakButton text={taskSpeech(lang, spoken.get(t.id)!)} lang={lang} subject={pick(lang, t.title_en, t.title_hi)} />
+                  </span>
                 </div>
                 <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-soft">
                   <span className="inline-flex items-center gap-1"><Icon name="pin" size={13} />{t.school_id ? look.schools.get(t.school_id) ?? t.school_id : pick(lang, 'All plan schools', 'सभी योजना विद्यालय')}</span>

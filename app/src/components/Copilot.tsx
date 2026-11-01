@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Icon } from './Icon';
 import { SourceChip } from './AiBriefing';
 import { askClaude } from './ask-claude';
+import { MicButton, SpeakButton } from './voice';
+import { appendDictation } from '@/lib/voice-text';
 
 /**
  * A Claude draft on a record: a button, then the draft in place. Renders what /api/ai/copilot
@@ -129,6 +131,7 @@ export function ClaudeDraft({ task, id, label, lang = 'en', configured = true, f
                 {followUp ? <button type="button" onClick={() => askClaude(followUp)} className="btn-ghost btn-sm text-brand"><Icon name="send" size={14} />{t.follow}</button> : null}
                 <button type="button" onClick={() => { void navigator.clipboard?.writeText(asText); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="btn-ghost btn-sm"><Icon name="copy" size={14} />{copied ? t.copied : t.copy}</button>
                 <button type="button" onClick={() => run(true)} className="btn-ghost btn-sm"><Icon name="refresh" size={14} />{t.redo}</button>
+                <SpeakButton text={asText} lang={lang} size="sm" />
                 {env?.audit && env.audit.checked > 0 && bad.length === 0 ? (
                   <span className="ml-auto inline-flex items-center gap-1 text-2xs text-good"><Icon name="check-circle" size={12} />{env.audit.checked} {t.audited}</span>
                 ) : null}
@@ -175,6 +178,7 @@ export function AskClaudeInline({ placeholder, questions = [], disabled = false,
         <Icon name="sparkles" size={16} className="shrink-0 text-brand" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} aria-label={placeholder} disabled={disabled}
           className="min-w-0 flex-1 bg-transparent py-1 text-sm text-ink outline-none placeholder:text-ink-faint disabled:opacity-50" />
+        <MicButton size="sm" onText={(x) => setQ((v) => appendDictation(v, x))} disabled={disabled} />
         <button type="submit" disabled={disabled || !q.trim()} className="btn-primary btn-sm rounded-full">{button}</button>
       </form>
       {questions.length ? (

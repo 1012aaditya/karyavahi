@@ -413,6 +413,45 @@ phone size against a production build: the manifest, My day and a task page open
 proof with GPS, proof saved offline and sent when the signal returns as exactly one row, sign-out
 clearing the saved pages, and no worker for officers (mutates the DB; reset afterwards).
 
+## Voice: listen and speak, in Hindi
+
+Field staff can use My day without reading or typing much. Everything runs in the browser on the
+Web Speech API — no extra library, no account, no server-side audio (`src/components/voice.tsx`;
+the words it says are built in `src/lib/voice-text.ts`).
+
+- **Listen / सुनें.** My day has **मेरा दिन सुनें** under the greeting: it reads the date, the
+  one-line summary and each open task in order — title, school, how late or when due, what proof
+  is needed and how much is still missing, and why proof came back. Each task card has its own
+  **सुनें**, and so does a task page. Claude's answers in the drawer and Claude drafts on cases and
+  reports have a small **Listen** too (markdown and record-id citations are left out of the
+  reading). Text is read in Hindi when it is Hindi — a Hindi answer on an English page still gets
+  a Hindi voice — with the phone's Hindi (hi-IN) voice when it has one, otherwise whatever voice
+  it has, saying so. It reads a little slower than normal (rate 0.9), in short pieces so Chrome
+  does not cut it off, one button at a time, and stops when you leave the page or close the drawer.
+- **Speak / बोलकर लिखें.** The proof note (My day and a task page), the complaint description,
+  the Claude drawer's input and the home page's ask line have a microphone. It takes dictation in
+  Hindi (hi-IN) or Indian English (en-IN), following the page language, shows the words as they
+  are heard, and adds them to whatever is already typed, so speaking and typing mix. One phrase
+  per tap. While listening the button is red and pressed (`aria-pressed`), with a pulse that is
+  switched off when the phone asks for reduced motion. It says plainly when there is no
+  connection, when the microphone is blocked, or when nothing was heard.
+- **Privacy.** In Chrome, speech recognition sends the audio to the browser vendor's (Google's)
+  speech service to be turned into text. Karyavahi never receives audio — only the text, and only
+  when the form is handed in. The proof form says this in one line under the microphone; the
+  other microphones say it in their tooltip and while listening. Reading aloud uses voices on the
+  phone and sends nothing.
+- **Where it does not work, nothing shows.** Every control checks for the API after the page
+  loads and renders nothing when it is missing (Firefox, some in-app browsers), so the page is
+  the same as before. Nothing is rendered on the server, so there is no hydration difference.
+
+`npm run test:voice` checks the read-aloud text (Hindi and English), voice choice, chunking and
+dictation rules (51 checks, no database). `KV_BASE=http://localhost:3000 node scripts/voice-e2e.cjs`
+(`npm run e2e:voice`) drives it in Chrome at phone size as a Hindi-speaking headmaster with fake
+speech objects, since headless Chrome has neither a microphone nor voices: Listen speaks Hindi
+with the Hindi voice, the mic fills the proof note with a Hindi transcript, the offline and
+blocked-microphone messages, the Claude drawer, and a browser without the APIs showing no voice
+controls — with no page errors.
+
 ## The hotspot map: real Uttar Pradesh, simulated data
 
 The map shows the real state of Uttar Pradesh. `data/up-geo.json` holds the state outline, its
@@ -595,6 +634,13 @@ scope, 404s, pagination, leak scan, cookies, rate limit, OpenAPI coverage, who m
   Background Sync: queued proof goes the next time the app is opened with signal. A queued proof
   stays on the phone until it is sent or removed, also across sign-out (only its author's next
   sign-in sends it); the service worker is not registered in `npm run dev`.
+- **Voice is in the browser only, and depends on the phone.** There is no phone-call (IVR) line
+  yet, so someone without a smartphone cannot use it. Dictation needs a connection in Chrome (the
+  audio goes to Google's speech service) and does not work offline; typing still does, and proof
+  typed offline is kept as before. Firefox and some in-app browsers have no speech recognition, and
+  then no mic appears. Reading aloud works offline, but the voice depends on the phone: many Android
+  phones have a Hindi voice, some have none (another voice then reads the Hindi, often poorly,
+  and the app says so). Dictation quality for village and school names is the browser's, not ours.
 - **GPS is a check, not proof of presence.** A phone's location can be spoofed and indoor fixes
   are rough; the server only judges the numbers it is sent. Proof saved offline is judged by the
   fix taken when it was saved, but the time it was saved is the phone's own clock (recorded, not
