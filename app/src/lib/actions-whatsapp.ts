@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { requireSession, getLanguage } from './session';
 import { Refused } from './guard';
 import { pick } from './i18n';
-import { queueTestMessage } from './whatsapp/admin';
+import { queueTestMessage, connectBusinessAccount } from './whatsapp/admin';
 
 type State = { error?: string; ok?: string };
 
@@ -25,5 +25,25 @@ export async function whatsappTestAction(_prev: State, form: FormData): Promise<
   } catch (e) {
     if (e instanceof Refused) return { error: e.message };
     return { error: pick(lang, 'The test message could not be queued.', 'परीक्षण संदेश कतार में नहीं जुड़ सका।') };
+  }
+}
+
+/** The outbox page's "Connect the webhook to this WhatsApp account" button (demo admin only). */
+export async function whatsappConnectAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const lang = await getLanguage();
+  try {
+    const apps = await connectBusinessAccount(s, String(form.get('waba_id') ?? ''));
+    revalidatePath('/admin/outbox');
+    return {
+      ok: pick(
+        lang,
+        `Connected. Apps receiving this account's messages: ${apps.join(', ') || 'this app'}. Now send "hi" from the test phone.`,
+        `जुड़ गया। इस खाते के संदेश पाने वाले ऐप: ${apps.join(', ') || 'यह ऐप'}। अब परीक्षण फ़ोन से "hi" भेजें।`,
+      ),
+    };
+  } catch (e) {
+    if (e instanceof Refused) return { error: e.message };
+    return { error: pick(lang, 'Could not connect the WhatsApp account.', 'WhatsApp खाता नहीं जुड़ सका।') };
   }
 }

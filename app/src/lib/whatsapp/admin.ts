@@ -7,6 +7,7 @@ import type { Session } from '../session';
 import { appendAudit } from '../write';
 import { whatsappConfig, maskPhone } from './config';
 import { initialDeliveryStatus, personaByEmail, scheduleOutboxSend, windowClosesAt } from './outbound';
+import { linkBusinessAccount } from './send';
 import { W } from './texts';
 
 /** What the outbox page shows about the WhatsApp connection. Numbers only ever masked. */
@@ -63,4 +64,31 @@ export function queueTestMessage(s: Session, userId: string): string {
   });
   scheduleOutboxSend(id);
   return id;
+}
+
+/**
+ * "Connect the webhook to this WhatsApp account": demo admin only. Subscribes this app to the
+ * WhatsApp Business Account (the "Messaging account ID" on Meta's API Setup page) so Meta forwards
+ * real incoming messages, not only its dashboard test events. Uses the server's token; nothing
+ * secret passes through the browser. Audited either way.
+ */
+export async function connectBusinessAccount(s: Session, wabaId: string): Promise<string[]> {
+  if (!(hasRole(s, 'demo_admin') && may(s, 'demo.reset'))) {
+    appendAudit({
+      actorUserId: s.user_id, actorRole: actingRole(s), action: 'whatsapp.link_refused',
+      entityType: 'system', entityId: 'whatsapp', reason: 'demo admin only', result: 'failure',
+    });
+    throw new Refused('Only the demo admin can connect the WhatsApp account.', 'role');
+  }
+  const id = wabaId.trim();
+  if (!/^\d{6,20}$/.test(id)) throw new Refused('That does not look like a WhatsApp Business Account ID (digits only).', 'bad_input');
+  const cfg = whatsappConfig();
+  if (!cfg.sending) throw new Refused('WhatsApp is not configured on this server.', 'not_configured');
+  const r = await linkBusinessAccount(cfg, id);
+  appendAudit({
+    actorUserId: s.user_id, actorRole: actingRole(s), action: r.ok ? 'whatsapp.account_linked' : 'whatsapp.link_failed',
+    entityType: 'system', entityId: 'whatsapp', reason: r.ok ? null : r.reason, result: r.ok ? 'success' : 'failure',
+  });
+  if (!r.ok) throw new Refused(`Meta refused: ${r.reason}${r.code ? ` (code ${r.code})` : ''}`, 'provider');
+  return r.apps;
 }

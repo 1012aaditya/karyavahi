@@ -7,7 +7,7 @@ import { may } from '@/lib/guard';
 import { hasRole } from '@/lib/scope';
 import { whatsappStatus } from '@/lib/whatsapp/admin';
 import { deliveryNotes } from '@/lib/whatsapp/outbound';
-import { whatsappTestAction } from '@/lib/actions-whatsapp';
+import { whatsappTestAction, whatsappConnectAction } from '@/lib/actions-whatsapp';
 import { Card, CardHead, PageHead, Callout, Toolbar, Empty, Mono, fmtDate } from '@/components/ui';
 import { Pill, NotSent, type Tone } from '@/components/labels';
 import { FilterChips } from '@/components/lists';
@@ -118,6 +118,26 @@ export default async function OutboxPage({
                     </li>
                   ))}
                 </ul>
+              ) : null}
+              {wa.sending ? (
+                <div className="mt-4 rounded border border-line bg-paper-sunk/50 p-3">
+                  <p className="text-sm font-medium text-ink">{pick(lang, 'Not receiving replies?', 'उत्तर नहीं आ रहे?')}</p>
+                  <p className="mt-1 text-sm text-ink-soft">
+                    {pick(
+                      lang,
+                      'Meta forwards a WhatsApp account\'s messages only to apps subscribed to it. Paste the "Messaging account ID" from Meta\'s API Setup page and connect; the server makes the call with its own token.',
+                      'Meta किसी WhatsApp खाते के संदेश केवल उससे जुड़े ऐप को भेजता है। Meta के API Setup पृष्ठ से "Messaging account ID" डालें और जोड़ें; सर्वर अपने टोकन से यह करता है।',
+                    )}
+                  </p>
+                  <ActionForm action={whatsappConnectAction} lang={lang} className="mt-2 flex flex-wrap items-end gap-2"
+                    label={pick(lang, 'Connect the webhook to this account', 'इस खाते से वेबहुक जोड़ें')}>
+                    <label className="block">
+                      <span className="text-xs text-ink-soft">{pick(lang, 'WhatsApp Business Account ID', 'WhatsApp बिज़नेस खाता आईडी')}</span>
+                      <input name="waba_id" inputMode="numeric" required pattern="[0-9]{6,20}" className="input mt-1 w-64 font-mono"
+                        defaultValue={process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ?? ''} />
+                    </label>
+                  </ActionForm>
+                </div>
               ) : null}
             </div>
           </Card>

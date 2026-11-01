@@ -105,6 +105,34 @@ export async function postMessage(cfg: WhatsAppConfig, payload: MessagePayload):
   }
 }
 
+// ---------------------------------------------------------------- linking the WhatsApp account
+/**
+ * Meta delivers a WhatsApp Business Account's messages to an app's webhook only when that app is
+ * subscribed to the account. Creating the app usually does this for the test number, but not
+ * always; this makes the subscription (POST /{waba-id}/subscribed_apps) with the server's own token
+ * and then lists the subscribed apps so the admin page can show the result.
+ */
+export type LinkResult =
+  | { ok: true; apps: string[] }
+  | { ok: false; httpStatus: number; code: number | null; reason: string };
+
+export async function linkBusinessAccount(cfg: WhatsAppConfig, wabaId: string): Promise<LinkResult> {
+  if (!cfg.sending) return { ok: false, httpStatus: 0, code: null, reason: 'WhatsApp is not configured' };
+  const url = `${GRAPH_HOST}/${cfg.version}/${encodeURIComponent(wabaId)}/subscribed_apps`;
+  const auth = { Authorization: `Bearer ${cfg.token}` };
+  try {
+    const post = await fetch(url, { method: 'POST', headers: auth, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
+    if (!post.ok) return { ok: false, httpStatus: post.status, ...(await graphFailure(post)) };
+    const get = await fetch(url, { headers: auth, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
+    if (!get.ok) return { ok: true, apps: [] };
+    const body = (await get.json()) as { data?: { whatsapp_business_api_data?: { name?: string } }[] };
+    return { ok: true, apps: (body.data ?? []).map((d) => d.whatsapp_business_api_data?.name ?? 'app').slice(0, 10) };
+  } catch (e) {
+    const timedOut = (e as Error)?.name === 'TimeoutError' || (e as Error)?.name === 'AbortError';
+    return { ok: false, httpStatus: 0, code: null, reason: timedOut ? 'no answer from WhatsApp within 10 s' : 'could not reach WhatsApp' };
+  }
+}
+
 // ---------------------------------------------------------------- received photos
 export type MediaResult =
   | { ok: true; bytes: Uint8Array; mime: string }
