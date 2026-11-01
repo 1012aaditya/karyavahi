@@ -99,8 +99,8 @@ const TITLES: Rule[] = [
 
 /** The few bodies the code writes itself (the rest is record text and stays as stored). */
 const OUTCOME_HI: Record<string, string> = {
-  'improved confirmed': 'सुधार पुष्ट', 'improved indicative': 'सुधार के संकेत', 'below target': 'लक्ष्य से कम',
-  'no change': 'कोई बदलाव नहीं', 'worsened': 'और गिरावट', 'inconclusive': 'अनिर्णायक',
+  'improved confirmed': 'सुधार — पुष्ट', 'improved indicative': 'सुधार — संकेतात्मक', 'below target': 'लक्ष्य से कम',
+  'no change': 'कोई बदलाव नहीं', 'worsened': 'और बिगड़ा', 'inconclusive': 'अनिर्णीत',
 };
 const BODIES: Rule[] = [
   [/^Action Taken Report for (\d{4}-\d{2})$/, (_, m) => `${m} की कार्यवाही रिपोर्ट`],
@@ -126,8 +126,8 @@ const apply = (rules: Rule[], text: string): string | null => {
 export interface NotificationText { kind: string; title: string; body: string }
 
 /**
- * What a reader sees for one notification. `taskTitleHi` is the task's own Hindi title when the
- * notification is about a task: a body that quotes the English title shows the Hindi one instead.
+ * What a reader sees for one notification. `taskTitle` holds the task's English and Hindi titles
+ * when the notification is about a task: a body that quotes the English title shows the Hindi one.
  */
 export function notificationText(
   n: { kind: string; title: string; body: string },
@@ -136,7 +136,8 @@ export function notificationText(
 ): NotificationText {
   if (lang !== 'hi') return { kind: n.kind.replace(/_/g, ' '), title: n.title, body: n.body };
   let body = n.body;
-  if (taskTitle?.hi && body.startsWith(taskTitle.en)) body = taskTitle.hi + body.slice(taskTitle.en.length);
+  // Bodies quote the task's title, often after the case's ("<case> — <task>"): show its Hindi title.
+  if (taskTitle?.hi && taskTitle.en && body.includes(taskTitle.en)) body = body.split(taskTitle.en).join(taskTitle.hi);
   return {
     kind: KIND_HI[n.kind] ?? n.kind.replace(/_/g, ' '),
     title: apply(TITLES, n.title) ?? n.title,

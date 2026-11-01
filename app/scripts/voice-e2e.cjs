@@ -237,7 +237,7 @@ function seedChat({ key, answer }) {
   await cMic.waitFor({ timeout: 5000 }).catch(() => {});
   ok('the Claude input has a mic', (await cMic.count()) === 1);
   ok('its tooltip says where the speech goes', ((await cMic.getAttribute('title')) ?? '').includes('वाक्-सेवा'));
-  const input = drawer.locator('textarea[aria-label="Ask Claude"]');
+  const input = drawer.locator('textarea[aria-label="Claude से पूछें"]');
   if (await cMic.isEnabled()) {
     await cMic.click();
     await page.waitForTimeout(1600);

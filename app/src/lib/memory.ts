@@ -92,18 +92,21 @@ export function similarCases(s: Session, caseId: string, limit = 5): SimilarCase
 }
 
 /** A plain, deterministic summary of what similar cases showed — no generalising beyond them. */
-export function lessonsFrom(cases: SimilarCase[]): string[] {
+export function lessonsFrom(cases: SimilarCase[], lang: 'en' | 'hi' = 'en'): string[] {
   const out: string[] = [];
+  const hi = lang === 'hi';
   const byIv = new Map<string, SimilarCase[]>();
   for (const c of cases) if (c.intervention) byIv.set(c.intervention, [...(byIv.get(c.intervention) ?? []), c]);
   for (const [iv, list] of byIv) {
     const evaluated = list.filter((c) => c.outcome);
-    if (evaluated.length === 0) { out.push(`${list.length} similar case${list.length > 1 ? 's' : ''} used ${iv}; none has an outcome check yet.`); continue; }
+    if (evaluated.length === 0) { out.push(hi ? `${list.length} मिलते-जुलते प्रकरणों में ${iv} लगाया गया; किसी की परिणाम जाँच अभी नहीं हुई।` : `${list.length} similar case${list.length > 1 ? 's' : ''} used ${iv}; none has an outcome check yet.`); continue; }
     const gained = evaluated.filter((c) => c.outcome!.category.startsWith('improved')).length;
     const lowPart = evaluated.filter((c) => !c.outcome!.participation_passed).length;
-    out.push(`${evaluated.length} similar case${evaluated.length > 1 ? 's' : ''} used ${iv} and were evaluated: ${gained} showed a gain${evaluated.length - gained > 0 ? `, ${evaluated.length - gained} did not` : ''}${lowPart ? ` (${lowPart} with participation below the floor)` : ''}.`);
+    out.push(hi
+      ? `${evaluated.length} मिलते-जुलते प्रकरणों में ${iv} लगाया गया और जाँचा गया: ${gained} में सुधार दिखा${evaluated.length - gained > 0 ? `, ${evaluated.length - gained} में नहीं` : ''}${lowPart ? ` (${lowPart} में भागीदारी न्यूनतम से कम)` : ''}।`
+      : `${evaluated.length} similar case${evaluated.length > 1 ? 's' : ''} used ${iv} and were evaluated: ${gained} showed a gain${evaluated.length - gained > 0 ? `, ${evaluated.length - gained} did not` : ''}${lowPart ? ` (${lowPart} with participation below the floor)` : ''}.`);
   }
   const reopened = cases.filter((c) => c.reopenCount > 0).length;
-  if (reopened) out.push(`${reopened} of these cases had to be reopened after delivery did not produce the gain.`);
+  if (reopened) out.push(hi ? `इनमें से ${reopened} प्रकरण काम पूरा होने पर भी सुधार न दिखने से फिर खोलने पड़े।` : `${reopened} of these cases had to be reopened after delivery did not produce the gain.`);
   return out;
 }

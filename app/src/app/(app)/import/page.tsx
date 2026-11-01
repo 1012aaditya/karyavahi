@@ -196,7 +196,7 @@ export default async function ImportPage() {
                       </Pill>
                     </td>
                     <td className="text-sm">
-                      <span className="tnum">{fmtDate(b.uploaded_at)}</span>
+                      <span className="tnum">{fmtDate(b.uploaded_at, false, lang)}</span>
                       <span className="block text-xs text-ink-faint">{users.get(b.uploaded_by) ?? b.uploaded_by}</span>
                     </td>
                   </tr>

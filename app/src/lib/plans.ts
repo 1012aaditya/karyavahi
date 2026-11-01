@@ -218,7 +218,8 @@ export function previewPlan(c: PlanCase, matches: InterventionMatch[], intervent
 }
 
 // ------------------------------------------------------------------ the task generator
-export interface OwnerOption { id: string; name: string; note: string }
+/** `noteHi` is the same note in Hindi, for a Hindi reader. */
+export interface OwnerOption { id: string; name: string; note: string; noteHi: string }
 
 export interface TaskDraft {
   /** `${template key}|${school id or empty}`, the row's identity in the assignment form. */
@@ -249,8 +250,10 @@ export function ownerOptions(c: PlanCase, role: RoleCode, schoolId: string | nul
       where ur.role = ? and u.status = 'active' and ${sql} order by u.id`, role, ...params,
   );
   const load = new Map<string, number>();
+  const NOTE_HI: Record<string, string> = { 'headmaster of this school': 'इस विद्यालय के प्रधानाध्यापक', "this case's cluster": 'इस प्रकरण का संकुल', 'this block': 'यही खंड', 'this district': 'यही ज़िला' };
+  const noteHi = (n: string) => NOTE_HI[n] ?? n.replace(/^covering from (.+)$/, '$1 से सहयोग');
   const withLoad = (rows: { id: string; full_name: string; scope_id: string; open: number }[], note: (r: { scope_id: string }) => string) =>
-    rows.map((r) => { load.set(r.id, Number(r.open)); return { id: r.id, name: r.full_name, note: `${note(r)} · ${Number(r.open)} open` }; });
+    rows.map((r) => { load.set(r.id, Number(r.open)); return { id: r.id, name: r.full_name, note: `${note(r)} · ${Number(r.open)} open`, noteHi: `${noteHi(note(r))} · ${Number(r.open)} खुले काम` }; });
 
   switch (role) {
     case 'headmaster':

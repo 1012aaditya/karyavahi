@@ -101,7 +101,7 @@ export default async function DistrictHome() {
                 <span className="tnum text-sm text-ink-soft">
                   {o.did_pp === null ? '—' : `${o.did_pp > 0 ? '+' : ''}${o.did_pp} pp`}
                 </span>
-                <span className="text-xs text-ink-faint">{fmtDate(o.evaluated_at)}</span>
+                <span className="text-xs text-ink-faint">{fmtDate(o.evaluated_at, false, lang)}</span>
                 <Mono>{o.id}</Mono>
               </li>
             ))}
@@ -118,7 +118,7 @@ export default async function DistrictHome() {
         <Stat label={pick(lang, 'Closed on proof', 'सबूत पर बंद')} value={tt.closed} tone="good" />
         <Stat
           label={pick(lang, 'Typical time to close', 'औसत समय')}
-          value={tt.medianDays === null ? '—' : `${tt.medianDays}d`}
+          value={tt.medianDays === null ? '—' : pick(lang, `${tt.medianDays}d`, `${tt.medianDays} दिन`)}
           sub={pick(lang, 'median across closed cases', 'बंद प्रकरणों का मध्यमान')}
         />
         <Stat

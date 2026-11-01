@@ -218,7 +218,7 @@ export default async function AuditPage({
               <tbody>
                 {rows.map((a) => (
                   <tr key={a.id}>
-                    <td className="tnum whitespace-nowrap text-sm">{fmtDate(a.ts, true)}</td>
+                    <td className="tnum whitespace-nowrap text-sm">{fmtDate(a.ts, true, lang)}</td>
                     <td className="text-sm">
                       {a.actor_user_id ? (users.get(a.actor_user_id) ?? a.actor_label) : a.actor_label}
                       <span className="block text-2xs text-ink-faint">{a.actor_role} · {a.source}</span>

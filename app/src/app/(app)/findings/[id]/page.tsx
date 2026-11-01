@@ -11,6 +11,7 @@ import { TrendChart, DivergingBars } from '@/components/charts';
 import { SERIES } from '@/lib/viz';
 import { FindingCalibrationNote } from '@/components/CalibrationNote';
 import { schoolName } from '@/lib/school-label';
+import { DQ_CHECK_HI, methodHi } from '@/components/case-panels';
 
 /** A finding the detector did not turn into a case, with the gate that stopped it. */
 
@@ -76,7 +77,7 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
           <ul className="mt-1.5 list-disc pl-5">
             {failed.map((c) => (
               <li key={c.check}>
-                {c.check.replace(/_/g, ' ')}: {c.value} ({pick(lang, 'needs', 'आवश्यक')} ≥ {c.threshold})
+                {(lang === 'hi' ? DQ_CHECK_HI[c.check] : undefined) ?? c.check.replace(/_/g, ' ')}: {c.value} ({pick(lang, 'needs', 'आवश्यक')} ≥ {c.threshold})
               </li>
             ))}
           </ul>
@@ -128,7 +129,8 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
               { key: 'cluster', label: pick(lang, 'This cluster', 'यह संकुल'), color: SERIES.one, points: trend.map((t) => t.cluster_pct) },
               { key: 'district', label: pick(lang, 'District', 'ज़िला'), color: SERIES.two, points: trend.map((t) => t.district_pct) },
             ]}
-            caption={`Class ${f.grade} ${compName}: percentage at the grade benchmark, this cluster against its district, across every completed round.`}
+            caption={pick(lang, `Class ${f.grade} ${compName}: percentage at the grade benchmark, this cluster against its district, across every completed round.`, `कक्षा ${f.grade} ${compName}: ग्रेड स्तर पर प्रतिशत, हर पूरे दौर में संकुल और उसका ज़िला।`)}
+            lang={lang}
           />
         </div>
       </Card>
@@ -141,7 +143,7 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
           />
           <div className="card-pad">
             <DivergingBars
-              caption="Change in percentage points per school between the two rounds."
+              caption={pick(lang, 'Change in percentage points per school between the two rounds.', 'दोनों दौरों के बीच हर विद्यालय में प्रतिशत अंकों का बदलाव।')}
               data={f.driver_schools.map((d) => ({
                 key: d.school_id,
                 label: schoolName(schools.get(d.school_id), lang) || d.school_id,
@@ -167,7 +169,7 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
           <tbody>
             {f.dq_checks.map((c) => (
               <tr key={c.check}>
-                <td>{c.check.replace(/_/g, ' ')}</td>
+                <td>{(lang === 'hi' ? DQ_CHECK_HI[c.check] : undefined) ?? c.check.replace(/_/g, ' ')}</td>
                 <td className="tnum">{c.value}</td>
                 <td className="tnum text-ink-soft">≥ {c.threshold}</td>
                 <td>{c.passed ? <Pill tone="good">{pick(lang, 'Passed', 'उत्तीर्ण')}</Pill> : <Pill tone="critical">{pick(lang, 'Failed', 'अनुत्तीर्ण')}</Pill>}</td>
@@ -176,7 +178,7 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
           </tbody>
         </table>
         <p className="px-4 py-3 text-xs text-ink-faint sm:px-5">
-          {f.detection_method} · {pick(lang, 'detected', 'पहचान')} {fmtDate(f.detected_at, true)} ·{' '}
+          {lang === 'hi' ? methodHi(f.detection_method) : f.detection_method} · {pick(lang, 'detected', 'पहचान')} {fmtDate(f.detected_at, true, lang)} ·{' '}
           {pick(lang, 'windows', 'अवधि')} {f.measured_prev_window_end} → {f.measured_curr_window_end}
         </p>
       </Card>

@@ -74,6 +74,7 @@ export default async function SourcesPage() {
 
   return (
     <AuthFrame
+      lang={lang}
       right={
         <>
           <form action="/api/language" method="post">

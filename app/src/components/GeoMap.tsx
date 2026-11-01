@@ -250,7 +250,7 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
       if (workspace) for (const k of ['grade', 'comp', 'subject', 'round']) { const v = sp.get(k); if (v) qs.set(k, v); }
       const r = await fetch(`/api/geo/map?${qs}`, { cache: 'no-store' });
       const j = await r.json();
-      if (!r.ok) { setError(L('The map could not be loaded.', 'नक्शा लोड नहीं हो सका।')); setData(null); onData?.(null); return; }
+      if (!r.ok) { setError(lang === 'hi' ? 'नक्शा लोड नहीं हो सका।' : j.error ?? 'The map could not be loaded.'); setData(null); onData?.(null); return; }
       setData(j); onData?.(j);
     } catch {
       setError(L('Could not reach the server for map data.', 'नक्शे के डेटा के लिए सर्वर तक नहीं पहुँच सके।'));
@@ -274,6 +274,12 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
           container: box.current,
           style: { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': PALETTE.map.DEFAULT } }] },
           center: [0, 0], zoom: 6, attributionControl: false, doubleClickZoom: false, dragRotate: false, pitchWithRotate: false,
+          // The map's own controls speak the page language.
+          ...(lang === 'hi' ? { locale: {
+            'Map.Title': 'नक्शा', 'Marker.Title': 'नक्शे पर निशान', 'NavigationControl.ZoomIn': 'पास से देखें', 'NavigationControl.ZoomOut': 'दूर से देखें',
+            'AttributionControl.ToggleAttribution': 'श्रेय दिखाएँ/छिपाएँ', 'AttributionControl.MapFeedback': 'नक्शे पर प्रतिक्रिया', 'Popup.Close': 'बंद करें',
+            'CooperativeGesturesHandler.MobileHelpText': 'नक्शा हिलाने के लिए दो उँगलियाँ लगाएँ',
+          } } : {}),
         });
         map.addControl(new lib.NavigationControl({ showCompass: false }), 'top-right');
         map.addControl(new lib.AttributionControl({ compact: true, customAttribution: 'MapLibre' }), 'bottom-right');

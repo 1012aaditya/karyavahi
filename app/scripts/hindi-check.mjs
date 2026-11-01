@@ -28,10 +28,13 @@ const DATA = [
   ...q(`select steps v from interventions`), ...q(`select resources v from interventions`),
   ...q(`select coalesce(json_extract(summary, '$.note'), '') v from evidence`),
   // Officer pages also show what people typed and what the system stored about a record.
-  ...q(`select title_en v from tasks`), ...q(`select coalesce(body, '') v from notifications`),
+  ...q(`select title_en v from tasks`),
   ...q(`select title v from reports`), ...q(`select coalesce(reason, '') v from approvals`),
   ...q(`select name_en v from competencies`), ...q(`select coalesce(description, '') v from complaints`),
   ...q(`select name v from states`), ...q(`select file_name v from import_batches`),
+  ...q(`select code v from assessment_rounds`), ...q(`select label v from assessment_rounds`),
+  ...q(`select coalesce(note, '') v from complaint_events where actor_user_id is not null`), ...q(`select coalesce(resolution_summary, '') v from complaints`),
+  ...q(`select coalesce(change_note, '') v from setting_versions`),
 ].map((r) => String(r.v)).join('\u0001');
 
 /**
@@ -55,8 +58,14 @@ for (const sql of ['select * from interventions', 'select observations, ranked_f
 const ACCEPTED = new Set(['CRC', 'BRC', 'BEO', 'DEO', 'HM', 'AI', 'PAB', 'GPS', 'KB', 'MB', 'pp', 'Karyavahi', 'Claude', 'ID', 'PTR',
   // Names of sources, schemes, file formats and channels, written the same way in Hindi.
   'ASER', 'NFHS', 'UDISE', 'PARAKH', 'PRS', 'NIPUN', 'FLN', 'TaRL', 'SMC', 'ATR', 'CSV', 'PDF', 'XLSX', 'API', 'SMS', 'IVR', 'WhatsApp',
-  'NCERT', 'LGD', 'ODbL', 'ODC', 'BY', 'SD', 'PRABANDH', 'ShikshaLokam', 'ELEVATE', 'cQube', 'English', 'z', 'Opus']);
-const ID = /\b[A-Z]{2,5}-\d{2,}(-\d+)?\b/g;
+  'NCERT', 'LGD', 'ODbL', 'ODC', 'BY', 'SD', 'PRABANDH', 'ShikshaLokam', 'ELEVATE', 'cQube', 'English', 'z', 'Opus',
+  // Products, organisations and laws named inside Hindi sentences on the roadmap and sources pages.
+  'MoU', 'Glific', 'Meta', 'Exotel', 'VSK', 'OpenAPI', 'TRAI', 'DLT', 'SQLite', 'Postgres', 'pgvector', 'Android', 'DPDP',
+  'UP', 'ISB', 'IIPS', 'TLM', 'RTE', 'NAS', 'DiD']);
+/** Names of more than one word, removed before the words are checked. */
+const PHRASES = ['India Data Portal', 'Meta Cloud API', 'J-PAL', 'API v1', 'UDISE+', 'karyavahi-seed v1.0', 'seed 20261024'];
+/** Record ids ("CASE-0184", "TSK-00412") and assessment round codes ("R4"). */
+const ID = /\b[A-Z]{2,5}-\d{2,}(?:-\d+)?\b|\bR\d\b/g;
 
 const pick = (sql, ...p) => db.prepare(sql).get(...p);
 const hmTask = pick(`select t.owner_user_id u, t.id from tasks t where t.owner_role = 'headmaster' and t.status in ('in_progress','sent_back') order by t.id limit 1`);
@@ -71,16 +80,17 @@ for (const a of ACCOUNTS.slice(0, 2)) {
 }
 
 /** The officers' desks. A `*` route is filled in from the first matching link on the page before it. */
-const OFFICER = ['/overview', '/today', '/cases', '/cases/*', '/execution', '/tasks/*', '/hotspots', '/hotspots?view=list',
+const OFFICER = ['/overview', '/today', '/cases', '/cases/*', '/execution', '/tasks/*', '/execution?tab=overdue&view=table', '/execution?tab=blockers', '/execution?tab=workload', '/hotspots', '/hotspots?view=list',
   '/reports', '/reports/*', '/interventions', '/evidence', '/notifications', '/assistant', '/complaints', '/changes', '/approvals', '/findings'];
 ACCOUNTS.push(
   { email: 'beo.blk-01@demo.karyavahi.test', routes: [...OFFICER, '/schools/SCH-00412', '/roadmap', '/sources'] },
-  { email: 'deo.rmp@demo.karyavahi.test', routes: OFFICER },
-  { email: 'state.analyst@demo.karyavahi.test', routes: ['/overview', '/hotspots', '/reports', '/reports/*', '/notifications', '/assistant'] },
-  { email: 'crc.clu-001@demo.karyavahi.test', routes: ['/notifications', '/assistant', '/complaints'] },
+  { email: 'deo.rmp@demo.karyavahi.test', routes: [...OFFICER, '/findings/*', '/district', '/schools', '/impact', '/visits', '/reports/new', '/interventions/compare'] },
+  { email: 'state.analyst@demo.karyavahi.test', routes: ['/overview', '/state', '/hotspots', '/reports', '/reports/*', '/notifications', '/assistant'] },
+  { email: 'crc.clu-001@demo.karyavahi.test', routes: ['/notifications', '/assistant', '/complaints/new', '/complaints', '/complaints/*'] },
 );
 /** Where a `*` route finds its record: the first link of that shape on the previous page. */
-const LINK = { '/cases/*': /href="\/cases\/(CASE-\d+)"/, '/tasks/*': /href="\/tasks\/(TSK-[\w-]+)"/, '/reports/*': /href="\/reports\/(RPT-[\w-]+)"/ };
+const LINK = { '/cases/*': /href="\/cases\/(CASE-\d+)"/, '/tasks/*': /href="\/tasks\/(TSK-[\w-]+)"/, '/reports/*': /href="\/reports\/(RPT-[\w-]+)"/,
+  '/findings/*': /href="\/findings\/(FND-\d+)"/, '/complaints/*': /href="\/complaints\?(?:[^"]*&amp;)?open=(CMP-\d+)/ };
 
 async function signIn(a) {
   const body = new URLSearchParams(a.email ? { email: a.email } : { user_id: a.userId });
@@ -90,9 +100,13 @@ async function signIn(a) {
   return `kv_session=${token}; kv_lang=hi`;
 }
 
-/** The text pieces a reader sees in the page body, split where markup splits them. */
+/**
+ * The text pieces a reader sees in the page body, split where markup splits them, and the words
+ * a screen reader or a tooltip gives them (aria-label, title, placeholder).
+ */
 function textPieces(html) {
-  const body = html.slice(html.indexOf('<body'));
+  const body = html.slice(html.indexOf('<body'))
+    .replace(/<[^>]*?\s(?:placeholder|title|aria-label)="([^"]*)"[^>]*>/g, (tag, said) => `<i>${said}</i>${tag}`);
   return body
     .replace(/<script[\s\S]*?<\/script>/g, ' ')
     .replace(/<style[\s\S]*?<\/style>/g, ' ')
@@ -103,20 +117,52 @@ function textPieces(html) {
     .filter(Boolean);
 }
 
-/** Avatar initials ("PG"), short hashes ("4e0dfa0e…3278") and the word "sha256" beside them. */
-const CODE = /^[A-Z]{1,3}$|^[0-9a-f]{6,}…[0-9a-f]{3,}$|^·? ?sha256$/;
+/**
+ * Avatar initials ("PG"), short hashes ("4e0dfa0e…3278") and the word "sha256" beside them, audit
+ * action codes shown in monospace ("case.created"), settings versions ("SET-v2") and model ids
+ * ("simulated-template-v1"), and file names ("assessment_R3_KSG_v2.csv").
+ */
+const CODE = /^[A-Z]{1,3}$|^[0-9a-f]{6,}…[0-9a-f]{3,}$|^·? ?sha256$|^[a-z_]+(\.[a-z_]+)+$|^SET-v\d+$|^[a-z0-9.]+(-[a-z0-9.]+)*-v?\d[\w.]*$|^[\w.-]+\.(csv|xlsx|pdf|jpe?g|png)$/;
 
+/** Whether the text is two or more stored values written one after another. */
+function storedRun(s, depth = 0) {
+  if (depth > 0 && STORED.has(s)) return true;
+  if (depth > 6) return false;
+  for (let i = s.indexOf(' '); i > 0; i = s.indexOf(' ', i + 1)) {
+    if (STORED.has(s.slice(0, i)) && storedRun(s.slice(i + 1), depth + 1)) return true;
+  }
+  return false;
+}
+
+/** One run of Latin text is fine when it is data, an id, or accepted words. */
+function englishRun(s) {
+  if (CODE.test(s) || DATA.includes(s) || STORED.has(s)) return false;
+  // Data joined together: an intervention's resources (", "), or a case title and a task title (" — ").
+  const parts = s.split(/, | — /);
+  if (parts.length > 1 && parts.every((part) => DATA.includes(part) || STORED.has(part))) return false;
+  // Several stored lines run together, such as an intervention's limitations.
+  if (storedRun(s)) return false;
+  const rest = PHRASES.reduce((t, ph) => t.split(ph).join(' '), s).replace(ID, ' ').split(/[^A-Za-z]+/).filter((w) => w && !ACCEPTED.has(w));
+  return rest.length > 0 && !rest.every((w) => DATA.includes(w) && /^[A-Z]/.test(w));
+}
+
+/**
+ * A piece leaks when the whole of it is English interface text, or when, in a Hindi sentence, a
+ * run of Latin words between the Hindi is neither data nor an accepted word ("CASE-0184 पर Plan
+ * approved"). Data quoted inside Hindi ("Rampur में 3 प्रकरण") is checked run by run.
+ */
 function leaks(pieces) {
   const out = [];
   for (const p of pieces) {
     if (!/[A-Za-z]/.test(p)) continue;
-    if (CODE.test(p) || DATA.includes(p) || STORED.has(p)) continue;
-    // Hindi prose that names a product or source in Latin letters ("आज SQLite; पायलट हेतु Postgres").
-    if ((p.match(/[\u0900-\u097F]/g) ?? []).length >= (p.match(/[A-Za-z]/g) ?? []).length) continue;
-    // A list joined from the data, such as an intervention's resources.
-    if (p.includes(', ') && p.split(', ').every((part) => DATA.includes(part))) continue;
-    const rest = p.replace(ID, ' ').split(/[^A-Za-z]+/).filter((w) => w && !ACCEPTED.has(w));
-    if (rest.length && !rest.every((w) => DATA.includes(w) && /^[A-Z]/.test(w))) out.push(p);
+    if (!englishRun(p)) continue;
+    if (/[\u0900-\u097F]/.test(p)) {
+      // Ids split runs too, so "<reason typed by an officer> (TSK-00412 पर दर्ज…)" checks the reason alone.
+      const runs = p.split(new RegExp(`[\\u0900-\\u097F][\\u0900-\\u097F\\s]*|${ID.source}`)).map((r) => r.replace(/^[\s\p{P}\p{S}\d]+|(?:[\s\p{P}\p{S}]+\d*)+$/gu, ''))
+        .filter((r) => /[A-Za-z]/.test(r));
+      if (runs.every((r) => !englishRun(r))) continue;
+    }
+    out.push(p);
   }
   return [...new Set(out)];
 }

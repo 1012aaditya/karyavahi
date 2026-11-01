@@ -74,7 +74,7 @@ export default async function CommandCentre() {
   const progress = recentProgress(session, 6, lang);
   const sys = systemStatus();
   const brief = plainBrief(session, lang);
-  const hot = topHotspots(session, 4);
+  const hot = topHotspots(session, 4, lang);
   const stages = stageStrip(session);
   const proof = may(session, 'evidence.verify') ? countEvidenceToCheck(session) : 0;
   const scope = scopeName(session.scope_type, session.scope_id);
@@ -129,7 +129,7 @@ export default async function CommandCentre() {
       </Panel>
 
       <Panel title={pick(lang, 'Where your cases are', 'आपके प्रकरण कहाँ हैं')} action={<Link href="/cases" className="text-xs font-medium text-brand hover:underline">{pick(lang, 'All cases', 'सभी प्रकरण')}</Link>}>
-        <div className="flex h-20 items-end gap-1.5" role="img" aria-label={stages.map((s) => `${s.en}: ${s.n}`).join(', ')}>
+        <div className="flex h-20 items-end gap-1.5" role="img" aria-label={stages.map((s) => `${pick(lang, s.en, s.hi)}: ${s.n}`).join(', ')}>
           {stages.map((s, i) => (
             <div key={s.key} className="flex flex-1 flex-col items-center gap-1">
               <span className="tnum text-2xs font-semibold text-ink-soft">{s.n}</span>

@@ -20,6 +20,8 @@ const ROLE_SHORT: Record<string, string> = {
   beo: 'BEO', brc: 'BRC', crc: 'CRC', headmaster: 'Headmaster', deo: 'DEO',
   state_admin: 'State team', auditor: 'Auditor', demo_admin: 'Demo admin',
 };
+const ROLE_SHORT_HI: Record<string, string> = { headmaster: 'प्रधानाध्यापक', state_admin: 'राज्य दल', auditor: 'लेखा परीक्षक', demo_admin: 'डेमो प्रशासक' };
+const roleShort = (lang: Language, role: string) => (lang === 'hi' ? ROLE_SHORT_HI[role] : undefined) ?? ROLE_SHORT[role] ?? role;
 
 export function CaseThreadComposer({
   lang, caseId, candidates, canDecide = false, mode = 'new', commentId, version, initialBody = '', initialMentions = [],
@@ -95,7 +97,7 @@ export function CaseThreadComposer({
                   <button type="button" className="flex w-full items-baseline justify-between gap-2 px-3 py-1.5 text-left text-[13px] hover:bg-paper-sunk"
                     onClick={() => choose(c)}>
                     <span className="font-medium text-ink">{c.name}</span>
-                    <span className="text-[11.5px] text-ink-faint">{ROLE_SHORT[c.role] ?? c.role} · {c.scope}</span>
+                    <span className="text-[11.5px] text-ink-faint">{roleShort(lang, c.role)} · {c.scope}</span>
                   </button>
                 </li>
               ))}
@@ -111,7 +113,7 @@ export function CaseThreadComposer({
             onChange={(e) => { const c = byId.get(e.target.value); if (c) choose(c); }}>
             <option value="">{t(lang, `choose (${candidates.length} can see this case)`, `चुनें (${candidates.length})`)}</option>
             {candidates.filter((c) => !mentions.includes(c.id)).map((c) => (
-              <option key={c.id} value={c.id}>{c.name} — {ROLE_SHORT[c.role] ?? c.role}</option>
+              <option key={c.id} value={c.id}>{c.name} — {roleShort(lang, c.role)}</option>
             ))}
           </select>
         </label>

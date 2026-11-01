@@ -68,8 +68,8 @@ export default async function ImportBatchPage({ params }: { params: Promise<{ id
             <Field label={pick(lang, 'Scope', 'दायरा')}>{b.scope_type} {b.scope_id}</Field>
             <Field label={pick(lang, 'Round', 'दौर')}>{r ? `${r.code} · ${r.label}` : '—'}</Field>
             <Field label={pick(lang, 'Uploaded by', 'अपलोड किया')}>{users.get(b.uploaded_by) ?? b.uploaded_by}</Field>
-            <Field label={pick(lang, 'Uploaded at', 'अपलोड समय')}><span className="tnum">{fmtDate(b.uploaded_at, true)}</span></Field>
-            <Field label={pick(lang, 'Committed at', 'दर्ज समय')}><span className="tnum">{fmtDate(b.committed_at, true)}</span></Field>
+            <Field label={pick(lang, 'Uploaded at', 'अपलोड समय')}><span className="tnum">{fmtDate(b.uploaded_at, true, lang)}</span></Field>
+            <Field label={pick(lang, 'Committed at', 'दर्ज समय')}><span className="tnum">{fmtDate(b.committed_at, true, lang)}</span></Field>
             <Field label={pick(lang, 'Provenance', 'स्रोत')}><ProvenanceChip provenance={b.provenance} lang={lang} /></Field>
           </Facts>
         </div>

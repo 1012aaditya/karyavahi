@@ -2,6 +2,8 @@ import { STATUS_LABELS } from '@domain/lifecycle';
 import type { Language } from '@domain/types';
 import { REPORT_TYPES } from '@/lib/reports';
 import { REPORT_HI } from './ReportsRail';
+import { priorityTitleHi, priorityDetailHi, priorityWhenHi, priorityOwnerHi } from '@/lib/priority-text';
+import { blockerText } from '@/lib/blocker-text';
 
 /**
  * Report wording in the reader's language, applied when a report is shown.
@@ -23,7 +25,7 @@ const EXACT: Record<string, string> = {
   'Gain confirmed (interval above zero)': 'सुधार पुष्ट (अंतराल शून्य से ऊपर)',
   'Gain indicative only': 'सुधार केवल संकेत',
   'No gain / below target / worse': 'सुधार नहीं / लक्ष्य से कम / गिरावट',
-  'Inconclusive': 'अनिर्णायक',
+  'Inconclusive': 'अनिर्णीत',
   'Overdue tasks': 'विलंबित काम',
   'Escalated': 'ऊपर भेजे गए',
   'Proof sent back (period)': 'लौटाए गए सबूत (अवधि में)',
@@ -89,12 +91,13 @@ const EXACT: Record<string, string> = {
     'कुछ ही प्रकरणों का औसत प्रभाव अस्थिर होता है; इसे जाँचे गए प्रकरणों की संख्या के साथ पढ़ें।',
   // cell values the builder writes
   'Officer-raised': 'अधिकारी द्वारा उठाया', 'Awaiting next round': 'अगले दौर की प्रतीक्षा', 'Not yet evaluated': 'अभी जाँच नहीं हुई',
+  'Passed floor': 'न्यूनतम पूरा', 'Below floor': 'न्यूनतम से कम',
   'None — closed': 'कुछ नहीं — बंद', 'Yes': 'हाँ', 'No': 'नहीं', 'Submitted today': 'आज जमा', 'You': 'आप', 'Open': 'खुली',
   critical: 'अति गंभीर', high: 'उच्च', medium: 'मध्यम', significant: 'उल्लेखनीय गिरावट', moderate: 'मध्यम चिंता', stable: 'स्थिर',
   improving: 'सुधार', insufficient: 'अपर्याप्त डेटा',
   'verified': 'सत्यापित', 'partially verified': 'आंशिक सत्यापित', 'not started': 'शुरू नहीं', 'pending': 'लंबित',
-  'improved confirmed': 'सुधार पुष्ट', 'improved indicative': 'सुधार के संकेत', 'below target': 'लक्ष्य से कम', 'no change': 'कोई बदलाव नहीं',
-  'worsened': 'और गिरावट', 'inconclusive': 'अनिर्णायक',
+  'improved confirmed': 'सुधार — पुष्ट', 'improved indicative': 'सुधार — संकेतात्मक', 'below target': 'लक्ष्य से कम', 'no change': 'कोई बदलाव नहीं',
+  'worsened': 'और बिगड़ा', 'inconclusive': 'अनिर्णीत',
   'committed': 'दर्ज', 'failed': 'विफल', 'committed_with_rejections': 'दर्ज, कुछ अस्वीकृत',
   // blocker types (blockers.ts)
   'Staff unavailable': 'कर्मचारी उपलब्ध नहीं', 'Budget unavailable': 'बजट उपलब्ध नहीं', 'Teaching materials unavailable': 'शिक्षण सामग्री उपलब्ध नहीं',
@@ -113,7 +116,7 @@ const EXACT: Record<string, string> = {
   rejected_rows: 'अस्वीकृत पंक्तियाँ', metrics: 'मापदंड', verified_closures_to_date: 'अब तक पुष्ट बंद', reopened_to_date: 'अब तक फिर खुले',
   median_days_detection_to_approval_90d: 'पहचान से स्वीकृति तक माध्य दिन (90 दिन)', on_time_task_rate_30d: 'समय पर काम की दर (30 दिन)',
   escalations_last_7d: 'पिछले 7 दिन में ऊपर भेजे', narrative: 'विवरण', synthetic_demo: 'काल्पनिक डेमो डेटा',
-  improved_confirmed: 'सुधार पुष्ट', improved_indicative: 'सुधार के संकेत', below_target: 'लक्ष्य से कम', no_change: 'कोई बदलाव नहीं',
+  improved_confirmed: 'सुधार — पुष्ट', improved_indicative: 'सुधार — संकेतात्मक', below_target: 'लक्ष्य से कम', no_change: 'कोई बदलाव नहीं',
 };
 // Case statuses, in both the raw form older reports store and the label newer ones show.
 for (const [k, v] of Object.entries(STATUS_LABELS)) { EXACT[k] ??= v.hi; EXACT[v.en] ??= v.hi; }
@@ -148,15 +151,26 @@ const PATTERNS: [RegExp, (...m: string[]) => string][] = [
 /** One piece of report text, as a Hindi reader should see it. */
 function one(text: string): string {
   const t = text.trim();
-  if (EXACT[t]) return EXACT[t];
-  // "2 task(s) overdue; 1 proof pending; <blocker typed by someone>"
-  if (t.includes('; ')) {
-    const parts = t.split('; ');
-    if (parts.some((p) => /^\d+ (task\(s\) overdue|proof pending)$/.test(p))) {
-      return parts.map((p) => p.replace(/^(\d+) task\(s\) overdue$/, '$1 काम विलंबित').replace(/^(\d+) proof pending$/, '$1 सबूत लंबित')).join('; ');
-    }
+  if (Object.hasOwn(EXACT, t)) return EXACT[t];
+  // "2 task(s) overdue; 1 proof pending; <blocker typed by someone>", or any one of those alone
+  const parts = t.split('; ');
+  if (parts.some((p) => /^\d+ (task\(s\) overdue|proof pending)$/.test(p))) {
+    return parts.map((p) => p.replace(/^(\d+) task\(s\) overdue$/, '$1 काम विलंबित').replace(/^(\d+) proof pending$/, '$1 सबूत लंबित')).join('; ');
   }
-  for (const [re, f] of PATTERNS) { const m = re.exec(t); if (m) return f(...m); }
+  for (const [re, f] of PATTERNS) {
+    const m = re.exec(t);
+    if (m) { const out = f(...m); if (out !== t) return out; }
+  }
+  // Priority rows of a review pack: who, when, and "<title> — <detail>" (priority-text.ts).
+  const when = priorityWhenHi(t) ?? priorityOwnerHi(t);
+  if (when) return when;
+  const blocker = blockerText(t, 'hi');
+  if (blocker !== t) return blocker;
+  for (let i = t.lastIndexOf(' — '); i > 0; i = t.lastIndexOf(' — ', i - 1)) {
+    const a = t.slice(0, i), b = t.slice(i + 3);
+    const ah = priorityTitleHi(a), bh = priorityDetailHi(b);
+    if (ah !== a || bh !== b) return `${ah} — ${bh}`;
+  }
   return text;
 }
 

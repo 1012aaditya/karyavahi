@@ -18,9 +18,44 @@ import { Pill, ProvenanceChip } from '@/components/labels';
  * next to the outcomes it produced.
  */
 
+/** Stored words this page shows (datasets, closure rules, rejection codes, job summaries), in Hindi. */
+const DATASET_HI: Record<string, string> = {
+  'School master': 'विद्यालय मास्टर', 'Schools, hierarchy, enrolment and sanctioned posts.': 'विद्यालय, पदानुक्रम, नामांकन और स्वीकृत पद।',
+  'Assessment results': 'आकलन परिणाम', 'Grade × competency results per school per round (aggregate counts, no student records).': 'हर दौर में हर विद्यालय के कक्षा × दक्षता परिणाम (कुल संख्या, किसी विद्यार्थी का अभिलेख नहीं)।',
+  'Attendance (monthly)': 'उपस्थिति (मासिक)', 'Average student attendance per school per month.': 'हर विद्यालय में हर महीने विद्यार्थियों की औसत उपस्थिति।',
+  'Staff events': 'कर्मचारी घटनाएँ', 'Teacher transfers and joinings (pseudonymous teacher refs).': 'शिक्षकों के स्थानांतरण और कार्यभार ग्रहण (छद्म नाम वाले संदर्भ)।',
+  'Field visits': 'क्षेत्र भ्रमण', 'CRC/BRC visits captured in the app.': 'ऐप में दर्ज CRC/BRC भ्रमण।',
+  'Intervention library': 'हस्तक्षेप पुस्तकालय', 'Intervention cards with cost basis, delivery conditions and evidence status.': 'लागत आधार, क्रियान्वयन शर्तों और साक्ष्य स्थिति वाले हस्तक्षेप कार्ड।',
+  'Annual': 'वार्षिक', 'Per assessment round': 'हर आकलन दौर', 'Monthly': 'मासिक', 'Quarterly': 'त्रैमासिक', 'Continuous (app)': 'लगातार (ऐप)', 'Reviewed yearly': 'वार्षिक समीक्षा',
+  'Synthetic — karyavahi-seed v1.0, seed 20261024. Shaped like a UDISE+ export; not UDISE+ data.': 'काल्पनिक — karyavahi-seed v1.0, seed 20261024। UDISE+ निर्यात जैसा आकार; UDISE+ डेटा नहीं।',
+  'Synthetic — karyavahi-seed v1.0.': 'काल्पनिक — karyavahi-seed v1.0।',
+  'Costs illustrative; two cards cite J-PAL evidence flagged for verification.': 'लागत उदाहरण हेतु; दो कार्ड J-PAL साक्ष्य उद्धृत करते हैं, जिनकी जाँच बाकी है।',
+  'Every task in the current plan has verified evidence': 'वर्तमान योजना के हर काम का सबूत सत्यापित हो',
+  'At least one verification comes from an independent source (spot-check or follow-up assessment by a different role)': 'कम से कम एक सत्यापन स्वतंत्र स्रोत से हो (दूसरी भूमिका द्वारा त्वरित जाँच या अनुवर्ती आकलन)',
+  'The pre-registered outcome check shows DiD at or above the success threshold': 'पूर्व-निर्धारित परिणाम जाँच में DiD सफलता सीमा के बराबर या ऊपर हो',
+  'Follow-up participation in treated schools meets the participation floor': 'उपचारित विद्यालयों में अनुवर्ती भागीदारी न्यूनतम सीमा पूरी करे',
+  proficient_exceeds_assessed: 'दक्ष संख्या आकलित से अधिक', unknown_school_id: 'अज्ञात विद्यालय आईडी', duplicate_row: 'दोहराई पंक्ति', invalid_date: 'अमान्य तिथि', non_numeric: 'संख्या नहीं',
+  succeeded: 'सफल', skipped: 'छोड़ा गया', failed: 'विफल', running: 'चल रहा है',
+  import_validation: 'आयात जाँच', detection_run: 'पहचान चक्र', outcome_run: 'परिणाम जाँच चक्र', reminder_sweep: 'अनुस्मारक चक्र',
+  channel_dispatch: 'संदेश प्रेषण', briefing_build: 'ब्रीफ़िंग निर्माण',
+  district: 'ज़िला', block: 'खंड', cluster: 'संकुल', school: 'विद्यालय', state: 'राज्य',
+};
+const JOB_KEY_HI: Record<string, string> = {
+  batch: 'बैच', accepted: 'स्वीकृत', rejected: 'अस्वीकृत', round: 'दौर', candidates: 'संभावित', flagged: 'चिह्नित', rejected_noise: 'शोर के कारण अस्वीकृत',
+  rejected_data_quality: 'डेटा गुणवत्ता से अस्वीकृत', cases_opened: 'खुले प्रकरण', settings: 'सेटिंग', evaluated: 'जाँचे गए', closed_same_week_or_later: 'उसी सप्ताह या बाद में बंद',
+  reopened: 'फिर खुले', inconclusive: 'अनिर्णीत', reminders_sent: 'भेजे गए अनुस्मारक', escalations_created: 'ऊपर भेजे गए', overdue_open: 'विलंबित खुले', idempotency: 'दोहराव नियम',
+  queued: 'कतार में', sent: 'भेजे गए', note: 'टिप्पणी', scope: 'दायरा', open_cases: 'खुले प्रकरण', rows: 'पंक्तियाँ', breach_nudges: 'समय-सीमा अनुस्मारक', as_of: 'तिथि',
+  block_officers_told: 'सूचित खंड अधिकारी', outbox_messages: 'आउटबॉक्स संदेश', trigger: 'कारण', ran_at: 'चला',
+};
+const JOB_VALUE_HI: Record<string, string> = {
+  'WhatsApp, IVR and SMS are simulated; no provider configured': 'व्हाट्सऐप, IVR और SMS काल्पनिक हैं; कोई प्रदाता नहीं जुड़ा',
+  'one reminder and one escalation per task, keyed on task id + rule': 'हर काम पर एक अनुस्मारक और एक बार ऊपर भेजना, काम की आईडी + नियम के आधार पर',
+};
+
 export default async function StateHome() {
   const session = await pageSession();
   const lang = await getLanguage();
+  const hiw = (s: string) => (lang === 'hi' ? DATASET_HI[s] ?? s : s);
 
   const h = headline(session);
   const districts = districtRollup(session);
@@ -65,7 +100,7 @@ export default async function StateHome() {
 
       <Grid cols={4}>
         <Stat label={pick(lang, 'Closed on proof', 'सबूत पर बंद')} value={tt.closed} tone="good" />
-        <Stat label={pick(lang, 'Typical time to close', 'औसत समय')} value={tt.medianDays === null ? '—' : `${tt.medianDays}d`} />
+        <Stat label={pick(lang, 'Typical time to close', 'औसत समय')} value={tt.medianDays === null ? '—' : pick(lang, `${tt.medianDays}d`, `${tt.medianDays} दिन`)} />
         <Stat label={pick(lang, 'Reopened', 'फिर खोले')} value={h.reopened} tone={h.reopened > 0 ? 'warn' : 'neutral'} />
         <Stat
           label={pick(lang, 'Next round', 'अगला दौर')}
@@ -77,7 +112,7 @@ export default async function StateHome() {
       <Card>
         <CardHead
           title={pick(lang, 'Current configuration', 'वर्तमान सेटिंग')}
-          hint={`v${current.version} · ${pick(lang, 'in force since', 'प्रभावी')} ${fmtDate(current.effective_from)}`}
+          hint={`v${current.version} · ${pick(lang, 'in force since', 'प्रभावी')} ${fmtDate(current.effective_from, false, lang)}`}
           right={<Link href="/settings" className="link text-sm">{pick(lang, 'All versions', 'सभी संस्करण')}</Link>}
         />
         <div className="card-pad space-y-3">
@@ -104,7 +139,7 @@ export default async function StateHome() {
               <span className="tnum">{current.outcome.comparison_schools_per_treated}</span>
             </Field>
             <Field label={pick(lang, 'Reminder / escalation', 'स्मरण / उच्चाधिकारी')}>
-              <span className="tnum">T−{current.reminders.reminder_days_before_due} / +{current.reminders.escalation_days_overdue}d</span>
+              <span className="tnum">T−{current.reminders.reminder_days_before_due} / +{current.reminders.escalation_days_overdue}{pick(lang, 'd', ' दिन')}</span>
             </Field>
           </Facts>
           <Callout tone="method" title={pick(lang, 'Why this version', 'यह संस्करण क्यों')}>
@@ -113,7 +148,7 @@ export default async function StateHome() {
           <div>
             <h3 className="h-section mb-1">{pick(lang, 'A case may only close when', 'प्रकरण तभी बंद हो सकता है जब')}</h3>
             <ul className="list-disc space-y-0.5 pl-5 text-sm text-ink">
-              {current.closure_rules.map((r) => <li key={r}>{r}</li>)}
+              {current.closure_rules.map((r) => <li key={r}>{hiw(r)}</li>)}
             </ul>
           </div>
         </div>
@@ -142,13 +177,13 @@ export default async function StateHome() {
               {datasets().map((d) => (
                 <tr key={d.id}>
                   <td>
-                    <span className="font-medium">{d.name}</span>
-                    <p className="text-xs text-ink-soft">{d.description}</p>
-                    <p className="text-xs text-ink-faint">{d.source_note}</p>
+                    <span className="font-medium">{hiw(d.name)}</span>
+                    <p className="text-xs text-ink-soft">{hiw(d.description)}</p>
+                    <p className="text-xs text-ink-faint">{hiw(d.source_note)}</p>
                   </td>
                   <td><ProvenanceChip provenance={d.provenance} lang={lang} /></td>
-                  <td className="text-sm">{d.refresh_cadence}</td>
-                  <td className="tnum text-sm">{fmtDate(d.last_updated_at)}</td>
+                  <td className="text-sm">{hiw(d.refresh_cadence)}</td>
+                  <td className="tnum text-sm">{fmtDate(d.last_updated_at, false, lang)}</td>
                 </tr>
               ))}
             </tbody>
@@ -166,7 +201,7 @@ export default async function StateHome() {
           <ul className="card-pad flex flex-wrap gap-2">
             {rejections.map((r) => (
               <li key={r.error_code}>
-                <Pill tone="warn">{r.error_code.replace(/_/g, ' ')} · <span className="tnum">{r.c}</span></Pill>
+                <Pill tone="warn">{lang === 'hi' ? DATASET_HI[r.error_code] ?? r.error_code.replace(/_/g, ' ') : r.error_code.replace(/_/g, ' ')} · <span className="tnum">{r.c}</span></Pill>
               </li>
             ))}
           </ul>
@@ -191,12 +226,12 @@ export default async function StateHome() {
                 {imports.map((b) => (
                   <tr key={b.id}>
                     <td><Link href={`/import/${b.id}`} className="link">{b.file_name}</Link></td>
-                    <td className="text-sm">{b.scope_type} {b.scope_id}</td>
+                    <td className="text-sm">{hiw(b.scope_type)} {b.scope_id}</td>
                     <td className="tnum">{fmtInt(b.accepted_rows)} / {fmtInt(b.total_rows)}</td>
                     <td className="tnum">
                       {b.rejected_rows > 0 ? <span className="text-warn">{b.rejected_rows}</span> : <span className="text-ink-faint">0</span>}
                     </td>
-                    <td className="tnum text-sm">{fmtDate(b.uploaded_at)}</td>
+                    <td className="tnum text-sm">{fmtDate(b.uploaded_at, false, lang)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -228,11 +263,13 @@ export default async function StateHome() {
           <ul className="divide-y divide-line">
             {jobs.map((j) => (
               <li key={j.id} className="flex flex-wrap items-baseline gap-x-3 px-4 py-2 text-sm sm:px-5">
-                <Mono>{j.job_type}</Mono>
-                <Pill tone={j.status === 'succeeded' ? 'good' : j.status === 'failed' ? 'critical' : 'neutral'}>{j.status}</Pill>
-                <span className="tnum text-xs text-ink-faint">{fmtDate(j.started_at, true)}</span>
+                {lang === 'hi' ? <span className="font-medium text-ink">{hiw(j.job_type)}</span> : <Mono>{j.job_type}</Mono>}
+                <Pill tone={j.status === 'succeeded' ? 'good' : j.status === 'failed' ? 'critical' : 'neutral'}>{hiw(j.status)}</Pill>
+                <span className="tnum text-xs text-ink-faint">{fmtDate(j.started_at, true, lang)}</span>
                 <span className="text-xs text-ink-soft">
-                  {Object.entries(j.summary).slice(0, 3).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${String(v)}`).join(' · ')}
+                  {Object.entries(j.summary).slice(0, 3).map(([k, v]) => (lang === 'hi'
+                    ? `${JOB_KEY_HI[k] ?? k.replace(/_/g, ' ')}: ${JOB_VALUE_HI[String(v)] ?? String(v)}`
+                    : `${k.replace(/_/g, ' ')}: ${String(v)}`)).join(' · ')}
                 </span>
               </li>
             ))}

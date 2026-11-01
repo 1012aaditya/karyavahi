@@ -68,6 +68,20 @@ export const ACTION_HI: Record<string, string> = {
   'Appeal — reopen': 'अपील — फिर खोलें', 'Resume investigation': 'जाँच फिर शुरू करें', 'Send the information': 'जानकारी भेजें', 'Investigate again': 'फिर से जाँच करें',
 };
 
+const ROUTE_LEVEL_HI: Record<string, string> = { school: 'विद्यालय', cluster: 'संकुल', block: 'खंड', district: 'ज़िला', state: 'राज्य' };
+/** The routing rule that will apply (complaints.ts routeFor), in Hindi. */
+export function routeHi(text: string): string {
+  let m = /^Category rule: “(.+)” is routed to the (\w+) office\.$/.exec(text);
+  if (m) {
+    const key = categories().find((c) => c.label === m![1])?.key;
+    return `श्रेणी नियम: “${(key && CATEGORY_HI[key]?.label) || m[1]}” ${ROUTE_LEVEL_HI[m[2]] ?? m[2]} कार्यालय को जाती है।`;
+  }
+  m = /^Critical priority: policy routes this category directly to the (\w+) office\.$/.exec(text);
+  if (m) return `अति गंभीर प्राथमिकता: नीति के अनुसार यह श्रेणी सीधे ${ROUTE_LEVEL_HI[m[1]] ?? m[1]} कार्यालय को जाती है।`;
+  if (text.startsWith('Restricted: the complaint concerns an officer')) return 'प्रतिबंधित: शिकायत सामान्य मार्ग के किसी अधिकारी के बारे में है, इसलिए यह अगले स्वतंत्र अधिकारी को जाती है।';
+  return text;
+}
+
 /** Who may do what from which status. 'assignee' = current authority; 'reporter' = complainant. */
 type Actor = 'assignee' | 'reporter';
 const T: Record<string, { action: string; label: string; to: string; by: Actor; needsNote?: boolean }[]> = {

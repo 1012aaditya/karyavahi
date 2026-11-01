@@ -139,7 +139,8 @@ export default async function SchoolPage({ params }: { params: Promise<{ id: str
                       <p className="mb-1 text-sm font-medium text-ink-soft">{gr.label}</p>
                       <TrendChart
                         xLabels={completed.map((r) => r.code)} series={gr.series} height={190}
-                        caption={`Class ${grade} ${gr.label} at ${s.name}: percentage of assessed children at the grade benchmark in each round.`}
+                        caption={pick(lang, `Class ${grade} ${gr.label} at ${s.name}: percentage of assessed children at the grade benchmark in each round.`, `${s.name}, कक्षा ${grade} ${gr.label}: हर दौर में ग्रेड स्तर तक पहुँचे आकलित बच्चों का प्रतिशत।`)}
+                        lang={lang}
                       />
                     </div>
                   ))}
@@ -159,7 +160,8 @@ export default async function SchoolPage({ params }: { params: Promise<{ id: str
               xLabels={[...attendance].reverse().map((a) => a.month.slice(2))}
               series={[{ key: 'att', label: pick(lang, 'Attendance', 'उपस्थिति'), color: SERIES.one, points: [...attendance].reverse().map((a) => a.avg_attendance_pct) }]}
               yLabel="% present" height={190}
-              caption={`Average daily attendance as a percentage, by month, at ${s.name}.`}
+              caption={pick(lang, `Average daily attendance as a percentage, by month, at ${s.name}.`, `${s.name} में महीनेवार औसत दैनिक उपस्थिति, प्रतिशत में।`)}
+              lang={lang}
             />
           </div>
         </Card>
@@ -197,7 +199,7 @@ export default async function SchoolPage({ params }: { params: Promise<{ id: str
               <tbody>
                 {staff.map((e) => (
                   <tr key={e.id}>
-                    <td className="tnum whitespace-nowrap text-sm">{fmtDate(e.event_date)}</td>
+                    <td className="tnum whitespace-nowrap text-sm">{fmtDate(e.event_date, false, lang)}</td>
                     <td>
                       <Pill tone={e.event_type === 'transfer_out' ? 'critical' : 'good'}>
                         {e.event_type === 'transfer_out' ? pick(lang, 'transferred out', 'स्थानांतरित') : pick(lang, 'joined', 'कार्यभार ग्रहण')}
@@ -227,7 +229,7 @@ export default async function SchoolPage({ params }: { params: Promise<{ id: str
             {visits.map((v) => (
               <li key={v.id} className="px-4 py-2.5 sm:px-5">
                 <div className="flex flex-wrap items-baseline gap-x-3">
-                  <span className="tnum w-24 shrink-0 text-sm text-ink-faint">{fmtDate(v.visit_date)}</span>
+                  <span className="tnum w-24 shrink-0 text-sm text-ink-faint">{fmtDate(v.visit_date, false, lang)}</span>
                   <Pill>{v.purpose.replace(/_/g, ' ')}</Pill>
                   <span className="text-sm text-ink-soft">
                     {visitors.get(v.visitor_user_id) ?? v.visitor_user_id} ({v.visitor_role})

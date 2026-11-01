@@ -109,7 +109,7 @@ export default async function Shell({ children }: { children: ReactNode }) {
             <Icon name="bell" size={19} label={t(lang, 'navNotifications')} />
             {badges.notifications > 0 ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-crit" aria-label={pick(lang, `${badges.notifications} unread`, `${badges.notifications} अपठित`)} /> : null}
           </Link>
-          <UserMenu name={session.full_name} role={roleLabel} scope={scope} email={session.email}>
+          <UserMenu name={session.full_name} role={roleLabel} scope={scope} email={session.email} label={pick(lang, 'Account menu', 'खाता मेनू')}>
             <UserMenuLink href="/account"><Icon name="user" size={16} />{t(lang, 'navAccount')}</UserMenuLink>
             <UserMenuLink href="/notifications">
               <Icon name="bell" size={16} />{t(lang, 'navNotifications')}

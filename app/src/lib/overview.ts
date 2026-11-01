@@ -12,6 +12,7 @@ import { STATUS_LABELS } from '@domain/lifecycle';
 import { AS_OF_TS } from '@domain/catalog';
 import { listComplaints, slaState, STATUS as CSTATUS, complaintsPred } from './complaints';
 import type { CaseStatus, Language } from '@domain/types';
+import { priorityTitleHi, priorityActionHi } from './priority-text';
 
 /**
  * The operational overview: "what needs my attention today to improve learning outcomes?"
@@ -282,7 +283,9 @@ export function recentProgress(s: Session, limit = 8, lang: Language = 'en'): Pr
     const text = hi
       ? (kind === 'approved' ? `${r.case_id} पर हस्तक्षेप स्वीकृत` : kind === 'verified' && r.to_status === 'closed' ? `${r.case_id} पुष्ट सुधार के साथ बंद`
         : kind === 'verified' ? `${r.case_id} के परिणाम की जाँच हुई` : kind === 'reopened' ? `${r.case_id} फिर खुला — सुधार नहीं दिखा`
-        : kind === 'evidence' ? `${r.case_id} पर सारे सबूत जमा` : kind === 'escalated' ? `${r.case_id} का विलंबित काम ऊपर भेजा गया` : r.summary)
+        : kind === 'evidence' ? `${r.case_id} पर सारे सबूत जमा` : kind === 'escalated' ? `${r.case_id} का विलंबित काम ऊपर भेजा गया`
+        // Any other step: the case and its new status, since the stored summary is English.
+        : r.to_status && STATUS_LABELS[r.to_status as CaseStatus] ? `${r.case_id}: ${STATUS_LABELS[r.to_status as CaseStatus].hi}` : r.summary)
       : kind === 'approved' ? `Intervention approved on ${r.case_id}` : kind === 'verified' && r.to_status === 'closed' ? `${r.case_id} closed on a verified gain`
       : kind === 'verified' ? `Outcome evaluated for ${r.case_id}` : kind === 'reopened' ? `${r.case_id} reopened — no gain shown`
       : kind === 'evidence' ? `All proof submitted on ${r.case_id}` : kind === 'escalated' ? `Overdue task on ${r.case_id} escalated` : r.summary;
@@ -307,6 +310,9 @@ export function recentProgress(s: Session, limit = 8, lang: Language = 'en'): Pr
   }).slice(0, limit);
 }
 
+/** A priority's title and action in Hindi, for the plain brief (priority-text.ts). */
+const priorityHi = (p: PriorityItem): { title: string; action: string } => ({ title: priorityTitleHi(p.title), action: priorityActionHi(p.action) });
+
 /** A deterministic, non-AI brief built from the same summary the AI narrates. */
 export interface PlainBrief { finding: string; changed: string; geography: string; concern: string; next: string; sources: string[] }
 export function plainBrief(s: Session, lang: Language = 'en'): PlainBrief {
@@ -317,13 +323,14 @@ export function plainBrief(s: Session, lang: Language = 'en'): PlainBrief {
   const likeForLike = last >= 2 && t.scope[last] !== null && t.scope[last - 2] !== null ? (t.scope[last]! - t.scope[last - 2]!) : null;
   const top = pa.items[0];
   if (lang === 'hi') {
-    // The same figures in Hindi; the priority's title is record text and stays as stored.
+    // The same figures in Hindi; record text inside a priority (a task or complaint title) stays as stored.
+    const tp = top ? priorityHi(top) : null;
     return {
-      finding: top ? `${top.title}.` : 'अभी आपके लिए कुछ भी तत्काल नहीं है।',
+      finding: tp ? `${tp.title}।` : 'अभी आपके लिए कुछ भी तत्काल नहीं है।',
       changed: likeForLike === null ? 'तुलना के लिए पर्याप्त समान दौर नहीं।' : `${t.labels[last]}: ${t.scope[last]}% ग्रेड स्तर पर, पिछले वर्ष के इसी दौर से ${Math.abs(likeForLike).toFixed(1)} pp ${likeForLike >= 0 ? 'ऊपर' : 'नीचे'}${t.state[last] !== null ? ` (राज्य ${t.state[last]}%)` : ''}।`,
       geography: `${t.scopeLabel} में ${h.critical} गंभीर प्रकरण खुले हैं।`,
       concern: h.overdue_tasks ? `${h.overdue_tasks} काम समय से पीछे, जिनमें ${h.escalated_tasks} ज़िले को भेजे गए।` : 'कोई काम समय से पीछे नहीं।',
-      next: top ? `${top.action}: ${top.title}` : 'नई गिरावट के लिए अधिगम हॉटस्पॉट देखें।',
+      next: tp ? `${tp.action}: ${tp.title}` : 'नई गिरावट के लिए अधिगम हॉटस्पॉट देखें।',
       sources: pa.items.flatMap((i) => i.sources).slice(0, 8),
     };
   }

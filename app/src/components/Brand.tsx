@@ -37,12 +37,13 @@ export const WORKFLOW = [
 ] as const;
 
 /** Signed-out frame: a slim header with the wordmark, the page, and the demo disclosure. */
-export function AuthFrame({ children, right }: { children: ReactNode; right?: ReactNode }) {
+/** `lang` sets the footer's words; the sign-in pages are English and leave it out. */
+export function AuthFrame({ children, right, lang = 'en' }: { children: ReactNode; right?: ReactNode; lang?: 'en' | 'hi' }) {
   return (
     <div className="flex min-h-screen flex-col bg-ivory">
       <header className="border-b border-line/70 bg-ivory/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-          <Link href="/" aria-label="Karyavahi home"><Wordmark /></Link>
+          <Link href="/" aria-label={lang === 'hi' ? 'कार्यवाही मुखपृष्ठ' : 'Karyavahi home'}><Wordmark /></Link>
           <div className="flex items-center gap-2">{right}</div>
         </div>
       </header>
@@ -50,7 +51,15 @@ export function AuthFrame({ children, right }: { children: ReactNode; right?: Re
       <footer className="border-t border-line/70 py-5">
         <p className="mx-auto flex max-w-6xl items-start gap-2 px-5 text-xs leading-relaxed text-ink-faint">
           <Icon name="info" size={14} className="mt-0.5" />
-          {realDataVersion() ? (
+          {lang === 'hi' ? (
+            <span>
+              <strong className="font-semibold text-warn">डेमो मोड — वास्तविक सरकारी आँकड़े नहीं।</strong>{' '}
+              {realDataVersion()
+                ? 'विद्यालय, नामांकन, शिक्षक और स्थान वास्तविक हैं (UDISE+, इंडिया डेटा पोर्टल के माध्यम से, लगभग 2020-21; नाम छिपाए गए)। अधिगम परिणाम काल्पनिक हैं और PRS 2024 के अनुरूप रखे गए हैं; लागत UP PAB 2025-26 कार्यवृत्त से है। लोग, प्रकरण और परिणाम काल्पनिक हैं।'
+                : 'हर विद्यालय, व्यक्ति, अंक, लागत और परिणाम बनाया गया है। कुछ भी UDISE+, NAS, ASER, राज्य VSK, व्हाट्सऐप या IVR से जुड़ा नहीं है।'}{' '}
+              <Link href="/sources" className="link">स्रोत और श्रेय</Link> · <Link href="/roadmap" className="link">आगे की राह</Link>
+            </span>
+          ) : realDataVersion() ? (
             <span>
               <strong className="font-semibold text-warn">Demo mode — not actual government statistics.</strong>{' '}
               Schools, enrolment, teachers and locations are real (UDISE+ via India Data Portal, about 2020-21; names withheld). Learning results are simulated and calibrated to PRS 2024; costs are from the UP PAB 2025-26 minutes. People, cases and outcomes are fictional.{' '}

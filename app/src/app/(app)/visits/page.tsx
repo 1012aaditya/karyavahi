@@ -79,7 +79,7 @@ export default async function VisitsPage() {
               return (
                 <li key={v.id} className="px-4 py-3 sm:px-5">
                   <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <span className="tnum w-24 shrink-0 text-sm text-ink-faint">{fmtDate(v.visit_date)}</span>
+                    <span className="tnum w-24 shrink-0 text-sm text-ink-faint">{fmtDate(v.visit_date, false, lang)}</span>
                     <Pill>{v.purpose.replace(/_/g, ' ')}</Pill>
                     <Link href={`/schools/${v.school_id}`} className="link text-sm font-medium">
                       {schools.get(v.school_id) ?? v.school_id}
