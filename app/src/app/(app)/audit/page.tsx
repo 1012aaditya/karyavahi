@@ -57,6 +57,8 @@ export default async function AuditPage({
   const total = countAudit(session, { entityType: sp.entityType, result: sp.result });
   const failures = countAudit(session, { result: 'failure' });
   const chain = verifyAuditChain(session);
+  // Only auditors, the state team and the demo admin run the full check; for others it comes back empty, which is not a break.
+  const verified = chain.checked > 0;
   const actions = auditActionCounts(session, 14);
   const users = userNames(rows.map((r) => r.actor_user_id ?? ''));
   const isAuditor = session.roles.some((r) => r.role === 'auditor');
@@ -83,15 +85,15 @@ export default async function AuditPage({
         />
         <Stat
           label={pick(lang, 'Hash chain', 'हैश श्रृंखला')}
-          value={chain.linked ? pick(lang, 'Intact', 'अखंड') : pick(lang, 'Broken', 'खंडित')}
-          tone={chain.linked ? 'good' : 'crit'}
-          sub={`${fmtInt(chain.checked)} ${pick(lang, 'rows re-hashed', 'पंक्तियाँ पुनः जाँची')}`}
+          value={!verified ? pick(lang, 'Auditors check', 'लेखा परीक्षक जाँचते हैं') : chain.linked ? pick(lang, 'Intact', 'अखंड') : pick(lang, 'Broken', 'खंडित')}
+          tone={!verified ? 'neutral' : chain.linked ? 'good' : 'crit'}
+          sub={!verified ? pick(lang, 'the whole chain is checked by auditors and the state team', 'पूरी श्रृंखला लेखा परीक्षक और राज्य दल जाँचते हैं') : `${fmtInt(chain.checked)} ${pick(lang, 'rows re-hashed', 'पंक्तियाँ पुनः जाँची')}`}
         />
         <Stat
           label={pick(lang, 'Contents re-hashed', 'सामग्री पुनः जाँची')}
-          value={chain.contentOk ? pick(lang, 'Match', 'मेल') : pick(lang, 'Differ', 'भिन्न')}
-          tone={chain.contentOk ? 'good' : 'crit'}
-          sub={`${fmtInt(chain.rehashed)} ${pick(lang, 'recomputed', 'पुनर्गणित')}${chain.unverifiable > 0 ? ` · ${fmtInt(chain.unverifiable)} ${pick(lang, 'other scheme', 'अन्य योजना')}` : ''}`}
+          value={!verified ? '—' : chain.contentOk ? pick(lang, 'Match', 'मेल') : pick(lang, 'Differ', 'भिन्न')}
+          tone={!verified ? 'neutral' : chain.contentOk ? 'good' : 'crit'}
+          sub={!verified ? pick(lang, 'not run for this role', 'इस भूमिका के लिए नहीं चलती') : `${fmtInt(chain.rehashed)} ${pick(lang, 'recomputed', 'पुनर्गणित')}${chain.unverifiable > 0 ? ` · ${fmtInt(chain.unverifiable)} ${pick(lang, 'other scheme', 'अन्य योजना')}` : ''}`}
         />
       </Grid>
 
