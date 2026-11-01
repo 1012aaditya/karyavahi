@@ -45,6 +45,7 @@ export const T: Dict = {
   navAdmin: { en: 'Demo admin', hi: 'डेमो प्रशासन' },
   navOutbox: { en: 'Message outbox', hi: 'संदेश आउटबॉक्स' },
   navJobs: { en: 'System jobs', hi: 'सिस्टम कार्य' },
+  navApiKeys: { en: 'API keys', hi: 'API कुंजियाँ' },
   navAi: { en: 'AI activity log', hi: 'AI लॉग' },
   navOverview: { en: 'Dashboard', hi: 'डैशबोर्ड' },
   navToday: { en: 'My day', hi: 'आज का काम' },

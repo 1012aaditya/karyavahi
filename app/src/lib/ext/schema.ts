@@ -6,6 +6,7 @@ import {
   type GenUnit, type Geometry,
 } from './geogen';
 import { ensureCollabTables } from './collab-schema';
+import { ensureApiTables } from './api-schema';
 
 /**
  * Extension schema: geography, organisational hierarchy, complaints, onboarding and sign-in sessions.
@@ -117,6 +118,8 @@ export function ensureExtensions(c: DatabaseSync): void {
   migratePerf(c);
   // Round import and case threads keep their own version markers (see collab-schema.ts).
   ensureCollabTables(c);
+  // The read-only API for state dashboards: keys and the call log (see api-schema.ts).
+  ensureApiTables(c);
   const v = one<{ value: string }>(c, `select value from ext_meta where key = 'version'`)?.value;
   if (v !== EXT_VERSION) {
     c.exec('begin immediate');

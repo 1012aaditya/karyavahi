@@ -89,6 +89,9 @@ const COMMON = [
   '/hotspots?layer=complaints', '/hotspots?h=urban', '/api/geo/map', '/api/geo/search?q=ram',
   '/complaints', '/complaints?queue=all', '/complaints?queue=overdue', '/complaints?queue=escalated', '/complaints/new', '/complaints/new?category=conduct',
   '/account', '/admin/accounts', '/admin/accounts?tab=users', '/admin/hierarchy', '/admin/geography', '/register', '/register/status',
+  // the read-only API for state dashboards: the key manager (state team and demo admin; everyone
+  // else is shown a refusal) and the plain-words API guide (every signed-in role)
+  '/admin/api-keys', '/developers',
 ];
 
 // Real failure signatures. Next serialises its own 404 component into every page's payload,
@@ -193,6 +196,8 @@ await expectRefusal('a CRC cannot open the demo controls page', crc.id, '/admin/
 await expectRefusal('a BEO cannot pull the district map by changing the parent', IDS.has(accounts.find((a) => a.role === 'beo').id) ? accounts.find((a) => a.role === 'beo').id : crc.id, '/api/geo/map?parent=DST-01', 404);
 await expectRefusal('a CRC cannot open account approvals', crc.id, '/admin/accounts', 'does not approve or manage accounts');
 await expectRefusal('a CRC cannot read the AI log', crc.id, '/ai-log', 'can read this log');
+await expectRefusal('a BEO cannot manage API keys', blk09Beo, '/admin/api-keys', 'Only the state programme team');
+await expectRefusal('a CRC cannot manage API keys', crc.id, '/admin/api-keys', 'Only the state programme team');
 await expectRefusal('an unknown session is sent to sign in', { raw: 'USR-NOPE' }, '/cases', 'redirect-to-login');
 await expectRefusal('a cookie holding a real user id is not a session', { raw: blk09Beo }, '/cases', 'redirect-to-login');
 

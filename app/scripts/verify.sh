@@ -57,6 +57,9 @@ npx tsx --conditions=react-server scripts/import-test.mts 2>&1 | grep -vE 'Exper
 step 'case threads, mentions and followers'
 npx tsx --conditions=react-server scripts/threads-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
 
+step 'API keys for state dashboards'
+npx tsx --conditions=react-server scripts/api-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
+
 if [ "$FULL" = "--full" ]; then
   step 'production build'
   npm run build 2>&1 | tail -4
@@ -69,6 +72,9 @@ if [ "$FULL" = "--full" ]; then
 
   step 'sign-in sessions over HTTP'
   npx tsx --conditions=react-server scripts/session-test.mts http://localhost:3000 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
+
+  step 'the read-only API over HTTP: keys, scope, pagination, rate limit'
+  npx tsx --conditions=react-server scripts/api-test.mts http://localhost:3000 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
 
   step 'the demo story through the browser'
   node scripts/e2e.cjs 2>&1 | tail -6
