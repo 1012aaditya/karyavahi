@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Icon } from './Icon';
 
 /**
- * Karyavahi Intelligence Brief. Renders what /api/ai/briefing returns — cached, freshly
+ * Claude's briefing. Renders what /api/ai/briefing returns — cached, freshly
  * generated, or an honest error. When the model is not configured (or fails), it shows the
  * deterministic summary computed on the server, clearly labelled as not AI. It never invents text.
  */
@@ -58,7 +58,7 @@ export function AiBriefing({ fallback }: { fallback?: PlainBriefProps }) {
   const useFallback = !b && !loading && !!fallback;
   const sources = b ? [...new Set([...(env?.sources ?? []), ...b.priorities.flatMap((p) => p.source_ids)])] : fallback?.sources ?? [];
   const stamp = env?.status === 'ok' && env.generatedAt
-    ? `AI · ${env.model} · ${new Date(env.generatedAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} IST${env.cached ? ' · cached' : ''}`
+    ? `Claude · ${env.model} · ${new Date(env.generatedAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} IST${env.cached ? ' · cached' : ''}`
     : useFallback ? 'Computed summary · not AI' : '';
 
   return (
@@ -66,7 +66,7 @@ export function AiBriefing({ fallback }: { fallback?: PlainBriefProps }) {
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-5 py-3">
         <div className="flex items-center gap-2.5">
           <Icon name="sparkles" size={17} className="text-brand" />
-          <h2 id="brief-title" className="text-md font-semibold tracking-tight text-ink">Karyavahi Intelligence Brief</h2>
+          <h2 id="brief-title" className="text-md font-semibold tracking-tight text-ink">Claude’s briefing</h2>
           {stamp ? <span className={`chip ${useFallback ? 'border-line-strong bg-paper-sunk text-ink-soft' : 'border-brand/25 bg-brand-light text-brand'}`}>{stamp}</span> : null}
         </div>
         <div className="flex items-center gap-1">

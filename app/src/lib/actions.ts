@@ -220,7 +220,10 @@ export async function recomputeOutcomeAction(_prev: State, form: FormData): Prom
         evaluationId: evaluationId || undefined,
         followupRoundId: followupRoundId || undefined,
       });
-      detail = r.agreesWithStored
+      const did = r.did === null ? 'no estimate' : `${r.did > 0 ? '+' : ''}${r.did} pp`;
+      detail = r.newRound
+        ? `Checked against ${r.followupRoundId}: ${did}, ${r.category.replace(/_/g, ' ')}. Saved as a new outcome check; earlier checks stay on the record.`
+        : r.agreesWithStored
         ? `Re-derived from the raw assessment rows: ${r.did === null ? 'no estimate' : `${r.did > 0 ? '+' : ''}${r.did} pp`}, ${r.category.replace(/_/g, ' ')}. This matches what was on record.`
         : `Re-derived from the raw assessment rows: ${r.did === null ? 'no estimate' : `${r.did > 0 ? '+' : ''}${r.did} pp`}, ${r.category.replace(/_/g, ' ')}. This DIFFERS from what was on record — the evaluation has been updated.`;
     },
@@ -421,9 +424,10 @@ export async function registerAction(_prev: State, form: FormData): Promise<Stat
   if (res.ok) {
     // The demo shows the code on screen instead of emailing it; it goes in a cookie for this
     // browser, never in the address (see reg-code.ts).
-    const { rememberDemoCode } = await import('./reg-code');
+    const { rememberDemoCode, rememberRequest } = await import('./reg-code');
     await rememberDemoCode(out.id, out.code);
-    redirect(`/register/status?id=${out.id}&email=${encodeURIComponent(str(form, 'email'))}`);
+    await rememberRequest(out.id, str(form, 'email'));
+    redirect(`/register/status?id=${out.id}`);
   }
   return res;
 }
@@ -435,7 +439,7 @@ export async function verifyEmailAction(_prev: State, form: FormData): Promise<S
   if (res.ok) {
     const { forgetDemoCode } = await import('./reg-code');
     await forgetDemoCode();
-    redirect(`/register/status?id=${id}&email=${encodeURIComponent(email)}`);
+    redirect(`/register/status?id=${id}`);
   }
   return res;
 }
@@ -447,15 +451,25 @@ export async function affiliationAction(_prev: State, form: FormData): Promise<S
   try { r = checkAffiliation(id, email, str(form, 'affiliation_ref') || undefined); }
   catch (e) { return { error: e instanceof Refused ? e.message : (e as Error).message }; }
   if (!r.passed) return { error: r.message };
-  redirect(`/register/status?id=${id}&email=${encodeURIComponent(email)}`);
+  redirect(`/register/status?id=${id}`);
 }
 
 export async function respondInfoAction(_prev: State, form: FormData): Promise<State> {
   const { respondToInfo } = await import('./onboarding');
   const id = str(form, 'id'); const email = str(form, 'email');
   const res = await attempt(() => respondToInfo(id, email, str(form, 'response')), 'Sent to the verifier.');
-  if (res.ok) redirect(`/register/status?id=${id}&email=${encodeURIComponent(email)}`);
+  if (res.ok) redirect(`/register/status?id=${id}`);
   return res;
+}
+
+/** Look a request up by reference and email; the email goes into a cookie, not the address. */
+export async function lookupRequestAction(_prev: State, form: FormData): Promise<State> {
+  const { publicRequest } = await import('./onboarding');
+  const r = publicRequest(str(form, 'id'), str(form, 'email'));
+  if (!r) return { error: 'No request matches that reference and email.' };
+  const { rememberRequest } = await import('./reg-code');
+  await rememberRequest(r.id, r.email);
+  redirect(`/register/status?id=${r.id}`);
 }
 
 export async function decideRegistrationAction(_prev: State, form: FormData): Promise<State> {

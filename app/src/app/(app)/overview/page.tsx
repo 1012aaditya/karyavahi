@@ -17,6 +17,10 @@ import { TrendChart } from '@/components/charts';
 import { GeoMap } from '@/components/GeoMap';
 import { SERIES } from '@/lib/viz';
 import { SEVERITY_COLORS } from '@/lib/maplayers';
+import { AiBriefing } from '@/components/AiBriefing';
+import { AskClaudeInline } from '@/components/Copilot';
+import { aiStatus } from '@/lib/ai/config';
+import { mayReadBriefing } from '@/lib/ai/briefing';
 
 /**
  * The command centre: the officer's home.
@@ -82,6 +86,13 @@ export default async function CommandCentre() {
   const lfl = last >= 2 && trend.scope[last] !== null && trend.scope[last - 2] !== null ? trend.scope[last]! - trend.scope[last - 2]! : null;
   const stageMax = Math.max(1, ...stages.map((s) => s.n));
   const worstRel = Math.max(1, ...hot.map((x) => Math.abs(x.relPp)));
+  // Claude sits in the first card on the map: ask it anything about this area. District and state
+  // officers also get its written briefing below the map (ai.executive_briefing).
+  const claude = may(session, 'ai.assistant') ? aiStatus().configured : null;
+  const briefing = claude !== null && mayReadBriefing(session);
+  const claudeQuestions = approver
+    ? [pick(lang, 'What should I prioritise this week?', 'इस सप्ताह किसे प्राथमिकता दूँ?'), pick(lang, 'Which areas are slipping, and why?', 'कौन से क्षेत्र पिछड़ रहे हैं, और क्यों?'), pick(lang, 'Prepare an agenda for my review meeting', 'समीक्षा बैठक का एजेंडा बनाएँ')]
+    : [pick(lang, 'What should I do first today?', 'आज सबसे पहले क्या करूँ?'), pick(lang, 'Why are tasks overdue, and what is blocking them?', 'काम विलंबित क्यों हैं, और क्या रुकावट है?'), pick(lang, 'Which schools need a visit first?', 'किन विद्यालयों में पहले जाना चाहिए?')];
 
   const cards = (
     <>
@@ -166,6 +177,14 @@ export default async function CommandCentre() {
               </Link>
               <span className="text-xs text-ink-faint">{h.open_cases} {pick(lang, 'open cases', 'खुले प्रकरण')} · {h.critical} {pick(lang, 'critical', 'गंभीर')}</span>
             </div>
+            {claude !== null ? (
+              <div className="mt-3 border-t border-line pt-3">
+                <AskClaudeInline disabled={!claude}
+                  placeholder={pick(lang, `Ask Claude about ${scope}…`, `${scope} के बारे में Claude से पूछें…`)}
+                  button={pick(lang, 'Ask', 'पूछें')} questions={claudeQuestions} />
+                {briefing ? <a href="#claude-briefing" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">{pick(lang, 'Read Claude’s briefing', 'Claude की ब्रीफ़िंग पढ़ें')}<Icon name="chevron-down" size={13} /></a> : null}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -182,6 +201,8 @@ export default async function CommandCentre() {
 
       {/* On a phone and a small screen, the cards follow the map. */}
       <div className="grid gap-3 sm:grid-cols-2 lg:hidden">{cards}</div>
+
+      {briefing ? <div id="claude-briefing" className="scroll-mt-24"><AiBriefing fallback={brief} /></div> : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <section className="rounded-2xl border border-line bg-white p-5" aria-labelledby="lp-title">

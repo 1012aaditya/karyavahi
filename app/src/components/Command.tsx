@@ -6,16 +6,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Icon } from './Icon';
 import type { ClientNavGroup } from './Chrome';
+import { askClaude } from './ask-claude';
 
 /**
  * The command shell: a search box that is also the whole menu, and a small dock of the places a
  * role uses most. Together they replace the sidebar. The palette lists every page this role may
  * open (the same list the server built from the permission matrix), jumps straight to a record
- * when an id is typed (CASE-0184, SCH-00002, TSK-01401…), and otherwise searches everything.
+ * when an id is typed (CASE-0184, SCH-00002, TSK-01401…), hands a question to Claude, and
+ * otherwise searches everything.
  */
 
 export interface CommandLabels {
   trigger: string; placeholder: string; searchAll: string; open: string; empty: string; more: string; dock: string; jump: string;
+  /** "Ask Claude"; absent when this role has no Claude or none is connected. */
+  ask?: string;
 }
 
 interface Entry { href: string; label: string; group: string; icon: string; badge?: number }
@@ -78,12 +82,21 @@ export function CommandPalette({ groups, labels }: { groups: ClientNavGroup[]; l
   const term = q.trim();
   const idHit = ID_ROUTES.find(([re]) => re.test(term));
   const matches = term ? all.filter((e) => `${e.label} ${e.group}`.toLowerCase().includes(term.toLowerCase())) : all;
+  // A typed question goes to Claude first; a word or two is more likely a page, so Claude follows the pages.
+  const ask = term && labels.ask && !idHit ? [{ key: 'ask', href: '', label: `${labels.ask}: “${term}”`, hint: 'Claude', icon: 'sparkles' }] : [];
+  const question = /\s\S+\s|\?$/.test(term);
   const rows: { key: string; href: string; label: string; hint: string; icon: string; badge?: number }[] = [
     ...(idHit ? [{ key: 'id', href: idHit[1](term), label: `${labels.open} ${term.toUpperCase()}`, hint: idHit[2], icon: 'arrow-right' }] : []),
+    ...(question ? ask : []),
     ...matches.map((e) => ({ key: e.href, href: e.href, label: e.label, hint: e.group, icon: e.icon, badge: e.badge })),
+    ...(question ? [] : ask),
     ...(term ? [{ key: 'search', href: `/search?q=${encodeURIComponent(term)}`, label: `${labels.searchAll} “${term}”`, hint: '', icon: 'search' }] : []),
   ];
-  const go = (href: string) => { setOpen(false); router.push(href); };
+  const go = (href: string) => {
+    setOpen(false);
+    if (!href) askClaude(term);
+    else router.push(href);
+  };
 
   useEffect(() => { setAt(0); }, [q]);
   useEffect(() => { list.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' }); }, [at]);

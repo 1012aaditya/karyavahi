@@ -212,6 +212,7 @@ function zipEntries(buf) {
     await rp.fill('input[name=affiliation_ref]', 'EMP-EDU-4471');
     await rp.getByRole('button', { name: 'Submit request' }).click();
     await rp.waitForURL(/\/register\/status/, { timeout: 30000 });
+    ok('the status address carries the reference, not the email', !rp.url().includes('email') && !rp.url().includes(encodeURIComponent(email)));
     ok('registration shows the demo verification code', await rp.getByText(/Your code is/).count() > 0);
     await rp.getByRole('button', { name: 'Verify' }).click();
     await rp.getByRole('button', { name: 'Check affiliation' }).waitFor({ timeout: 20000 });

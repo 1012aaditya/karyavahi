@@ -30,7 +30,7 @@ const DATA = [
 ].map((r) => String(r.v)).join('\u0001');
 
 /** Words that are the same in Hindi interface text: role and scheme acronyms, units, the brand. */
-const ACCEPTED = new Set(['CRC', 'BRC', 'BEO', 'DEO', 'HM', 'AI', 'PAB', 'GPS', 'KB', 'MB', 'pp', 'Karyavahi', 'ID', 'PTR']);
+const ACCEPTED = new Set(['CRC', 'BRC', 'BEO', 'DEO', 'HM', 'AI', 'PAB', 'GPS', 'KB', 'MB', 'pp', 'Karyavahi', 'Claude', 'ID', 'PTR']);
 const ID = /\b[A-Z]{2,5}-\d{2,}(-\d+)?\b/g;
 
 const pick = (sql, ...p) => db.prepare(sql).get(...p);

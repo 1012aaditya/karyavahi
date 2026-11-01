@@ -78,6 +78,31 @@ All new tables are created by the app beside the seed's (never altering seed tab
 7. Sign in as `deo.rmp@demo.karyavahi.test` → the bell / **Notifications** shows "Vikas Qureshi mentioned you on CASE-0216".
 8. Reset afterwards with `npm run db:init -- --force` (server stopped) or the demo admin's reset.
 
+### v5 — Claude at the centre
+
+Claude is the co-pilot on every working page. It reads only what the signed-in officer may read
+(the same scoped tools as the chat), cites the record ids it used, and cannot change anything: a
+person makes every decision.
+
+| Where | What Claude does | Built from |
+| --- | --- | --- |
+| Home (map card) | "Ask Claude about <area>…" with role-specific suggested questions | `AskClaudeInline` → the Claude drawer |
+| Home (below the map) | Claude's briefing, for district and state officers (`ai.executive_briefing`) | `/api/ai/briefing` |
+| ⌘K | Type a question and pick "Ask Claude" | `Command.tsx` → `askClaude()` |
+| Case → Finding | **Explain this finding** | `get_case_details` |
+| Case → Plan | **Suggest a plan**, with a link into the composer preset to Claude's pick (`?iv=INT-xx`) | case, ranked options, similar cases |
+| Case → Outcome | **Explain the result** | `get_outcome_evaluation` |
+| Case → Discussion | **Summarise the discussion** | the scoped thread |
+| Case rail | Ready questions that open the drawer already asked | the chat |
+
+Drafts come from `/api/ai/copilot` (`src/lib/ai/copilot.ts`): one structured call to
+`claude-opus-5-5` with adaptive thinking, the server-side refusal fallback, and a cached system
+prompt. Ids the data did not contain are dropped, and a suggested intervention must be one of the
+options given. Each draft is cached per user against a hash of the data it was written from:
+reopening the page costs nothing, and the card says when the record has changed since. GET only
+reads the last draft; POST writes one (refused from another site, rate-limited, logged to
+`ai_interactions`).
+
 ### AI configuration
 
 Copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY` (server-side only). Model defaults to
@@ -427,14 +452,15 @@ What changed:
 - **Only assessment rounds can be uploaded.** Attendance and staff-movement batches are still
   the seeded ones. A committed batch cannot be withdrawn from the UI; a correction is a new
   upload (rows already on record are refused as duplicates).
-- **Outcome checks are not re-run automatically when a round arrives.** The cases whose plan
-  is judged on R4 still need an evaluation run against it (`recomputeOutcome(..., { followupRoundId:
-  'RND-2026-11' })` in `write.ts`); the case page does not yet offer that as a button.
+- **Outcome checks wait for an officer.** When the round a plan is judged on is imported, the
+  case's Outcome section says so and offers **Check whether the plan worked**
+  (`src/lib/outcome-due.ts`); nothing re-runs the check by itself, so a person sees each verdict
+  as it is made.
 - **My day has no offline queue yet.** A proof handed in without signal fails with a message and
   has to be sent again. The location on proof is still the worker's own statement, not GPS.
-- **No real language model.** The assistant answers from the database and says so. Generated
-  text would have to be grounded the same way: answer only from cited rows, refuse to state a
-  figure not in one, and log every draft.
+- **Claude drafts are not saved into the record.** A draft can be copied into a conclusion,
+  comment or report by hand; it is never written to the case on its own. Drafts are cached in
+  `app_state`, not versioned.
 - **SQLite, not Postgres.** Column names match `sql/schema.sql` exactly and scoping is ported
   predicate for predicate, but the database does not enforce RLS itself — the app does. Against
   Supabase, `sign-in` becomes `signInWithPassword`, `scope.ts` becomes redundant because the

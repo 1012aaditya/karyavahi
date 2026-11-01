@@ -4,20 +4,22 @@ import { scopeName, userNames } from '@/lib/repo';
 import { AuthFrame } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
 import { ActionForm, ReasonBox } from '@/components/ActionForm';
-import { verifyEmailAction, affiliationAction, respondInfoAction } from '@/lib/actions';
-import { demoCodeFor } from '@/lib/reg-code';
+import { verifyEmailAction, affiliationAction, respondInfoAction, lookupRequestAction } from '@/lib/actions';
+import { demoCodeFor, requestEmailFor } from '@/lib/reg-code';
 
 /**
- * Request status, looked up by reference + email (no account exists yet). Shows the applicant
+ * Request status, looked up by reference + email (no account exists yet). Only the reference is
+ * in the address; the email comes from this browser's request cookie (see reg-code.ts). Shows the applicant
  * where the request is and what they need to do next — and nothing internal.
  */
 
 const STEPS = ['email_verification_pending', 'institutional_verification_pending', 'approval_pending', 'active'];
 const STEP_LABEL = ['Email', 'Affiliation', 'Approval', 'Active'];
 
-export default async function StatusPage({ searchParams }: { searchParams: Promise<{ id?: string; email?: string }> }) {
+export default async function StatusPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
   const sp = await searchParams;
-  const r = sp.id && sp.email ? publicRequest(sp.id, sp.email) : null;
+  const email = sp.id ? await requestEmailFor(sp.id.trim().toUpperCase()) : null;
+  const r = sp.id && email ? publicRequest(sp.id, email) : null;
   // Shown only to the browser that submitted this request; never read from the address.
   const code = r?.status === 'email_verification_pending' ? await demoCodeFor(r.id) : null;
   const verifier = r?.verifier_user_id ? userNames([r.verifier_user_id]).get(r.verifier_user_id) : null;
@@ -28,12 +30,12 @@ export default async function StatusPage({ searchParams }: { searchParams: Promi
       <div className="mx-auto max-w-2xl px-5 py-12">
         <h1 className="font-display text-2xl font-semibold text-ink">Account request status</h1>
         {!r ? (
-          <form method="get" className="card mt-5 space-y-3 p-6">
-            {sp.id ? <p role="alert" className="rounded-lg border border-crit/30 bg-crit-light px-3 py-2 text-sm text-crit">No request matches that reference and email.</p> : null}
-            <label className="block"><span className="text-sm font-medium text-ink">Request reference</span><input name="id" required placeholder="REG-0007" defaultValue={sp.id ?? ''} className="input mt-1" /></label>
-            <label className="block"><span className="text-sm font-medium text-ink">Email used</span><input name="email" type="email" required defaultValue={sp.email ?? ''} className="input mt-1" /></label>
-            <button type="submit" className="btn-primary w-full">Check status</button>
-          </form>
+          <div className="card mt-5 p-6">
+            <ActionForm action={lookupRequestAction} label="Check status" className="space-y-3">
+              <label className="block"><span className="text-sm font-medium text-ink">Request reference</span><input name="id" required placeholder="REG-0007" defaultValue={sp.id ?? ''} className="input mt-1" /></label>
+              <label className="mb-2 block"><span className="text-sm font-medium text-ink">Email used</span><input name="email" type="email" required className="input mt-1" /></label>
+            </ActionForm>
+          </div>
         ) : (
           <div className="mt-5 space-y-4">
             <section className="card p-5">

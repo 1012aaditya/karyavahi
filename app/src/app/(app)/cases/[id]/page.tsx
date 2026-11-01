@@ -22,6 +22,9 @@ import {
 } from '@/components/case-panels';
 import { ActionForm, ReasonBox, Disclose } from '@/components/ActionForm';
 import { CaseThread } from '@/components/CaseThread';
+import { outcomeCheckDue } from '@/lib/outcome-due';
+import { ClaudeDraft, AskClaudeButtons } from '@/components/Copilot';
+import { aiStatus } from '@/lib/ai/config';
 import {
   decidePlanAction, transitionAction, setConclusionAction, recomputeOutcomeAction, reviewOutcomeAction,
 } from '@/lib/actions';
@@ -78,6 +81,9 @@ export default async function CasePage({
   }
 
   const { case: c, finding, diagnosis, plans, currentPlan, approvals, tasks, evidence, outcomes, timeline } = bundle;
+  const due = outcomeCheckDue(c.id, c.current_plan_id);
+  // Claude's drafts sit next to the part of the case they explain; null when this role has no Claude.
+  const claude = may(session, 'ai.assistant') ? { configured: aiStatus().configured, lang } : null;
   const places = placeNames();
   const comp = competency(c.competency_id);
   const allSchoolIds = [
@@ -274,7 +280,7 @@ export default async function CasePage({
         { id: 'plan', label: pick(lang, 'Plan', 'योजना'), badge: c.status === 'awaiting_approval' ? '!' : undefined, tone: 'warn' },
         { id: 'work', label: pick(lang, 'Work', 'काम'), badge: overdueTasks ? String(overdueTasks) : undefined, tone: 'crit' },
         { id: 'proof', label: pick(lang, 'Proof', 'सबूत'), badge: pendingProof ? String(pendingProof) : undefined, tone: 'warn' },
-        { id: 'outcome', label: pick(lang, 'Outcome', 'परिणाम'), badge: outcomes.length ? String(outcomes.length) : undefined },
+        { id: 'outcome', label: pick(lang, 'Outcome', 'परिणाम'), badge: due ? pick(lang, 'new', 'नया') : outcomes.length ? String(outcomes.length) : undefined, tone: due ? 'warn' : undefined },
         { id: 'discussion', label: pick(lang, 'Discussion', 'चर्चा') },
         { id: 'history', label: pick(lang, 'History', 'इतिहास') },
       ]} />
@@ -299,6 +305,11 @@ export default async function CasePage({
       ) : null}
 
       <div id="finding" className="scroll-mt-36"><FindingPanel finding={finding} trend={trend} names={names} lang={lang} grade={c.grade} /></div>
+      {claude ? (
+        <ClaudeDraft {...claude} task="explain_finding" id={c.id}
+          label={pick(lang, 'Explain this finding', 'यह निष्कर्ष समझाएँ')}
+          followUp={pick(lang, `What should I check first on ${c.id}?`, `${c.id} पर पहले क्या जाँचूँ?`)} />
+      ) : null}
 
       <div id="diagnosis" className="scroll-mt-36"><DiagnosisPanel diagnosis={diagnosis} names={names} lang={lang}>
         {may(session, 'case.edit_diagnosis') ? (
@@ -328,6 +339,11 @@ export default async function CasePage({
         plans={plans} currentPlan={currentPlan} approvals={approvals}
         intervention={iv} names={names} lang={lang}
       >
+        {claude && COMPOSABLE.includes(c.status) ? (
+          <ClaudeDraft {...claude} task="suggest_plan" id={c.id}
+            label={pick(lang, 'Suggest a plan', 'योजना सुझाएँ')}
+            followUp={pick(lang, `Compare the top two intervention options for ${c.id}`, `${c.id} के दो सबसे अच्छे विकल्पों की तुलना करें`)} />
+        ) : null}
         {COMPOSABLE.includes(c.status) && gate('awaiting_approval').allowed ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-brand/30 bg-brand-light p-3">
             <p className="min-w-0 max-w-xl text-sm text-ink">
@@ -444,6 +460,37 @@ export default async function CasePage({
       </ProofPanel></div>
 
       <div className="scroll-mt-36"><OutcomePanel outcomes={outcomes} names={names} lang={lang}>
+        {claude && outcomes.length > 0 ? (
+          <ClaudeDraft {...claude} task="explain_outcome" id={c.id} className="mt-3"
+            label={pick(lang, 'Explain the result', 'परिणाम समझाएँ')}
+            followUp={pick(lang, `What does the outcome on ${c.id} mean for closing it?`, `${c.id} के परिणाम का बंद करने पर क्या अर्थ है?`)} />
+        ) : null}
+        {due ? (
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-brand/30 bg-brand-light/50 px-4 py-3">
+            <Icon name="activity" size={18} className="shrink-0 text-brand" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-ink">
+                {pick(lang, `New results are in: ${due.roundCode}${due.roundLabel ? ` (${due.roundLabel})` : ''}`, `नए परिणाम आ गए: ${due.roundCode}`)}
+              </p>
+              <p className="text-sm text-ink-soft">
+                {pick(
+                  lang,
+                  `This plan is judged on ${due.roundCode}. ${due.schoolsWithData} of ${due.schoolsTotal} of its schools have results${due.arrivedAt ? `, imported ${fmtDate(due.arrivedAt, false, lang)}` : ''}. The check uses the comparison schools and threshold locked when the plan was approved.`,
+                  `यह योजना ${due.roundCode} पर परखी जाती है। इसके ${due.schoolsTotal} में से ${due.schoolsWithData} विद्यालयों के परिणाम आ गए हैं। जाँच स्वीकृति के समय तय तुलना-विद्यालयों और सीमा से होगी।`,
+                )}
+              </p>
+            </div>
+            {may(session, 'outcome.recompute') ? (
+              <ActionForm lang={lang}
+                action={recomputeOutcomeAction}
+                hidden={{ case_id: c.id, followup_round_id: due.roundId }}
+                label={pick(lang, `Check whether the plan worked`, 'जाँचें कि योजना कारगर रही या नहीं')}
+              />
+            ) : (
+              <p className="text-xs text-ink-faint">{pick(lang, 'The block or district officer runs this check.', 'यह जाँच खंड या ज़िला अधिकारी करते हैं।')}</p>
+            )}
+          </div>
+        ) : null}
         <div className="mt-3 flex flex-wrap gap-3">
           {may(session, 'outcome.recompute') ? (
             <ActionForm
@@ -491,7 +538,13 @@ export default async function CasePage({
         </Card>
       ) : null}
 
-      <div id="discussion" className="scroll-mt-36"><CaseThread session={session} caseId={c.id} lang={lang} /></div>
+      <div id="discussion" className="scroll-mt-36 space-y-3">
+        <CaseThread session={session} caseId={c.id} lang={lang} />
+        {claude ? (
+          <ClaudeDraft {...claude} task="summarise_discussion" id={c.id}
+            label={pick(lang, 'Summarise the discussion', 'चर्चा का सार')} />
+        ) : null}
+      </div>
 
       <div id="history" className="scroll-mt-36"><TimelinePanel events={timeline} names={names} lang={lang} /></div>
 
@@ -640,12 +693,18 @@ export default async function CasePage({
       </Card>
 
 
-        <RailCard title={pick(lang, 'Ask about this case', 'इस प्रकरण के बारे में पूछें')} icon="sparkles">
-          <div className="space-y-2 p-4 text-sm text-ink-soft">
-            <p>{pick(lang, 'Karyavahi AI can explain the finding, what blocks closure, or how similar cases went — citing the records.', 'AI निष्कर्ष, बंद होने की बाधाएँ या समान प्रकरण समझा सकता है।')}</p>
-            <p className="text-xs text-ink-faint">{pick(lang, 'Use “Ask AI” in the header — it already knows you are on', 'हेडर में “Ask AI” उपयोग करें —')} {c.id}.</p>
-          </div>
-        </RailCard>
+        {claude ? (
+          <RailCard title={pick(lang, 'Ask Claude about this case', 'इस प्रकरण पर Claude से पूछें')} icon="sparkles">
+            <div className="space-y-2 p-4">
+              <p className="text-sm text-ink-soft">{pick(lang, 'Claude reads this case through your own access and cites the records it used. It advises; you decide.', 'Claude आपकी अपनी पहुँच से यह प्रकरण पढ़ता है और स्रोत बताता है। सलाह Claude की, निर्णय आपका।')}</p>
+              <AskClaudeButtons disabled={!claude.configured} questions={[
+                pick(lang, `What is blocking ${c.id} from closing?`, `${c.id} को बंद होने से क्या रोक रहा है?`),
+                pick(lang, `How did similar cases to ${c.id} turn out?`, `${c.id} जैसे प्रकरणों का क्या हुआ?`),
+                pick(lang, `Draft a short update on ${c.id} for my district officer`, `${c.id} पर ज़िला अधिकारी के लिए छोटा अपडेट लिखें`),
+              ]} />
+            </div>
+          </RailCard>
+        ) : null}
         {match ? <RecommendationsCard caseId={c.id} matches={match.matches} /> : null}
         <SimilarCasesCard cases={similar} lessons={lessons} />
         <CaseBlockersCard blockers={blockers} />

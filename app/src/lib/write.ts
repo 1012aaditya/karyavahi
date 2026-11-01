@@ -950,6 +950,8 @@ export interface RecomputeResult {
   followupRoundId: string;
   /** True when this re-derivation reproduced the number that was already on record. */
   agreesWithStored: boolean;
+  /** True when this was the first check against a newly arrived round (a new evaluation). */
+  newRound: boolean;
 }
 
 /**
@@ -1131,8 +1133,9 @@ export function recomputeOutcome(
       );
     }
 
-    const agreesWithStored = !stored
-      || (result.did_pp === stored.did_pp && result.category === stored.category);
+    // Only a re-run of the same rounds can disagree with the record; a new round is a new verdict.
+    const agreesWithStored = !inPlace
+      || (result.did_pp === stored!.did_pp && result.category === stored!.category);
 
     appendAudit({
       actorUserId: s.user_id, actorRole: actingRole(s), action: 'outcome.recomputed',
@@ -1146,7 +1149,8 @@ export function recomputeOutcome(
     });
     addCaseEvent({
       caseId, actorUserId: s.user_id, actorLabel: s.user_id, kind: 'outcome_recomputed',
-      summary: `Outcome check re-derived from raw rows: ${result.category.replace(/_/g, ' ')}` +
+      summary: (inPlace ? 'Outcome check re-derived from raw rows: ' : `Outcome checked against the new round (${followupRoundId}): `) +
+        result.category.replace(/_/g, ' ') +
         (result.did_pp === null ? '' : ` (${result.did_pp > 0 ? '+' : ''}${result.did_pp} pp)`),
       related: plan.id,
     });
@@ -1159,6 +1163,7 @@ export function recomputeOutcome(
     return {
       evaluationId, category: result.category, did: result.did_pp,
       closureEligible: eligible, blockers, baselineRoundId, followupRoundId, agreesWithStored,
+      newRound: !inPlace,
     };
   });
 }

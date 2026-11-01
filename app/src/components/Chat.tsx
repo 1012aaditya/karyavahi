@@ -4,11 +4,12 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from './Icon';
+import { ASK_CLAUDE_EVENT } from './ask-claude';
 import { SourceChip } from './AiBriefing';
 import { Sheet, SheetClose, SheetContent, SheetTrigger } from './primitives/sheet';
 
 /**
- * Karyavahi AI conversation UI. Streams from /api/ai/chat, shows which tools ran, renders
+ * The Claude conversation UI. Streams from /api/ai/chat, shows which tools ran, renders
  * citations as links, and keeps the conversation in sessionStorage so the full page and the
  * drawer share it. Starter questions are optional — any question can be typed.
  */
@@ -110,8 +111,10 @@ function loadStore(user?: string): Store {
 }
 
 // ---------------------------------------------------------------- the panel
-export function ChatPanel({ context, starters, compact = false, configured = true, userKey, withHistory = false, scopeLabel }: {
+export function ChatPanel({ context, starters, compact = false, configured = true, userKey, withHistory = false, scopeLabel, ask }: {
   context?: ChatContext; starters: string[]; compact?: boolean; configured?: boolean; userKey?: string; withHistory?: boolean; scopeLabel?: string;
+  /** A question asked from elsewhere on the page (askClaude); sent once per new `n`. */
+  ask?: { q: string; n: number };
 }) {
   const [store, setStore] = useState<Store | null>(null);
   const [input, setInput] = useState('');
@@ -170,6 +173,7 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
 
   const patchLast = (fn: (m: Msg) => Msg) => setMsgs((xs) => (xs.length ? [...xs.slice(0, -1), fn(xs[xs.length - 1])] : xs));
 
+  const askedRef = useRef(0);
   const send = useCallback(async (question: string, base?: Msg[]) => {
     const q = question.trim();
     if (!q || busy) return;
@@ -253,6 +257,12 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
       <p className="mt-3 px-2 text-2xs leading-snug text-ink-faint">Kept only for this browser session, and only for you.</p>
     </aside>
   ) : null;
+
+  useEffect(() => {
+    if (!ask || !store || !configured || ask.n === askedRef.current) return;
+    askedRef.current = ask.n;
+    void send(ask.q);
+  }, [ask, store, configured, send]);
 
   return (
     <div className={`flex min-h-0 gap-4 ${compact ? 'h-full' : 'h-[calc(100vh-280px)] min-h-[480px]'}`}>
@@ -360,7 +370,7 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(input); } }}
             placeholder={configured ? 'Ask a question… (Enter to send, Shift+Enter for a new line)' : 'AI is not connected'}
             disabled={!configured}
-            aria-label="Ask Karyavahi AI"
+            aria-label="Ask Claude"
             className="max-h-40 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-base text-ink placeholder:text-ink-faint focus:outline-none"
           />
           {busy ? (
@@ -406,25 +416,37 @@ const STARTERS_FOR = (ctx: ChatContext): string[] =>
   : ctx.reportId ? ['Summarise this report', 'What decisions does this report call for?']
   : ['What should I prioritise this week?', 'Which cases need my approval?', 'Why are tasks overdue, and what is blocking them?', 'Prepare an agenda for tomorrow’s review meeting'];
 
-export function AssistantDrawer({ configured, userKey, label = 'Ask AI', hint = 'Ask Karyavahi AI about this page' }: { configured: boolean; userKey?: string; label?: string; hint?: string }) {
+export function AssistantDrawer({ configured, userKey, label = 'Ask Claude', hint = 'Ask Claude about this page' }: { configured: boolean; userKey?: string; label?: string; hint?: string }) {
   const [open, setOpen] = useState(false);
+  const [ask, setAsk] = useState<{ q: string; n: number } | undefined>();
   const path = usePathname();
   const ctx = useChatContext();
+  useEffect(() => {
+    const onAsk = (e: Event) => {
+      const q = (e as CustomEvent<string>).detail;
+      if (typeof q !== 'string' || !q.trim()) return;
+      setOpen(true);
+      setAsk((prev) => ({ q, n: (prev?.n ?? 0) + 1 }));
+    };
+    window.addEventListener(ASK_CLAUDE_EVENT, onAsk);
+    return () => window.removeEventListener(ASK_CLAUDE_EVENT, onAsk);
+  }, []);
   if (path.startsWith('/assistant')) return <Link href="/assistant" className="btn-ghost gap-1.5 px-2.5 text-brand"><Icon name="sparkles" size={17} /><span className="hidden text-sm font-medium xl:inline">{label}</span></Link>;
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    // Closing forgets the asked question, so reopening the drawer does not ask it again.
+    <Sheet open={open} onOpenChange={(o) => { setOpen(o); if (!o) setAsk(undefined); }}>
       <SheetTrigger asChild>
         <button type="button" className="btn-ghost gap-1.5 px-2.5 text-brand no-print" title={hint}>
           <Icon name="sparkles" size={17} />
           <span className="hidden text-sm font-medium xl:inline">{label}</span>
         </button>
       </SheetTrigger>
-      <SheetContent side="right" label="Karyavahi AI" className="w-full max-w-[520px] bg-ivory">
+      <SheetContent side="right" label="Claude" className="w-full max-w-[520px] bg-ivory">
         <header className="flex items-center justify-between border-b border-line bg-white px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white"><Icon name="sparkles" size={16} /></span>
-            <div><p className="text-base font-semibold text-ink">Karyavahi AI</p><p className="text-xs text-ink-faint">Grounded in your records</p></div>
+            <div><p className="text-base font-semibold text-ink">Claude</p><p className="text-xs text-ink-faint">Reads only the records you can see</p></div>
           </div>
           <div className="flex items-center gap-1">
             <Link href="/assistant" className="btn-ghost btn-sm" title="Open full page"><Icon name="arrow-up-right" size={15} /></Link>
@@ -432,7 +454,7 @@ export function AssistantDrawer({ configured, userKey, label = 'Ask AI', hint = 
           </div>
         </header>
         <div className="min-h-0 flex-1 px-4 pb-3 pt-3">
-          <ChatPanel compact context={ctx} starters={STARTERS_FOR(ctx)} configured={configured} userKey={userKey} />
+          <ChatPanel compact context={ctx} starters={STARTERS_FOR(ctx)} configured={configured} userKey={userKey} ask={ask} />
         </div>
       </SheetContent>
     </Sheet>

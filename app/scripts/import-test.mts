@@ -224,6 +224,37 @@ const rerun = imp.runDetection(R4, null);
 ok('re-running detection on the same data finds nothing new', rerun.newFindings.length === 0 && rerun.alreadyKnown === rerun.candidates,
   JSON.stringify({ n: rerun.newFindings.length, k: rerun.alreadyKnown, c: rerun.candidates }));
 
+console.log('\n— plans judged on R4 can now be checked —');
+const due = await import('../src/lib/outcome-due');
+const judged = all<{ id: string; current_plan_id: string }>(
+  `select c.id, c.current_plan_id from cases c join case_plans p on p.id = c.current_plan_id
+    where json_extract(p.pre_registration, '$.followup_round_id') = ? order by c.id`, R4,
+).filter((c) => due.outcomeCheckDue(c.id, c.current_plan_id) !== null);
+ok('at least one case whose plan is judged on R4 now offers the outcome check', judged.length > 0, `${judged.length}`);
+if (judged.length > 0) {
+  const c = judged[0];
+  const before = due.outcomeCheckDue(c.id, c.current_plan_id)!;
+  ok('the offer names R4 and how many of the plan\'s schools have results', before.roundCode === 'R4' && before.schoolsWithData > 0 && before.schoolsWithData <= before.schoolsTotal, JSON.stringify(before));
+  const caseBeo = loadSession(one<{ id: string }>(
+    `select u.id from users u join user_roles ur on ur.user_id = u.id join cases k on k.block_id = ur.scope_id
+      where ur.role = 'beo' and k.id = ? limit 1`, c.id,
+  )!.id)!;
+  const evalsBefore = n('select count(*) c from outcome_evaluations where case_id = ?', c.id);
+  let refusedCrc = false;
+  try { w.recomputeOutcome(crc, c.id, { followupRoundId: R4 }); } catch (e) { refusedCrc = e instanceof Refused; }
+  ok('a cluster coordinator cannot run the check', refusedCrc);
+  const r = w.recomputeOutcome(caseBeo, c.id, { followupRoundId: R4 });
+  ok('the block officer runs it: a new evaluation against R4', r.newRound && r.followupRoundId === R4
+    && n('select count(*) c from outcome_evaluations where case_id = ?', c.id) === evalsBefore + 1, JSON.stringify(r).slice(0, 200));
+  ok('a new round is not reported as disagreeing with the old verdict', r.agreesWithStored);
+  ok('once checked, the offer goes away', due.outcomeCheckDue(c.id, c.current_plan_id) === null);
+}
+const notYet = one<{ id: string; current_plan_id: string }>(
+  `select c.id, c.current_plan_id from cases c join case_plans p on p.id = c.current_plan_id
+    where json_extract(p.pre_registration, '$.followup_round_id') = 'RND-2026-07' limit 1`,
+);
+if (notYet) ok('a plan judged on an older round with a check already on record is not offered again', due.outcomeCheckDue(notYet.id, notYet.current_plan_id) === null || n('select count(*) c from outcome_evaluations where case_id = ? and followup_round_id = ?', notYet.id, 'RND-2026-07') === 0);
+
 console.log('\n— the audit chain —');
 const chain = feed.verifyAuditChain(auditor);
 ok('the hash chain still verifies after the import and detection run', chain.linked && chain.contentOk, JSON.stringify(chain).slice(0, 160));

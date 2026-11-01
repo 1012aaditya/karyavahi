@@ -34,7 +34,7 @@ export default async function AssistantPage({ searchParams }: { searchParams: Pr
   if (!may(session, 'ai.assistant')) {
     return (
       <div className="mx-auto max-w-2xl">
-        <PageHead title="Karyavahi AI" />
+        <PageHead title="Claude" />
         <Callout tone="warn">{pick(lang, 'Not available to your role.', 'आपकी भूमिका के लिए उपलब्ध नहीं।')}</Callout>
       </div>
     );
@@ -46,7 +46,7 @@ export default async function AssistantPage({ searchParams }: { searchParams: Pr
   return (
     <div>
       <PageHead
-        title={pick(lang, 'AI assistant', 'AI सहायक')}
+        title={pick(lang, 'Ask Claude', 'Claude से पूछें')}
         sub={pick(lang, 'Ask in your own words. Answers come only from records in your scope, cite the ids they used, and say what is uncertain or missing.', 'अपने शब्दों में पूछें। उत्तर केवल आपके दायरे के रिकॉर्ड से आते हैं और स्रोत बताते हैं।')}
         right={
           <span className={`chip ${st.configured ? 'border-good/30 bg-good-light text-good' : 'border-warn/30 bg-warn-light text-warn'}`}>
@@ -97,7 +97,7 @@ export default async function AssistantPage({ searchParams }: { searchParams: Pr
             </div>
           ) : null}
 
-          <Callout tone="method" title={pick(lang, 'How the AI is kept honest', 'AI को ईमानदार कैसे रखा जाता है')}>
+          <Callout tone="method" title={pick(lang, 'How Claude is kept honest', 'Claude को ईमानदार कैसे रखा जाता है')}>
             {pick(lang,
               'The model reads only through server-side tools that apply your scope. It has no tool that writes, approves or closes. Ids it cites but did not retrieve are flagged. Every interaction is logged in the AI activity log.',
               'मॉडल केवल सर्वर उपकरणों से आपके दायरे में पढ़ता है। कोई लिखने/स्वीकृत करने वाला उपकरण नहीं। हर बातचीत AI लॉग में दर्ज होती है।')}

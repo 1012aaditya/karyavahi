@@ -101,7 +101,7 @@ export default async function Shell({ children }: { children: ReactNode }) {
           <div className="flex min-w-0 flex-1 justify-center px-1">
             <CommandTrigger label={pick(lang, 'Search or jump to…', 'खोजें या सीधे जाएँ…')} />
           </div>
-          {may(session, 'ai.assistant') ? <Suspense fallback={null}><AssistantDrawer configured={aiStatus().configured} userKey={session.user_id} label={pick(lang, 'Ask AI', 'AI से पूछें')} hint={pick(lang, 'Ask Karyavahi AI about this page', 'इस पृष्ठ के बारे में कार्यवाही AI से पूछें')} /></Suspense> : null}
+          {may(session, 'ai.assistant') ? <Suspense fallback={null}><AssistantDrawer configured={aiStatus().configured} userKey={session.user_id} label={pick(lang, 'Ask Claude', 'Claude से पूछें')} hint={pick(lang, 'Ask Claude about this page', 'इस पृष्ठ के बारे में Claude से पूछें')} /></Suspense> : null}
           <Link href="/notifications" className="btn-ghost relative px-2" title={t(lang, 'navNotifications')}>
             <Icon name="bell" size={19} label={t(lang, 'navNotifications')} />
             {badges.notifications > 0 ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-crit" aria-label={`${badges.notifications} unread`} /> : null}
@@ -123,7 +123,10 @@ export default async function Shell({ children }: { children: ReactNode }) {
       <Dock items={dock} labels={{ more: pick(lang, 'More', 'और'), dock: pick(lang, 'Main places', 'मुख्य स्थान') }} />
       <CommandPalette groups={groups} labels={{
         trigger: pick(lang, 'Search or jump to…', 'खोजें या सीधे जाएँ…'),
-        placeholder: pick(lang, 'Type a page, a place, or an id like CASE-0184', 'पृष्ठ, स्थान या CASE-0184 जैसी पहचान लिखें'),
+        placeholder: may(session, 'ai.assistant')
+          ? pick(lang, 'A page, a place, an id like CASE-0184, or a question for Claude', 'पृष्ठ, स्थान, CASE-0184 जैसी पहचान, या Claude से प्रश्न')
+          : pick(lang, 'Type a page, a place, or an id like CASE-0184', 'पृष्ठ, स्थान या CASE-0184 जैसी पहचान लिखें'),
+        ask: may(session, 'ai.assistant') && aiStatus().configured ? pick(lang, 'Ask Claude', 'Claude से पूछें') : undefined,
         searchAll: pick(lang, 'Search everything for', 'सब में खोजें:'),
         open: pick(lang, 'Open', 'खोलें'),
         empty: pick(lang, 'No page matches. Press Enter to search everything.', 'कोई पृष्ठ नहीं मिला।'),

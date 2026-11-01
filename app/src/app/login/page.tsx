@@ -41,7 +41,7 @@ export default async function LoginPage({
             {[
               ['shield', 'You only ever see your own block, cluster or school.'],
               ['lock', 'Every approval and refusal is written to a tamper-evident audit chain.'],
-              ['sparkles', 'Karyavahi AI explains the records; it never makes the decision.'],
+              ['sparkles', 'Claude explains the records and drafts the next step; a person always decides.'],
             ].map(([icon, text]) => (
               <li key={text} className="flex items-start gap-3">
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-light text-brand"><Icon name={icon} size={16} /></span>

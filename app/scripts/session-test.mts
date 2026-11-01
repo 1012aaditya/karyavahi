@@ -106,15 +106,26 @@ if (BASE) {
   console.log('\n--- the registration code stays out of the address ---');
   const reg = one<{ id: string; email: string; email_code: string }>(`select id, email, email_code from registration_requests where status = 'email_verification_pending' order by id limit 1`);
   if (reg) {
-    const statusUrl = `/register/status?id=${reg.id}&email=${encodeURIComponent(reg.email)}`;
-    const viaUrl = await (await fetch(`${BASE}${statusUrl}&code=424242`)).text();
+    const statusUrl = `/register/status?id=${reg.id}`;
+    const reqCookie = (id: string, email: string) => `kv_reg_req=${Buffer.from(JSON.stringify({ id, email })).toString('base64url')}`;
+    const mine = reqCookie(reg.id, reg.email);
+    const viaUrl = await (await fetch(`${BASE}${statusUrl}&code=424242`, { headers: { cookie: mine } })).text();
     // (Next echoes the request's own URL inside the page payload, so look at what is displayed.)
     ok('a code put in the URL is ignored, not displayed or filled in', !viaUrl.includes('Your code is') && !viaUrl.includes('value="424242"'));
     ok('and the real code is not on the page for someone who only knows the reference and email', !viaUrl.includes(reg.email_code));
-    const own = await (await fetch(`${BASE}${statusUrl}`, { headers: { cookie: `kv_reg_code=${reg.id}.${reg.email_code}` } })).text();
+    const own = await (await fetch(`${BASE}${statusUrl}`, { headers: { cookie: `${mine}; kv_reg_code=${reg.id}.${reg.email_code}` } })).text();
     ok('the browser that submitted the request sees its code (from its cookie)', own.includes('Your code is') && own.includes(reg.email_code));
-    const other = await (await fetch(`${BASE}${statusUrl}`, { headers: { cookie: `kv_reg_code=REG-9999.${reg.email_code}` } })).text();
+    const other = await (await fetch(`${BASE}${statusUrl}`, { headers: { cookie: `${mine}; kv_reg_code=REG-9999.${reg.email_code}` } })).text();
     ok('a code cookie for another request shows nothing', !other.includes('Your code is'));
+
+    console.log('\n--- the applicant\'s email stays out of the address ---');
+    const legacy = await (await fetch(`${BASE}${statusUrl}&email=${encodeURIComponent(reg.email)}`)).text();
+    ok('an email in the URL no longer opens the request', !legacy.includes('Verify your email'));
+    const bare = await (await fetch(`${BASE}${statusUrl}`)).text();
+    ok('the reference alone shows only the lookup form', !bare.includes('Verify your email') && bare.includes('Email used'));
+    const wrong = await (await fetch(`${BASE}${statusUrl}`, { headers: { cookie: reqCookie('REG-9999', reg.email) } })).text();
+    ok('a request cookie for another reference opens nothing', !wrong.includes('Verify your email'));
+    ok('the browser that made the request sees it from its cookie', own.includes('Verify your email'));
   } else console.log('  --   (no request waiting on email verification)');
 
   console.log('\n--- the AI executive briefing ---');
@@ -123,6 +134,20 @@ if (BASE) {
   ok('a block officer is refused the AI executive briefing (ai.executive_briefing)', beoBrief.status === 403, `status ${beoBrief.status}`);
   // A district officer's request is not made here: with a model key configured it would generate
   // a real briefing. authority-test checks that the permission lets them through.
+
+  console.log('\n--- Claude drafts (no request here reaches the model) ---');
+  const beoCookie = `kv_session=${await as('beo.blk-01@demo.karyavahi.test')}`;
+  const cp = (q: string, init: RequestInit = {}) => fetch(`${BASE}/api/ai/copilot?${q}`, { ...init, headers: { cookie: beoCookie, ...(init.headers ?? {}) } });
+  ok('a draft cannot be requested from another site', (await cp('task=explain_finding&id=CASE-0184', { method: 'POST', headers: { origin: 'https://evil.example' } })).status === 403);
+  ok('an unknown draft type is refused', (await cp('task=approve_plan&id=CASE-0184', { method: 'POST' })).status === 400);
+  ok('a case id cannot be paired with the report task', (await cp('task=report_narrative&id=CASE-0184', { method: 'POST' })).status === 400);
+  const outside = one<{ id: string }>(`select id from cases where block_id <> 'BLK-01' order by id limit 1`)!.id;
+  const outDraft = await (await cp(`task=explain_finding&id=${outside}`, { method: 'POST' })).json() as { status: string; message?: string; draft?: unknown };
+  ok('a case outside the officer\'s block is refused before any model call', outDraft.status !== 'ok' && !outDraft.draft, JSON.stringify(outDraft));
+  const anon = await fetch(`${BASE}/api/ai/copilot?task=explain_finding&id=CASE-0184`, { method: 'POST' });
+  ok('signed out, no draft', anon.status === 401);
+  const peek = await (await cp('task=summarise_discussion&id=CASE-0001')).json() as { draft?: unknown };
+  ok('opening a page only reads the last draft (GET never writes one)', !peek.draft);
 }
 
 run('delete from sessions where user_agent = ?', TAG);
