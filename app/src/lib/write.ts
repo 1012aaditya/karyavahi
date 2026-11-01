@@ -17,6 +17,7 @@ import {
 import { matchForCase } from './studio';
 import { TEMPLATE, messageFor, outboxChannel, langOf, type MessageContext, type Template } from './reminders';
 import { checkPhoto, photoAlreadyUsed, storePhoto } from './evidence-files';
+import { classifyFix, parseFix, schoolPosition, type GpsResult, type GpsStatus } from './proof-gps';
 
 /**
  * Every write in the app. This is the TypeScript twin of the SECURITY DEFINER functions in
@@ -840,20 +841,60 @@ export function startTask(s: Session, taskId: string): void {
 }
 
 /**
- * Submit a piece of proof against a task. The demo does not take file uploads; it records the
- * same row an upload would produce, with a hash over the declared summary so the record is
- * still self-consistent, and marks where the GPS check landed.
+ * Submit a piece of proof against a task.
+ *
+ * With a photo, the photo's bytes are checked and hashed here; without one, the row carries a
+ * hash over the declaration. Where it was handed in is worked out here too: the phone sends its
+ * GPS fix (or nothing) and `classifyFix` sets gps_status from the distance to the school. Nothing
+ * the form says about the status is read.
+ *
+ * `clientId` makes a retry safe. A phone that saved the proof offline sends it with the id it
+ * made up then; if this submitter already has a row with that id, that row is returned
+ * (`duplicate: true`) and nothing new is written, however many times the phone retries.
  */
 export function submitEvidence(
   s: Session,
   o: {
-    taskId: string; note: string; schoolId?: string | null; gps?: 'matched' | 'not_captured' | 'outside_radius';
+    taskId: string; note: string; schoolId?: string | null;
+    /** The phone's fix, from navigator.geolocation at the moment of handing in. Untrusted. */
+    location?: { lat: unknown; lng: unknown; accuracy: unknown } | null;
+    /** Why the phone had no fix ('denied', 'timeout', 'unsupported'), for the record only. */
+    locationError?: string | null;
+    /** The idempotency key the phone generated when the proof was first saved. */
+    clientId?: string | null;
+    /** When the phone saved it (its own clock), for proof queued without signal. Recorded, not trusted. */
+    savedOfflineAt?: string | null;
     /** A photo of the proof. Its type, size and hash are worked out here, never taken from the form. */
     photo?: { bytes: Uint8Array; name: string } | null;
   },
-): { evidenceId: string } {
+): { evidenceId: string; duplicate: boolean; gps: GpsResult } {
+  const clientId = o.clientId ? String(o.clientId).trim() : null;
+  if (clientId !== null && !/^[A-Za-z0-9_-]{8,64}$/.test(clientId)) {
+    throw new Refused('The proof id sent by the phone is not valid.', 'bad_client_id');
+  }
+  // A retry of proof already on record: answer with that row before anything else is checked,
+  // because the first attempt may have moved the task on or used the photo.
+  const existing = (): { evidenceId: string; duplicate: boolean; gps: GpsResult } | null => {
+    if (!clientId) return null;
+    const r = one<{ id: string; task_id: string; gps_status: string; gps_distance_m: number | null; gps_lat: number | null; gps_lng: number | null; gps_accuracy_m: number | null }>(
+      'select id, task_id, gps_status, gps_distance_m, gps_lat, gps_lng, gps_accuracy_m from evidence where submitted_by = ? and client_id = ?', s.user_id, clientId,
+    );
+    if (!r) return null;
+    if (r.task_id !== o.taskId) throw new Refused('This proof id was already used for another task.', 'client_id_reused');
+    const fix = r.gps_lat !== null && r.gps_lng !== null ? { lat: r.gps_lat, lng: r.gps_lng, accuracy: r.gps_accuracy_m ?? Infinity } : null;
+    return {
+      evidenceId: r.id, duplicate: true,
+      gps: { status: (r.gps_status as GpsStatus) ?? 'unavailable', reason: null, distance_m: r.gps_distance_m, fix },
+    };
+  };
+  const already = existing();
+  if (already) return already;
+
   const photo = o.photo && o.photo.bytes.length > 0 ? checkPhoto(o.photo.bytes, o.photo.name) : null;
+  const fix = o.location ? parseFix(o.location.lat, o.location.lng, o.location.accuracy) : null;
   return tx(() => {
+    const again = existing(); // another request with the same id won the race
+    if (again) return again;
     const t = one<{
       id: string; case_id: string; owner_user_id: string; owner_role: string; status: string;
       proof_type: string; proof_count: number; school_id: string | null; title_en: string;
@@ -871,11 +912,15 @@ export function submitEvidence(
         throw new Refused(`This exact photo was already submitted as proof for ${used.task_id}. Take a new photo of this work.`, 'duplicate_photo');
       }
     }
+    // Judged against the task's own school; a task for all the plan's schools has none to judge by.
+    const gps = classifyFix(schoolPosition(t.school_id), fix);
 
     const n = nextId('evidence', 'EVD-', 6);
     const summary = {
       note: o.note.trim(), declared_by: s.user_id, recorded_on: today(),
       ...(photo ? { photo: { sha256: photo.sha256, bytes: photo.bytes.length, mime: photo.mime } } : {}),
+      ...(gps.reason ? { location_unavailable: o.locationError && gps.reason === 'no_fix' ? `${gps.reason}:${String(o.locationError).slice(0, 20)}` : gps.reason } : {}),
+      ...(o.savedOfflineAt ? { saved_offline_at: String(o.savedOfflineAt).slice(0, 40) } : {}),
     };
     // With a photo, the evidence's hash is the photo's own; without one, a hash of the declaration.
     const digest = photo ? photo.sha256 : sha(JSON.stringify({ task: o.taskId, ...summary }));
@@ -884,11 +929,13 @@ export function submitEvidence(
       `insert into evidence
         (id, task_id, case_id, school_id, evidence_type, file_name, sha256, visit_id, summary,
          submitted_by, submitted_role, submitted_at, gps_status, channel, status,
-         verified_by, verified_at, verification_method, rejection_reason, provenance)
-       values (?,?,?,?,?,?,?,null,?,?,?,?,?,'app','pending',null,null,null,null,'user_uploaded')`,
+         verified_by, verified_at, verification_method, rejection_reason, provenance,
+         client_id, gps_lat, gps_lng, gps_accuracy_m, gps_distance_m)
+       values (?,?,?,?,?,?,?,null,?,?,?,?,?,'app','pending',null,null,null,null,'user_uploaded',?,?,?,?,?)`,
       n, o.taskId, t.case_id, o.schoolId ?? t.school_id, t.proof_type,
       `${o.taskId}-${n}.${photo ? photo.ext : 'pdf'}`, digest, JSON.stringify(summary),
-      s.user_id, actingRole(s), nowIso(), o.gps ?? 'not_captured',
+      s.user_id, actingRole(s), nowIso(), gps.status,
+      clientId, fix?.lat ?? null, fix?.lng ?? null, fix && Number.isFinite(fix.accuracy) ? Math.round(fix.accuracy) : null, gps.distance_m,
     );
     if (photo) {
       run(
@@ -911,7 +958,7 @@ export function submitEvidence(
     appendAudit({
       actorUserId: s.user_id, actorRole: actingRole(s), action: 'evidence.submitted',
       entityType: 'evidence', entityId: n,
-      after: { task_id: o.taskId, sha256: digest, pieces: count, of: t.proof_count, photo: !!photo },
+      after: { task_id: o.taskId, sha256: digest, pieces: count, of: t.proof_count, photo: !!photo, gps: gps.status, gps_distance_m: gps.distance_m, client_id: clientId },
     });
     addCaseEvent({
       caseId: t.case_id, actorUserId: s.user_id, actorLabel: s.user_id, kind: 'evidence_submitted',
@@ -928,7 +975,7 @@ export function submitEvidence(
       });
     }
 
-    return { evidenceId: n };
+    return { evidenceId: n, duplicate: false, gps };
   });
 }
 

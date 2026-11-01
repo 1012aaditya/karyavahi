@@ -6,6 +6,7 @@ import type {
 import type { TrendPoint } from '@/lib/repo';
 import { OUTCOME_NOTE } from '@domain/outcome';
 import { pick, FACTOR_LABEL } from '@/lib/i18n';
+import { GpsBadge } from './GpsBadge';
 import {
   Card, CardHead, Callout, Facts, Field, Empty, Mono, Delta, Bar,
   fmtPct, fmtDate, fmtInr, fmtInt, shortHash,
@@ -703,14 +704,7 @@ export function ProofPanel({
                     {e.verification_method && e.verification_method !== 'desk_review' ? (
                       <Pill tone="active">{e.verification_method.replace(/_/g, ' ')}</Pill>
                     ) : null}
-                    {e.gps_status === 'outside_radius' ? (
-                      <Pill tone="warn" title="The location recorded does not match the school">
-                        {pick(lang, 'GPS outside the school', 'GPS विद्यालय से बाहर')}
-                      </Pill>
-                    ) : null}
-                    {e.gps_status === 'not_captured' ? (
-                      <Pill title="No location was recorded">{pick(lang, 'No GPS', 'GPS नहीं')}</Pill>
-                    ) : null}
+                    <GpsBadge status={e.gps_status} distance={e.gps_distance_m} accuracy={e.gps_accuracy_m} lang={lang} />
                   </div>
                   <p className="mt-1 text-sm text-ink-soft">
                     {pick(lang, 'Submitted by', 'प्रस्तुत')} {nm(names.users, e.submitted_by)}{' '}

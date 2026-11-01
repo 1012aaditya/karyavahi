@@ -140,6 +140,7 @@ export function ensureExtensions(c: DatabaseSync): void {
   migrateIntegrity(c);
   migrateApprovalLever(c);
   migrateReminders(c);
+  migrateProofSync(c);
 }
 
 // ---------------------------------------------------------------- speed
@@ -248,6 +249,40 @@ function migrateReminders(c: DatabaseSync): void {
                   select o.ts from outbox_messages o where o.entity_type = 'task' and o.entity_id = tasks.id and o.template = 'overdue_nudge'))
               where breach_nudged_at is null`);
     exec(c, `insert into ext_meta (key, value) values ('reminders', ?) on conflict(key) do update set value = excluded.value`, REMINDERS_VERSION);
+    c.exec('commit');
+  } catch (e) {
+    try { c.exec('rollback'); } catch { /* already rolled back */ }
+    throw e;
+  }
+}
+
+// ---------------------------------------------------------------- offline proof and GPS
+/**
+ * Proof handed in from a phone that may have had no signal, with the phone's own location.
+ *
+ * - evidence.client_id: an id the phone makes up when the proof is first saved. A proof queued
+ *   offline can be sent twice (the page and the service worker both retry, or the answer is
+ *   lost on a weak line); the server keeps one row per (submitter, client_id), so a retry
+ *   returns the proof already recorded instead of adding another. The unique index is the
+ *   backstop under the check in submitEvidence().
+ * - evidence.gps_lat / gps_lng / gps_accuracy_m: the fix the phone reported, read once at the
+ *   moment of handing in (never tracked). gps_distance_m is what the SERVER worked out against
+ *   the school's position, and gps_status is set from that distance, never from the form.
+ *
+ * Additive only, once per database.
+ */
+export const PROOF_SYNC_VERSION = 'proof-sync-v1';
+
+function migrateProofSync(c: DatabaseSync): void {
+  if (one<{ value: string }>(c, `select value from ext_meta where key = 'proof_sync'`)?.value === PROOF_SYNC_VERSION) return;
+  const hasColumn = (col: string) => q(c, `select 1 from pragma_table_info('evidence') where name = ?`, col).length > 0;
+  c.exec('begin immediate');
+  try {
+    for (const [col, type] of [['client_id', 'text'], ['gps_lat', 'real'], ['gps_lng', 'real'], ['gps_accuracy_m', 'real'], ['gps_distance_m', 'real']]) {
+      if (!hasColumn(col)) exec(c, `alter table evidence add column ${col} ${type}`);
+    }
+    exec(c, 'create unique index if not exists evidence_client_uq on evidence (submitted_by, client_id) where client_id is not null');
+    exec(c, `insert into ext_meta (key, value) values ('proof_sync', ?) on conflict(key) do update set value = excluded.value`, PROOF_SYNC_VERSION);
     c.exec('commit');
   } catch (e) {
     try { c.exec('rollback'); } catch { /* already rolled back */ }

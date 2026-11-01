@@ -3,6 +3,7 @@ import type { Language } from '@domain/types';
 import type { Case, Task, Evidence, Finding } from '@/lib/cases';
 import { pick } from '@/lib/i18n';
 import { Empty, Mono, Delta, fmtDate, fmtPct, fmtInt } from './ui';
+import { GpsBadge } from './GpsBadge';
 import {
   StatusPill, SeverityPill, TaskStatusPill, EvidenceStatusPill, OutcomePill, Pill,
   OverduePill, EscalatedPill, CrossSourcePill, EvidenceTypeName, RoleName,
@@ -208,9 +209,7 @@ export function EvidenceList({
                   <EvidenceTypeName type={e.evidence_type} lang={lang} />
                 </span>
                 <EvidenceStatusPill status={e.status} lang={lang} />
-                {e.gps_status === 'outside_radius' ? (
-                  <Pill tone="warn">{pick(lang, 'GPS outside the school', 'GPS विद्यालय से बाहर')}</Pill>
-                ) : null}
+                <GpsBadge status={e.gps_status} distance={e.gps_distance_m} accuracy={e.gps_accuracy_m} lang={lang} />
               </div>
               <p className="mt-1 text-sm text-ink-soft">
                 <Link href={`/cases/${e.case_id}`} className="link"><Mono>{e.case_id}</Mono></Link>

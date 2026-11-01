@@ -169,18 +169,27 @@ export async function submitEvidenceAction(_prev: State, form: FormData): Promis
   const photo = file instanceof File && file.size > 0
     ? { bytes: new Uint8Array(await file.arrayBuffer()), name: file.name }
     : null;
+  // Where it was handed in comes from the phone's GPS fix (lat, lng, accuracy); the server works
+  // out the distance to the school and sets the status. A "gps" field in the form is not read.
+  let where = '';
   const res = await attempt(
     () => {
-      w.submitEvidence(s, {
+      const r = w.submitEvidence(s, {
         taskId,
         note: str(form, 'note'),
         schoolId: str(form, 'school_id') || null,
-        gps: (str(form, 'gps') || 'not_captured') as 'matched' | 'not_captured' | 'outside_radius',
+        location: { lat: str(form, 'lat'), lng: str(form, 'lng'), accuracy: str(form, 'accuracy') },
+        locationError: str(form, 'gps_error') || null,
+        clientId: str(form, 'client_id') || null,
         photo,
       });
+      where = r.gps.status === 'matched' ? ' GPS: at the school.'
+        : r.gps.status === 'outside_radius' && r.gps.distance_m !== null ? ` GPS: ${r.gps.distance_m >= 1000 ? `${(r.gps.distance_m / 1000).toFixed(1)} km` : `${r.gps.distance_m} m`} from the school.`
+        : ' GPS: not available.';
     },
     photo ? 'Proof and photo submitted. Someone other than you has to check it.' : 'Proof submitted. Someone other than you has to check it.',
   );
+  if (res.ok) res.ok += where;
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath('/tasks');
   revalidatePath('/today');

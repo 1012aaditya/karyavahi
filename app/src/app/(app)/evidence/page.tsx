@@ -11,6 +11,7 @@ import { pick, EVIDENCE_TYPE_LABEL } from '@/lib/i18n';
 import { Card, PageHead, Callout, fmtDate } from '@/components/ui';
 import { EvidenceList } from '@/components/lists';
 import { EvidenceStatusPill, EvidenceTypeName, Pill, RoleName } from '@/components/labels';
+import { GpsBadge } from '@/components/GpsBadge';
 import { EvidenceSummary } from '@/components/EvidenceSummary';
 import { Icon } from '@/components/Icon';
 import { ActionForm, ReasonBox, Disclose } from '@/components/ActionForm';
@@ -214,7 +215,7 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
                   <Link href={`/cases/${e.case_id}`} className="font-mono hover:text-brand">{e.case_id}</Link>
                 </span>
                 {e.school_id ? <span className="mt-1 flex items-center gap-1.5 truncate text-xs text-ink-soft"><Icon name="school" size={13} className="shrink-0 text-ink-faint" />{look.schools.get(e.school_id) ?? e.school_id}</span> : null}
-                {e.gps_status === 'outside_radius' ? <span className="mt-2"><Pill tone="warn">{pick(lang, 'GPS outside the school', 'GPS विद्यालय से बाहर')}</Pill></span> : null}
+                <span className="mt-2"><GpsBadge status={e.gps_status} distance={e.gps_distance_m} accuracy={e.gps_accuracy_m} lang={lang} /></span>
                 <EvidenceSummary id={e.id} summary={e.summary} lang={lang} />
                 <span className="mt-3 flex items-center gap-2.5 border-t border-line pt-3 text-xs">
                   <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-navy-100 text-2xs font-semibold text-navy-700" title={who}>{who.split(/\s+/).map((x) => x[0]).slice(0, 2).join('').toUpperCase()}</span>

@@ -15,7 +15,7 @@ const LABEL: Record<string, { en: string; hi: string }> = {
   schools: { en: 'Schools', hi: 'विद्यालय' },
 };
 /** Recorded for the audit trail, and already shown beside the proof. */
-const HIDDEN = new Set(['photo', 'declared_by', 'recorded_on']);
+const HIDDEN = new Set(['photo', 'declared_by', 'recorded_on', 'location_unavailable', 'saved_offline_at']);
 
 export function EvidenceSummary({ id, summary, lang }: { id: string; summary: Record<string, unknown>; lang: Language }) {
   const rows = Object.entries(summary).filter(([k]) => !HIDDEN.has(k));

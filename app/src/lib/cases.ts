@@ -98,6 +98,8 @@ export interface Evidence {
   gps_status: string; channel: string; status: 'pending' | 'verified' | 'rejected';
   verified_by: string | null; verified_at: string | null;
   verification_method: string | null; rejection_reason: string | null;
+  /** The phone's fix and the server's distance to the school (proof-sync migration; null on older rows). */
+  gps_distance_m?: number | null; gps_accuracy_m?: number | null;
 }
 
 export interface OutcomeEvaluation {
