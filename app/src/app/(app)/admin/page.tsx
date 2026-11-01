@@ -91,6 +91,13 @@ export default async function AdminHub() {
       stat: `${fmtInt(liveKeys)} ${pick(lang, 'keys in use', 'कुंजियाँ उपयोग में')}`,
     });
   }
+  if (may(session, 'feedback.review')) {
+    tiles.push({
+      href: '/admin/feedback', icon: 'inbox', title: pick(lang, 'User feedback', 'उपयोगकर्ता सुझाव'),
+      body: pick(lang, 'Thumbs up and down on Claude, and the feedback form from every page. Counts, filters and a CSV for the user-testing analysis.', 'Claude पर पसंद-नापसंद और हर पृष्ठ का सुझाव फ़ॉर्म। गिनती, छँटाई और परीक्षण विश्लेषण के लिए CSV।'),
+      stat: `${fmtInt(count('select count(*) c from feedback'))} ${pick(lang, 'responses', 'उत्तर')}`,
+    });
+  }
   if (may(session, 'demo.reset')) {
     tiles.push({
       href: '/admin/outbox', icon: 'inbox', title: pick(lang, 'Message outbox', 'संदेश आउटबॉक्स'),

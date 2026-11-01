@@ -8,6 +8,7 @@ import {
 import { ensureCollabTables } from './collab-schema';
 import { ensureApiTables } from './api-schema';
 import { ensureRealData, realDataVersion } from './realdata';
+import { ensureFeedbackTables } from './feedback-schema';
 
 /**
  * Extension schema: geography, organisational hierarchy, complaints, onboarding and sign-in sessions.
@@ -123,6 +124,8 @@ export function ensureExtensions(c: DatabaseSync): void {
   ensureRealData(c);
   // The read-only API for state dashboards: keys and the call log (see api-schema.ts).
   ensureApiTables(c);
+  // What people tell us about the app: thumbs on Claude, the feedback form (see feedback-schema.ts).
+  ensureFeedbackTables(c);
   const v = one<{ value: string }>(c, `select value from ext_meta where key = 'version'`)?.value;
   if (v !== EXT_VERSION) {
     c.exec('begin immediate');

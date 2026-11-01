@@ -54,6 +54,8 @@ export interface CopilotEnvelope {
   cached?: boolean;
   stale?: boolean;
   message?: string;
+  /** The AI log row this draft was written in, so a thumbs up or down can point at it. */
+  interactionId?: string;
 }
 
 const SCHEMA = {
@@ -206,13 +208,13 @@ export async function draft(s: Session, task: CopilotTask, id: string, lang: Lan
     parsed.intervention_id = task === 'suggest_plan' && allowed.has(parsed.intervention_id) && /^INT-\d{2}$/.test(parsed.intervention_id) ? parsed.intervention_id : '';
     const sources = [...new Set(parsed.points.flatMap((p) => p.source_ids))];
     const audit = auditNumbers(draftText(parsed), [g.data]);
-    const env: CopilotEnvelope & { version: string } = { status: 'ok', task, draft: parsed, sources, audit, model: msg.model, generatedAt: nowIso(), version };
-    setAppState(cacheKey(s, task, id, lang), JSON.stringify(env));
-    logAi(s, {
+    const interactionId = logAi(s, {
       kind: `copilot_${task}`, model: msg.model, question: `${task} ${id}`, tools: audit.unsupported.length ? [`audit: ${audit.unsupported.length} unsupported figure(s)`] : [`audit: ${audit.checked} figures checked`], referencedIds: [id, ...sources], status: 'ok',
       usage: { input: msg.usage.input_tokens, output: msg.usage.output_tokens, cacheRead: msg.usage.cache_read_input_tokens ?? 0 },
       requestId: (msg as { _request_id?: string | null })._request_id ?? null, stopReason: msg.stop_reason,
     });
+    const env: CopilotEnvelope & { version: string } = { status: 'ok', task, draft: parsed, sources, audit, model: msg.model, generatedAt: nowIso(), version, interactionId };
+    setAppState(cacheKey(s, task, id, lang), JSON.stringify(env));
     return { ...env, cached: false, stale: false };
   } catch (err) {
     console.error('[ai copilot]', err);

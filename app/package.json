@@ -32,6 +32,7 @@
     "test:threads": "tsx --conditions=react-server scripts/threads-test.mts",
     "test:reminders": "tsx --conditions=react-server scripts/reminders-test.mts",
     "test:api": "tsx --conditions=react-server scripts/api-test.mts",
+    "test:feedback": "tsx --conditions=react-server scripts/feedback-test.mts",
     "test:offline": "tsx --conditions=react-server scripts/offline-test.mts",
     "e2e:offline": "node scripts/offline-e2e.cjs",
     "test:voice": "tsx --conditions=react-server scripts/voice-test.mts",

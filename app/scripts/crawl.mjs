@@ -92,6 +92,9 @@ const COMMON = [
   // the read-only API for state dashboards: the key manager (state team and demo admin; everyone
   // else is shown a refusal) and the plain-words API guide (every signed-in role)
   '/admin/api-keys', '/developers', '/sources', '/roadmap',
+  // user feedback: the review page (state team and demo admin; everyone else is shown a refusal)
+  // and "What we changed after testing" (every signed-in role)
+  '/admin/feedback', '/admin/feedback?kind=claude_answer&tone=down', '/changes',
 ];
 
 // Real failure signatures. Next serialises its own 404 component into every page's payload,
@@ -198,6 +201,8 @@ await expectRefusal('a CRC cannot open account approvals', crc.id, '/admin/accou
 await expectRefusal('a CRC cannot read the AI log', crc.id, '/ai-log', 'can read this log');
 await expectRefusal('a BEO cannot manage API keys', blk09Beo, '/admin/api-keys', 'Only the state programme team');
 await expectRefusal('a CRC cannot manage API keys', crc.id, '/admin/api-keys', 'Only the state programme team');
+await expectRefusal('a BEO cannot read user feedback', blk09Beo, '/admin/feedback', 'Only the state programme team and the demo administrator can read feedback');
+await expectRefusal('a headmaster cannot read user feedback', hm.id, '/admin/feedback', 'Only the state programme team and the demo administrator can read feedback');
 await expectRefusal('an unknown session is sent to sign in', { raw: 'USR-NOPE' }, '/cases', 'redirect-to-login');
 await expectRefusal('a cookie holding a real user id is not a session', { raw: blk09Beo }, '/cases', 'redirect-to-login');
 

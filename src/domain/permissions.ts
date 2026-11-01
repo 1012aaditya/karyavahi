@@ -22,6 +22,7 @@ export const ACTIONS = [
   'settings.configure',
   'users.manage',
   'api.manage_keys',
+  'feedback.review',
   'demo.reset',
 ] as const;
 
@@ -61,6 +62,9 @@ export const MATRIX: Record<Action, Record<RoleCode, Grant>> = {
   // Read-only API keys for state dashboard systems (VSKs). State-level only: a key can read a
   // whole district or the state, so issuing one is a state decision.
   'api.manage_keys':             { beo: 'no', brc: 'no', crc: 'no', headmaster: 'no', deo: 'no', state_admin: 'yes', auditor: 'no', demo_admin: 'yes' },
+  // Reading what people said about the app (thumbs on Claude, the feedback form) and exporting
+  // it. The state programme team runs the user testing; comments are not shared more widely.
+  'feedback.review':             { beo: 'no', brc: 'no', crc: 'no', headmaster: 'no', deo: 'no', state_admin: 'yes', auditor: 'no', demo_admin: 'yes' },
   'demo.reset':                  { beo: 'no', brc: 'no', crc: 'no', headmaster: 'no', deo: 'no', state_admin: 'no', auditor: 'no', demo_admin: 'yes' },
 };
 
