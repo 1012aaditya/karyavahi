@@ -35,6 +35,13 @@ export const STATUS: Record<string, { label: string; tone: 'neutral' | 'pending'
   rejected: { label: 'Rejected with reason', tone: 'neutral', open: false },
   closed: { label: 'Closed', tone: 'neutral', open: false },
 };
+/** The same statuses in Hindi, for the field screens. */
+export const STATUS_HI: Record<string, string> = {
+  draft: 'मसौदा', submitted: 'पावती लंबित', acknowledged: 'पावती दी गई', assigned: 'सौंपी गई',
+  under_investigation: 'जाँच जारी', information_requested: 'जानकारी माँगी गई', resolution_proposed: 'समाधान प्रस्तावित',
+  awaiting_verification: 'सत्यापन प्रतीक्षित', escalated: 'आगे बढ़ाई गई', reopened: 'फिर खोली गई',
+  resolved: 'हल हुई', rejected: 'कारण सहित अस्वीकृत', closed: 'बंद',
+};
 export const OPEN_STATUSES = Object.entries(STATUS).filter(([, v]) => v.open).map(([k]) => k);
 
 /** Who may do what from which status. 'assignee' = current authority; 'reporter' = complainant. */
@@ -351,11 +358,18 @@ export function linkCase(s: Session, id: string, caseId: string): void {
   });
 }
 
-export const slaState = (c: Complaint): { label: string; tone: 'crit' | 'warn' | 'ok' | 'none'; days: number | null } => {
+export const slaState = (c: Complaint, lang: 'en' | 'hi' = 'en'): { label: string; tone: 'crit' | 'warn' | 'ok' | 'none'; days: number | null } => {
   if (!STATUS[c.status]?.open) return { label: '', tone: 'none', days: null };
   const due = ['submitted', 'escalated'].includes(c.status) ? c.ack_due : c.resolve_due;
   if (!due) return { label: '', tone: 'none', days: null };
   const left = daysBetween(today(), due);
-  const what = ['submitted', 'escalated'].includes(c.status) ? 'acknowledge' : 'resolve';
+  const ack = ['submitted', 'escalated'].includes(c.status);
+  if (lang === 'hi') {
+    const what = ack ? 'पावती' : 'समाधान';
+    return left < 0 ? { label: `${what} में ${-left} दिन विलंब`, tone: 'crit', days: left }
+      : left <= 1 ? { label: `${what} ${left === 0 ? 'आज' : 'कल'} तक`, tone: 'warn', days: left }
+      : { label: `${what} हेतु ${left} दिन`, tone: 'ok', days: left };
+  }
+  const what = ack ? 'acknowledge' : 'resolve';
   return left < 0 ? { label: `${-left}d overdue to ${what}`, tone: 'crit', days: left } : left <= 1 ? { label: `${what} ${left === 0 ? 'today' : 'tomorrow'}`, tone: 'warn', days: left } : { label: `${left}d to ${what}`, tone: 'ok', days: left };
 };

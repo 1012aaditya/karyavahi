@@ -155,16 +155,17 @@ export const fmtInr = (v: number | null | undefined): string =>
 export const fmtInt = (v: number | null | undefined): string =>
   v === null || v === undefined ? '—' : v.toLocaleString('en-IN');
 
-/** Dates are rendered in IST because every date column in the seed is IST. */
-export function fmtDate(iso: string | null | undefined, withTime = false): string {
+/** Dates are rendered in IST because every date column in the seed is IST. In Hindi the month
+ *  names are Hindi too ("5 नव॰ 2026"). */
+export function fmtDate(iso: string | null | undefined, withTime = false, lang: 'en' | 'hi' = 'en'): string {
   if (!iso) return '—';
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso);
   if (Number.isNaN(d.getTime())) return String(iso);
-  const date = new Intl.DateTimeFormat('en-IN', {
+  const date = new Intl.DateTimeFormat(lang === 'hi' ? 'hi-IN' : 'en-IN', {
     day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata',
   }).format(d);
   if (!withTime || iso.length === 10) return date;
-  const time = new Intl.DateTimeFormat('en-IN', {
+  const time = new Intl.DateTimeFormat(lang === 'hi' ? 'hi-IN' : 'en-IN', {
     hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata',
   }).format(d);
   return `${date}, ${time}`;

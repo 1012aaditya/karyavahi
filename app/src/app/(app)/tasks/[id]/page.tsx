@@ -22,6 +22,7 @@ import {
   acknowledgeTaskAction, startTaskAction, submitEvidenceAction, verifyEvidenceAction, reassignTaskAction,
 } from '@/lib/actions';
 import { reassignView } from '@/lib/plans';
+import { EvidenceSummary } from '@/components/EvidenceSummary';
 
 /** One task: what it asks for, what proof it needs, and what has been submitted so far. */
 
@@ -91,10 +92,10 @@ export default async function TaskPage({
             </Field>
             <Field label={pick(lang, 'Due', 'नियत तिथि')} hint={
               t.original_due_date !== t.due_date
-                ? `${pick(lang, 'originally', 'मूल रूप से')} ${fmtDate(t.original_due_date)}`
+                ? `${pick(lang, 'originally', 'मूल रूप से')} ${fmtDate(t.original_due_date, false, lang)}`
                 : undefined
             }>
-              <span className="tnum">{fmtDate(t.due_date)}</span>
+              <span className="tnum">{fmtDate(t.due_date, false, lang)}</span>
             </Field>
             <Field label={pick(lang, 'Proof required', 'आवश्यक सबूत')}>
               {t.proof_count} × <EvidenceTypeName type={t.proof_type} lang={lang} />
@@ -106,7 +107,7 @@ export default async function TaskPage({
               ) : null}
             </Field>
             <Field label={pick(lang, 'Assigned', 'सौंपा गया')}>
-              <span className="tnum">{fmtDate(t.assigned_at)}</span>
+              <span className="tnum">{fmtDate(t.assigned_at, false, lang)}</span>
             </Field>
           </Facts>
 
@@ -165,7 +166,7 @@ export default async function TaskPage({
               </p>
             ) : (
               <Disclose label={pick(lang, 'Reassign', 'पुनः सौंपें')}>
-                <ActionForm
+                <ActionForm lang={lang}
                   action={reassignTaskAction}
                   hidden={{ task_id: t.id, task_version: String(reassign!.task.version) }}
                   label={pick(lang, 'Reassign the task', 'काम पुनः सौंपें')}
@@ -184,7 +185,7 @@ export default async function TaskPage({
                       ))}
                     </select>
                   </label>
-                  <ReasonBox required label={pick(lang, 'Why it is moving', 'क्यों बदला जा रहा है')} placeholder={pick(lang, 'For example: CRC on medical leave until the 20th.', 'उदाहरण: CRC 20 तारीख तक चिकित्सा अवकाश पर।')} />
+                  <ReasonBox lang={lang} required label={pick(lang, 'Why it is moving', 'क्यों बदला जा रहा है')} placeholder={pick(lang, 'For example: CRC on medical leave until the 20th.', 'उदाहरण: CRC 20 तारीख तक चिकित्सा अवकाश पर।')} />
                 </ActionForm>
               </Disclose>
             )}
@@ -202,16 +203,16 @@ export default async function TaskPage({
           />
           <div className="card-pad flex flex-wrap items-start gap-3">
             {t.status === 'assigned' ? (
-              <ActionForm action={acknowledgeTaskAction} hidden={{ task_id: t.id }}
+              <ActionForm lang={lang} action={acknowledgeTaskAction} hidden={{ task_id: t.id }}
                 label={pick(lang, 'Mark as seen', 'देखा गया')} tone="quiet" />
             ) : null}
             {['assigned', 'acknowledged', 'sent_back'].includes(t.status) ? (
-              <ActionForm action={startTaskAction} hidden={{ task_id: t.id }}
+              <ActionForm lang={lang} action={startTaskAction} hidden={{ task_id: t.id }}
                 label={pick(lang, 'Mark as started', 'शुरू किया')} tone="quiet" />
             ) : null}
             {t.status !== 'verified' && t.status !== 'cancelled' ? (
               <Disclose label={pick(lang, 'Submit proof', 'सबूत जमा करें')}>
-                <ActionForm
+                <ActionForm lang={lang}
                   action={submitEvidenceAction}
                   hidden={{ task_id: t.id, school_id: t.school_id ?? '' }}
                   label={pick(lang, 'Submit', 'जमा करें')}
@@ -221,7 +222,7 @@ export default async function TaskPage({
                     `इस काम के लिए ${t.proof_count} सबूत चाहिए। कोई और उसे जाँचेगा।`,
                   )}
                 >
-                  <ReasonBox
+                  <ReasonBox lang={lang}
                     name="note" required rows={4}
                     label={pick(lang, 'What the proof shows', 'सबूत क्या दिखाता है')}
                     placeholder={pick(lang, 'Describe what was done, where and when.', 'क्या किया, कहाँ और कब — लिखें।')}
@@ -271,44 +272,35 @@ export default async function TaskPage({
                     <div className="flex flex-wrap items-center gap-2">
                       <EvidenceStatusPill status={e.status} lang={lang} />
                       {e.verification_method && e.verification_method !== 'desk_review' ? (
-                        <Pill tone="active">{e.verification_method.replace(/_/g, ' ')}</Pill>
+                        <Pill tone="active">{e.verification_method === 'spot_check_visit' ? pick(lang, 'checked on a visit', 'भ्रमण में जाँचा') : e.verification_method === 'cross_source_assessment' ? pick(lang, 'checked by an independent assessment', 'स्वतंत्र आकलन से जाँचा') : e.verification_method.replace(/_/g, ' ')}</Pill>
                       ) : null}
                       {e.gps_status === 'outside_radius' ? (
                         <Pill tone="warn">{pick(lang, 'GPS away from the school', 'GPS विद्यालय से दूर')}</Pill>
                       ) : null}
                     </div>
                     <p className="mt-1 text-sm text-ink-soft">
-                      {users.get(e.submitted_by) ?? e.submitted_by} · {fmtDate(e.submitted_at, true)}
+                      {users.get(e.submitted_by) ?? e.submitted_by} · {fmtDate(e.submitted_at, true, lang)}
                       {e.sha256 ? <> · sha256 <Mono>{shortHash(e.sha256)}</Mono></> : null}
                     </p>
-                    {Object.entries(e.summary).length > 0 ? (
-                      <dl className="mt-1 space-y-0.5 text-sm">
-                        {Object.entries(e.summary).map(([k, v]) => (
-                          <div key={k} className="flex gap-1.5">
-                            <dt className="text-ink-faint">{k.replace(/_/g, ' ')}:</dt>
-                            <dd className="text-ink">{String(v)}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                    ) : null}
+                    <EvidenceSummary id={e.id} summary={e.summary} lang={lang} />
                     {e.rejection_reason ? (
                       <p className="mt-1 border-l-2 border-crit/40 pl-2 text-sm text-crit">{e.rejection_reason}</p>
                     ) : null}
                   </div>
                   {canVerifyHere && e.status === 'pending' && e.submitted_by !== session.user_id ? (
                     <div className="flex shrink-0 flex-col items-end gap-2 no-print">
-                      <ActionForm
+                      <ActionForm lang={lang}
                         action={verifyEvidenceAction}
                         hidden={{ evidence_id: e.id, case_id: e.case_id, accept: 'yes', method: t.cross_source ? 'cross_source_assessment' : 'desk_review' }}
                         label={pick(lang, 'Accept', 'स्वीकारें')} tone="good"
                       />
                       <Disclose label={pick(lang, 'Send back', 'लौटाएँ')} tone="danger">
-                        <ActionForm
+                        <ActionForm lang={lang}
                           action={verifyEvidenceAction}
                           hidden={{ evidence_id: e.id, case_id: e.case_id, accept: 'no' }}
                           label={pick(lang, 'Send back', 'लौटाएँ')} tone="danger"
                         >
-                          <ReasonBox required label={pick(lang, 'Why', 'कारण')} />
+                          <ReasonBox lang={lang} required label={pick(lang, 'Why', 'कारण')} />
                         </ActionForm>
                       </Disclose>
                     </div>
@@ -336,8 +328,8 @@ export default async function TaskPage({
               <ul className="divide-y divide-line">
                 {bl.map((b) => (
                   <li key={b.id} className="px-4 py-2.5 text-sm sm:px-5">
-                    <span className={`chip mr-2 ${b.status === 'resolved' ? 'border-good/30 bg-good-light text-good' : 'border-warn/30 bg-warn-light text-warn'}`}>{b.status}</span>
-                    <span className="font-medium text-ink">{blockerMeta(b.blocker_type).label}</span>
+                    <span className={`chip mr-2 ${b.status === 'resolved' ? 'border-good/30 bg-good-light text-good' : 'border-warn/30 bg-warn-light text-warn'}`}>{b.status === 'resolved' ? pick(lang, 'resolved', 'हल हुई') : b.status === 'escalated' ? pick(lang, 'escalated', 'आगे भेजी') : pick(lang, b.status, 'खुली')}</span>
+                    <span className="font-medium text-ink">{pick(lang, blockerMeta(b.blocker_type).label, blockerMeta(b.blocker_type).hi)}</span>
                     <span className="text-ink-soft"> — {b.description}</span>
                   </li>
                 ))}
@@ -346,22 +338,22 @@ export default async function TaskPage({
             {canReport && !t.submitted_at ? (
               <div className="border-t border-line px-4 py-3 sm:px-5">
                 <Disclose label={pick(lang, 'Report a blocker…', 'बाधा दर्ज करें…')}>
-                  <ActionForm action={reportBlockerAction} hidden={{ task_id: t.id }} label={pick(lang, 'Record blocker', 'दर्ज करें')}>
+                  <ActionForm lang={lang} action={reportBlockerAction} hidden={{ task_id: t.id }} label={pick(lang, 'Record blocker', 'दर्ज करें')}>
                     <div className="mb-2 grid gap-2 sm:grid-cols-2">
                       <label className="block"><span className="label">{pick(lang, 'Type', 'प्रकार')}</span>
                         <select name="type" required className="input mt-1">
-                          {BLOCKER_TYPES.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
+                          {BLOCKER_TYPES.map((b) => <option key={b.key} value={b.key}>{pick(lang, b.label, b.hi)}</option>)}
                         </select>
                       </label>
                       <label className="block"><span className="label">{pick(lang, 'Severity', 'गंभीरता')}</span>
                         <select name="severity" defaultValue="medium" className="input mt-1">
-                          <option value="high">High — work cannot proceed</option>
-                          <option value="medium">Medium — work is slowed</option>
-                          <option value="low">Low — minor</option>
+                          <option value="high">{pick(lang, 'High — work cannot proceed', 'अधिक — काम रुका है')}</option>
+                          <option value="medium">{pick(lang, 'Medium — work is slowed', 'मध्यम — काम धीमा है')}</option>
+                          <option value="low">{pick(lang, 'Low — minor', 'कम — मामूली')}</option>
                         </select>
                       </label>
                     </div>
-                    <ReasonBox name="description" required label={pick(lang, 'What is happening', 'क्या हो रहा है')} placeholder={pick(lang, 'e.g. Activity cards not delivered to 3 of 5 schools', 'उदा. 5 में से 3 विद्यालयों को कार्ड नहीं मिले')} />
+                    <ReasonBox lang={lang} name="description" required label={pick(lang, 'What is happening', 'क्या हो रहा है')} placeholder={pick(lang, 'e.g. Activity cards not delivered to 3 of 5 schools', 'उदा. 5 में से 3 विद्यालयों को कार्ड नहीं मिले')} />
                   </ActionForm>
                 </Disclose>
               </div>

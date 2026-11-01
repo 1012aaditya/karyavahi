@@ -46,18 +46,18 @@ function Legend({ series }: { series: Series[] }) {
 }
 
 function TableView({
-  xLabels, series, unit = '%', caption,
-}: { xLabels: string[]; series: Series[]; unit?: string; caption: string }) {
+  xLabels, series, unit = '%', caption, lang = 'en',
+}: { xLabels: string[]; series: Series[]; unit?: string; caption: string; lang?: 'en' | 'hi' }) {
   return (
     <details className="mt-2 no-print">
       <summary className="cursor-pointer text-xs text-ink-faint hover:text-ink-soft">
-        View as a table
+        {lang === 'hi' ? 'तालिका के रूप में देखें' : 'View as a table'}
       </summary>
       <table className="table mt-2">
         <caption className="sr-only">{caption}</caption>
         <thead>
           <tr>
-            <th scope="col">Series</th>
+            <th scope="col">{lang === 'hi' ? 'शृंखला' : 'Series'}</th>
             {xLabels.map((x) => <th key={x} scope="col">{x}</th>)}
           </tr>
         </thead>
@@ -78,7 +78,7 @@ function TableView({
 
 // ------------------------------------------------------------------ trend (line)
 export function TrendChart({
-  xLabels, series, yMax = 100, yLabel = '% at grade benchmark', caption, height = 230, markers = [],
+  xLabels, series, yMax = 100, yLabel = '% at grade benchmark', caption, height = 230, markers = [], lang = 'en',
 }: {
   xLabels: string[];
   series: Series[];
@@ -86,6 +86,8 @@ export function TrendChart({
   yLabel?: string;
   caption: string;
   height?: number;
+  /** The language of the chart's own words; the caller translates the caption. */
+  lang?: 'en' | 'hi';
   /** Vertical annotations, e.g. the round the work started. */
   markers?: { at: number; label: string }[];
 }) {
@@ -238,7 +240,7 @@ export function TrendChart({
         ) : null}
       </svg>
       <figcaption className="sr-only">{caption}</figcaption>
-      <TableView xLabels={xLabels} series={series} caption={caption} />
+      <TableView xLabels={xLabels} series={series} caption={caption} lang={lang} />
     </figure>
   );
 }

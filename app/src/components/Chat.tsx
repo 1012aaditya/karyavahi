@@ -406,18 +406,18 @@ const STARTERS_FOR = (ctx: ChatContext): string[] =>
   : ctx.reportId ? ['Summarise this report', 'What decisions does this report call for?']
   : ['What should I prioritise this week?', 'Which cases need my approval?', 'Why are tasks overdue, and what is blocking them?', 'Prepare an agenda for tomorrow’s review meeting'];
 
-export function AssistantDrawer({ configured, userKey }: { configured: boolean; userKey?: string }) {
+export function AssistantDrawer({ configured, userKey, label = 'Ask AI', hint = 'Ask Karyavahi AI about this page' }: { configured: boolean; userKey?: string; label?: string; hint?: string }) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
   const ctx = useChatContext();
-  if (path.startsWith('/assistant')) return <Link href="/assistant" className="btn-ghost gap-1.5 px-2.5 text-brand"><Icon name="sparkles" size={17} /><span className="hidden text-sm font-medium xl:inline">Ask AI</span></Link>;
+  if (path.startsWith('/assistant')) return <Link href="/assistant" className="btn-ghost gap-1.5 px-2.5 text-brand"><Icon name="sparkles" size={17} /><span className="hidden text-sm font-medium xl:inline">{label}</span></Link>;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <button type="button" className="btn-ghost gap-1.5 px-2.5 text-brand no-print" title="Ask Karyavahi AI about this page">
+        <button type="button" className="btn-ghost gap-1.5 px-2.5 text-brand no-print" title={hint}>
           <Icon name="sparkles" size={17} />
-          <span className="hidden text-sm font-medium xl:inline">Ask AI</span>
+          <span className="hidden text-sm font-medium xl:inline">{label}</span>
         </button>
       </SheetTrigger>
       <SheetContent side="right" label="Karyavahi AI" className="w-full max-w-[520px] bg-ivory">

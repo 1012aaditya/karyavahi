@@ -150,7 +150,7 @@ export function EvidenceStrength({ status, lang }: { status: string; lang: Langu
 export const OverduePill = ({ lang, days }: { lang: Language; days?: number }) => (
   <Pill tone="critical">
     <span aria-hidden>!</span>{' '}
-    {pick(lang, 'Overdue', 'विलंबित')}{days !== undefined && days > 0 ? ` · ${days}d` : ''}
+    {pick(lang, 'Overdue', 'विलंबित')}{days !== undefined && days > 0 ? ` · ${days}${pick(lang, 'd', ' दिन')}` : ''}
   </Pill>
 );
 

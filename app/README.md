@@ -261,10 +261,38 @@ the column rather than translating. Chrome with no Hindi in the data is translat
 `src/lib/i18n.ts`. A user's `preferred_language` is the default; the BEO demo account prefers
 Hindi, which is why that account opens in Devanagari.
 
+The field workers' pages (`/today`, `/field`, `/school`, `/tasks` and a task) are fully Hindi,
+including dates ("05 नव॰ 2026"), the sidebar and header, the map legend and the forms' own words.
+`npm run test:hindi -- http://localhost:3000` loads them in Hindi as a coordinator, a block
+coordinator and a headmaster and reports any English interface text. Data stored in English
+(school and people's names, case and complaint titles, reasons officers typed) is allowed; it
+is recognised by looking it up in the database. Officer pages are not yet fully translated.
+
+## My day and photo proof
+
+Cluster and block coordinators and headmasters land on **My day** (`/today`), built for a phone:
+one column, large buttons, and a tab bar at the bottom (My day · School(s) · My tasks · Raise).
+It lists the person's own work in the order to do it: proof sent back (with the reason), late,
+due today, this week, later, and proof already handed in. Each task can be marked seen, started
+and given its proof on the same screen. Coordinators also see the schools in their area that have
+gone longest without a visit, and everyone sees complaints waiting on them. The desktop Field
+Operations workspace (`/field`) and the headmaster's school page (`/school`) are still in the menu.
+
+Proof can carry a photo. The browser shrinks it (longest side 1600 px) before sending, but the
+server trusts nothing it is told: it reads the first bytes to decide whether it is a JPEG, PNG or
+WebP, refuses anything else or anything over 5 MB, computes the SHA-256 itself, refuses a photo
+already used as proof elsewhere, and stores it in `.data/evidence-files/` under that hash
+(`src/lib/evidence-files.ts`, table `evidence_files`). The evidence row's hash is the photo's.
+`/api/evidence/[id]/photo` serves it only to someone who can see that proof, and hashes it again
+first, refusing a file that has changed on disk. `npm run test:myday` checks all of this.
+
 ## Known limits
 
-- **Uploading a file is not implemented.** The wizard's validation behaviour is visible through
-  the seeded batches and their rejected rows; the upload itself is deliberately not faked.
+- **Uploading a data file is not implemented.** The import wizard's validation behaviour is
+  visible through the seeded batches and their rejected rows; the upload itself is deliberately
+  not faked. (Proof photos are real uploads; see My day.)
+- **My day has no offline queue yet.** A proof handed in without signal fails with a message and
+  has to be sent again. The location on proof is still the worker's own statement, not GPS.
 - **No real language model.** The assistant answers from the database and says so. Generated
   text would have to be grounded the same way: answer only from cited rows, refuse to state a
   figure not in one, and log every draft.

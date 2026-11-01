@@ -36,10 +36,10 @@ export interface MapPayload {
 
 /** Status classes (which areas are coloured) and overlays (count badges on labels). */
 export const STATUS_LAYERS = [
-  { key: 'critical', label: 'Critical hotspots', sev: ['critical'], color: SEVERITY_COLORS.critical },
-  { key: 'decline', label: 'Learning decline', sev: ['significant', 'moderate'], color: SEVERITY_COLORS.significant },
-  { key: 'stable', label: 'Stable areas', sev: ['stable'], color: SEVERITY_COLORS.stable },
-  { key: 'improving', label: 'Improving areas', sev: ['improving'], color: SEVERITY_COLORS.improving },
+  { key: 'critical', label: 'Critical hotspots', hi: 'गंभीर हॉटस्पॉट', sev: ['critical'], color: SEVERITY_COLORS.critical },
+  { key: 'decline', label: 'Learning decline', hi: 'अधिगम में गिरावट', sev: ['significant', 'moderate'], color: SEVERITY_COLORS.significant },
+  { key: 'stable', label: 'Stable areas', hi: 'स्थिर क्षेत्र', sev: ['stable'], color: SEVERITY_COLORS.stable },
+  { key: 'improving', label: 'Improving areas', hi: 'सुधरते क्षेत्र', sev: ['improving'], color: SEVERITY_COLORS.improving },
 ] as const;
 export const OVERLAYS = [
   { key: 'complaints', label: 'Open complaints', prop: 'complaints', icon: 'inbox', cls: 'bg-pend text-white' },
@@ -78,10 +78,13 @@ function Popover({ label, icon, children, open, setOpen }: { label: string; icon
   );
 }
 
-export function GeoMap({ height = 560, compact = false, selectedId: selectedProp = null, basePath = '/hotspots', onData, rounds = [], competencies = [] }: {
+export function GeoMap({ height = 560, compact = false, selectedId: selectedProp = null, basePath = '/hotspots', onData, rounds = [], competencies = [], lang = 'en' }: {
   height?: number | string; compact?: boolean; selectedId?: string | null; basePath?: string;
   onData?: (d: MapPayload | null) => void; rounds?: { id: string; label: string }[]; competencies?: { id: string; label: string }[];
+  /** The compact map's own words (legend, loading, footnote) follow this; the full workspace is English for now. */
+  lang?: 'en' | 'hi';
 }) {
+  const L = (en: string, hi: string) => (lang === 'hi' ? hi : en);
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -327,29 +330,29 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
           </div>
         ) : null}
 
-        {loading ? <div className={`absolute z-10 flex items-center gap-2 rounded-md bg-white/95 px-2.5 py-1.5 text-xs text-ink-soft shadow ${workspace ? 'bottom-3 right-3' : 'left-3 top-3'}`}><span className="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" />Loading map…</div> : null}
+        {loading ? <div className={`absolute z-10 flex items-center gap-2 rounded-md bg-white/95 px-2.5 py-1.5 text-xs text-ink-soft shadow ${workspace ? 'bottom-3 right-3' : 'left-3 top-3'}`}><span className="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" />{L('Loading map…', 'नक्शा लोड हो रहा है…')}</div> : null}
         {error || mapError ? (
           <div className="absolute inset-0 z-10 grid place-items-center bg-ivory/90 p-6 text-center">
             <div>
               <Icon name="alert" size={26} className="mx-auto text-warn" />
               <p className="mt-2 font-medium text-ink">{mapError ?? error}</p>
               <div className="mt-3 flex justify-center gap-2">
-                {error ? <button type="button" onClick={() => void load()} className="btn-quiet btn-sm">Retry</button> : null}
-                <Link href={`${basePath}?view=list`} className="btn-quiet btn-sm">Use the list view</Link>
+                {error ? <button type="button" onClick={() => void load()} className="btn-quiet btn-sm">{L('Retry', 'फिर कोशिश करें')}</button> : null}
+                <Link href={`${basePath}?view=list`} className="btn-quiet btn-sm">{L('Use the list view', 'सूची देखें')}</Link>
               </div>
             </div>
           </div>
         ) : null}
         {!loading && !error && data && data.features.features.length === 0 ? (
-          <div className="absolute inset-x-0 top-1/2 z-10 mx-auto w-fit -translate-y-1/2 rounded-lg bg-white/95 px-4 py-2 text-sm text-ink-soft shadow">No mapped areas at this level.</div>
+          <div className="absolute inset-x-0 top-1/2 z-10 mx-auto w-fit -translate-y-1/2 rounded-lg bg-white/95 px-4 py-2 text-sm text-ink-soft shadow">{L('No mapped areas at this level.', 'इस स्तर पर कोई क्षेत्र नक्शे में नहीं।')}</div>
         ) : null}
         {hover ? (
           <div className="pointer-events-none absolute z-20 w-56 rounded-lg border border-line bg-white p-2.5 text-xs shadow-pop" style={{ left: Math.min(hover.x + 14, (box.current?.clientWidth ?? 600) - 236), top: Math.max(8, hover.y - 10) }}>
             <p className="text-sm font-semibold text-ink">{String(hover.p.name)}</p>
             <p className="text-2xs text-ink-faint">{LEVEL_NAME[String(hover.p.level)] ?? String(hover.p.level)}</p>
             <p className="mt-1 flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SEVERITY_COLORS[String(hover.p.severity)] }} />{SEVERITY_LABEL[String(hover.p.severity)]}{hover.p.severity !== 'insufficient' ? ` · ${pp(hover.p.relPp)}` : ''}</p>
-            <p className="mt-1 text-ink-faint">{String(hover.p.openCases)} cases · {String(hover.p.complaints)} complaints · {String(hover.p.overdue)} overdue</p>
-            <p className="mt-1 text-2xs text-ink-faint">{compact ? 'Click to open' : `Click to select${Number(hover.p.canDrill) ? ' · double-click to zoom in' : ''}`}</p>
+            <p className="mt-1 text-ink-faint">{L(`${String(hover.p.openCases)} cases · ${String(hover.p.complaints)} complaints · ${String(hover.p.overdue)} overdue`, `${String(hover.p.openCases)} प्रकरण · ${String(hover.p.complaints)} शिकायतें · ${String(hover.p.overdue)} विलंबित`)}</p>
+            <p className="mt-1 text-2xs text-ink-faint">{compact ? L('Click to open', 'खोलने के लिए क्लिक करें') : `Click to select${Number(hover.p.canDrill) ? ' · double-click to zoom in' : ''}`}</p>
           </div>
         ) : null}
         {workspace && legend ? (
@@ -362,10 +365,10 @@ export function GeoMap({ height = 560, compact = false, selectedId: selectedProp
         ) : null}
       </div>
       {compact ? (
-        <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft" aria-label="Legend">
-          {STATUS_LAYERS.map((l) => <li key={l.key} className="flex items-center gap-1.5"><span className="h-2.5 w-3.5 rounded-sm border border-line" style={{ background: l.color }} />{l.label}</li>)}
-          <li className="flex items-center gap-1.5"><span className="h-2.5 w-3.5 rounded-sm border border-line bg-[repeating-linear-gradient(45deg,rgba(69,82,106,.6)_0_2px,theme(colors.sev.insufficient)_2px_6px)]" />Insufficient data</li>
-          <li className="ml-auto text-ink-faint">Illustrative geography · fictional state</li>
+        <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft" aria-label={L('Legend', 'संकेत')}>
+          {STATUS_LAYERS.map((l) => <li key={l.key} className="flex items-center gap-1.5"><span className="h-2.5 w-3.5 rounded-sm border border-line" style={{ background: l.color }} />{L(l.label, l.hi)}</li>)}
+          <li className="flex items-center gap-1.5"><span className="h-2.5 w-3.5 rounded-sm border border-line bg-[repeating-linear-gradient(45deg,rgba(69,82,106,.6)_0_2px,theme(colors.sev.insufficient)_2px_6px)]" />{L('Insufficient data', 'अपर्याप्त डेटा')}</li>
+          <li className="ml-auto text-ink-faint">{L('Illustrative geography · fictional state', 'उदाहरण हेतु भूगोल · काल्पनिक राज्य')}</li>
         </ul>
       ) : null}
     </div>

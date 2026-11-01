@@ -17,6 +17,7 @@ import {
 } from './labels';
 import { TrendChart, DivergingBars, EffectInterval, SlopeChart } from './charts';
 import { SERIES } from '@/lib/viz';
+import { EvidenceSummary } from './EvidenceSummary';
 
 /** The anatomy of a case, one panel per question an officer actually asks. */
 
@@ -193,7 +194,7 @@ export function FindingPanel({
           <p className="mt-2 text-xs text-ink-faint">
             <Mono>{finding.id}</Mono> · {finding.detection_method} ·{' '}
             {pick(lang, 'settings', 'सेटिंग')} <Mono>{finding.settings_version_id}</Mono> ·{' '}
-            {pick(lang, 'detected', 'पहचान')} {fmtDate(finding.detected_at, true)}
+            {pick(lang, 'detected', 'पहचान')} {fmtDate(finding.detected_at, true, lang)}
           </p>
         </div>
       </div>
@@ -538,9 +539,9 @@ export function PlanPanel({
                     </div>
                     <p className="mt-1 text-sm text-ink-soft">
                       {pick(lang, 'Submitted by', 'प्रस्तुत')} {nm(names.users, a.submitted_by)}{' '}
-                      {fmtDate(a.submitted_at)}
+                      {fmtDate(a.submitted_at, false, lang)}
                       {a.decided_by ? (
-                        <> · {pick(lang, 'decided by', 'निर्णय')} {nm(names.users, a.decided_by)} {fmtDate(a.decided_at)}</>
+                        <> · {pick(lang, 'decided by', 'निर्णय')} {nm(names.users, a.decided_by)} {fmtDate(a.decided_at, false, lang)}</>
                       ) : null}
                     </p>
                     {a.reason ? (
@@ -640,10 +641,10 @@ export function WorkPanel({
                       {t.proof_count} × <EvidenceTypeName type={t.proof_type} lang={lang} />
                     </td>
                     <td className="tnum whitespace-nowrap text-sm">
-                      {fmtDate(t.due_date)}
+                      {fmtDate(t.due_date, false, lang)}
                       {t.original_due_date !== t.due_date ? (
                         <span className="block text-2xs text-ink-faint">
-                          {pick(lang, 'was', 'पहले')} {fmtDate(t.original_due_date)}
+                          {pick(lang, 'was', 'पहले')} {fmtDate(t.original_due_date, false, lang)}
                         </span>
                       ) : null}
                     </td>
@@ -713,23 +714,14 @@ export function ProofPanel({
                   </div>
                   <p className="mt-1 text-sm text-ink-soft">
                     {pick(lang, 'Submitted by', 'प्रस्तुत')} {nm(names.users, e.submitted_by)}{' '}
-                    (<RoleName role={e.submitted_role} lang={lang} />) {fmtDate(e.submitted_at, true)}
+                    (<RoleName role={e.submitted_role} lang={lang} />) {fmtDate(e.submitted_at, true, lang)}
                     {e.school_id ? <> · {nm(names.schools, e.school_id)}</> : null}
                     {e.channel !== 'app' ? <> · {pick(lang, 'via', 'माध्यम')} {e.channel}</> : null}
                   </p>
-                  {Object.keys(e.summary).length > 0 ? (
-                    <dl className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-sm">
-                      {Object.entries(e.summary).slice(0, 6).map(([k, v]) => (
-                        <div key={k} className="flex gap-1">
-                          <dt className="text-ink-faint">{k.replace(/_/g, ' ')}:</dt>
-                          <dd className="text-ink">{String(v)}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  ) : null}
+                  <EvidenceSummary id={e.id} summary={e.summary} lang={lang} />
                   {e.verified_by ? (
                     <p className="mt-1 text-sm text-good">
-                      {pick(lang, 'Checked by', 'जाँचा')} {nm(names.users, e.verified_by)} {fmtDate(e.verified_at, true)}
+                      {pick(lang, 'Checked by', 'जाँचा')} {nm(names.users, e.verified_by)} {fmtDate(e.verified_at, true, lang)}
                     </p>
                   ) : null}
                   {e.rejection_reason ? (
@@ -940,7 +932,7 @@ export function OutcomePanel({
               </details>
 
               <p className="text-xs text-ink-faint">
-                <Mono>{o.id}</Mono> · {pick(lang, 'evaluated', 'मूल्यांकित')} {fmtDate(o.evaluated_at, true)}
+                <Mono>{o.id}</Mono> · {pick(lang, 'evaluated', 'मूल्यांकित')} {fmtDate(o.evaluated_at, true, lang)}
                 {o.reviewed_by ? <> · {pick(lang, 'read by', 'पढ़ा')} {nm(names.users, o.reviewed_by)}</> : null}
                 {' · '}<Mono>{o.settings_version_id}</Mono>
               </p>
@@ -968,7 +960,7 @@ export function TimelinePanel({
           {events.map((e) => (
             <li key={e.id} className="flex gap-3 px-4 py-2.5 sm:px-5">
               <time className="tnum w-32 shrink-0 text-xs text-ink-faint" dateTime={e.ts}>
-                {fmtDate(e.ts, true)}
+                {fmtDate(e.ts, true, lang)}
               </time>
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-ink">{e.summary}</p>

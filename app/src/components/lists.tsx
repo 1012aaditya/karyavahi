@@ -7,6 +7,7 @@ import {
   StatusPill, SeverityPill, TaskStatusPill, EvidenceStatusPill, OutcomePill, Pill,
   OverduePill, EscalatedPill, CrossSourcePill, EvidenceTypeName, RoleName,
 } from './labels';
+import { EvidenceSummary } from './EvidenceSummary';
 
 /** Shared tables. Each row links to the record; none of them invent a number. */
 
@@ -60,7 +61,7 @@ export function CaseTable({
                 {c.closure_type ? <OutcomePill category={c.closure_type} lang={lang} /> : null}
               </td>
               <td className="text-sm">{g(look.users, c.owner_user_id)}</td>
-              <td className="tnum whitespace-nowrap text-sm">{fmtDate(c.due_date)}</td>
+              <td className="tnum whitespace-nowrap text-sm">{fmtDate(c.due_date, false, lang)}</td>
             </tr>
           ))}
         </tbody>
@@ -173,7 +174,7 @@ export function TaskTable({
                 <td className="text-sm">
                   {t.proof_count} × <EvidenceTypeName type={t.proof_type} lang={lang} />
                 </td>
-                <td className="tnum whitespace-nowrap text-sm">{fmtDate(t.due_date)}</td>
+                <td className="tnum whitespace-nowrap text-sm">{fmtDate(t.due_date, false, lang)}</td>
                 <td className="space-y-1">
                   <TaskStatusPill status={t.status} lang={lang} />
                   {t.is_overdue ? <OverduePill lang={lang} days={days} /> : null}
@@ -218,18 +219,9 @@ export function EvidenceList({
                 {e.school_id ? <> · {g(look.schools, e.school_id)}</> : null}
                 {' · '}
                 {pick(lang, 'by', 'द्वारा')} {g(look.users, e.submitted_by)}{' '}
-                (<RoleName role={e.submitted_role} lang={lang} />) {fmtDate(e.submitted_at)}
+                (<RoleName role={e.submitted_role} lang={lang} />) {fmtDate(e.submitted_at, false, lang)}
               </p>
-              {Object.keys(e.summary).length > 0 ? (
-                <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm">
-                  {Object.entries(e.summary).slice(0, 5).map(([k, v]) => (
-                    <div key={k} className="flex gap-1">
-                      <dt className="text-ink-faint">{k.replace(/_/g, ' ')}:</dt>
-                      <dd className="text-ink">{String(v)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : null}
+              <EvidenceSummary id={e.id} summary={e.summary} lang={lang} />
             </div>
             {children ? <div className="shrink-0 no-print">{children(e)}</div> : null}
           </div>

@@ -14,6 +14,7 @@ import {
   ownerOptions, type PlanCase, type ReassignTask,
 } from './plans';
 import { matchForCase } from './studio';
+import { checkPhoto, photoAlreadyUsed, storePhoto } from './evidence-files';
 
 /**
  * Every write in the app. This is the TypeScript twin of the SECURITY DEFINER functions in
@@ -839,8 +840,13 @@ export function startTask(s: Session, taskId: string): void {
  */
 export function submitEvidence(
   s: Session,
-  o: { taskId: string; note: string; schoolId?: string | null; gps?: 'matched' | 'not_captured' | 'outside_radius' },
+  o: {
+    taskId: string; note: string; schoolId?: string | null; gps?: 'matched' | 'not_captured' | 'outside_radius';
+    /** A photo of the proof. Its type, size and hash are worked out here, never taken from the form. */
+    photo?: { bytes: Uint8Array; name: string } | null;
+  },
 ): { evidenceId: string } {
+  const photo = o.photo && o.photo.bytes.length > 0 ? checkPhoto(o.photo.bytes, o.photo.name) : null;
   return tx(() => {
     const t = one<{
       id: string; case_id: string; owner_user_id: string; owner_role: string; status: string;
@@ -853,10 +859,20 @@ export function submitEvidence(
       throw new Refused(`This task is "${t.status}"; no more proof is needed.`, 'wrong_status');
     }
     if (!o.note.trim()) throw new Refused('Describe what the proof shows.', 'empty');
+    if (photo) {
+      const used = photoAlreadyUsed(photo.sha256);
+      if (used) {
+        throw new Refused(`This exact photo was already submitted as proof for ${used.task_id}. Take a new photo of this work.`, 'duplicate_photo');
+      }
+    }
 
     const n = nextId('evidence', 'EVD-', 6);
-    const summary = { note: o.note.trim(), declared_by: s.user_id, recorded_on: today() };
-    const digest = sha(JSON.stringify({ task: o.taskId, ...summary }));
+    const summary = {
+      note: o.note.trim(), declared_by: s.user_id, recorded_on: today(),
+      ...(photo ? { photo: { sha256: photo.sha256, bytes: photo.bytes.length, mime: photo.mime } } : {}),
+    };
+    // With a photo, the evidence's hash is the photo's own; without one, a hash of the declaration.
+    const digest = photo ? photo.sha256 : sha(JSON.stringify({ task: o.taskId, ...summary }));
 
     run(
       `insert into evidence
@@ -865,9 +881,16 @@ export function submitEvidence(
          verified_by, verified_at, verification_method, rejection_reason, provenance)
        values (?,?,?,?,?,?,?,null,?,?,?,?,?,'app','pending',null,null,null,null,'user_uploaded')`,
       n, o.taskId, t.case_id, o.schoolId ?? t.school_id, t.proof_type,
-      `${o.taskId}-${n}.pdf`, digest, JSON.stringify(summary),
+      `${o.taskId}-${n}.${photo ? photo.ext : 'pdf'}`, digest, JSON.stringify(summary),
       s.user_id, actingRole(s), nowIso(), o.gps ?? 'not_captured',
     );
+    if (photo) {
+      run(
+        `insert into evidence_files (evidence_id, sha256, mime, bytes, original_name, created_at) values (?,?,?,?,?,?)`,
+        n, photo.sha256, photo.mime, photo.bytes.length, photo.name, nowIso(),
+      );
+      storePhoto(photo);
+    }
 
     // Rejected proof was sent back, so it does not count towards the pieces the task needs.
     const count = one<{ c: number }>(
@@ -882,7 +905,7 @@ export function submitEvidence(
     appendAudit({
       actorUserId: s.user_id, actorRole: actingRole(s), action: 'evidence.submitted',
       entityType: 'evidence', entityId: n,
-      after: { task_id: o.taskId, sha256: digest, pieces: count, of: t.proof_count },
+      after: { task_id: o.taskId, sha256: digest, pieces: count, of: t.proof_count, photo: !!photo },
     });
     addCaseEvent({
       caseId: t.case_id, actorUserId: s.user_id, actorLabel: s.user_id, kind: 'evidence_submitted',

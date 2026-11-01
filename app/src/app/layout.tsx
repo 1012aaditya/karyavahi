@@ -31,7 +31,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:text-base focus:shadow"
         >
-          Skip to content
+          {lang === 'hi' ? 'मुख्य सामग्री पर जाएँ' : 'Skip to content'}
         </a>
         <Shell>{children}</Shell>
       </body>

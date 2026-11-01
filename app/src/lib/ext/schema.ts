@@ -85,6 +85,14 @@ create table if not exists sessions (
 );
 create index if not exists sessions_user on sessions(user_id);
 
+-- Photos attached to proof. The file sits in .data/evidence-files under its own SHA-256, which
+-- the server computes from the bytes it received; serving a file re-hashes it first.
+create table if not exists evidence_files (
+  evidence_id text primary key, sha256 text not null, mime text not null, bytes integer not null,
+  original_name text, created_at text not null
+);
+create index if not exists evidence_files_sha on evidence_files(sha256);
+
 create table if not exists ext_meta (key text primary key, value text not null);
 `;
 

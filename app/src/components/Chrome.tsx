@@ -87,19 +87,21 @@ function NavBody({ groups, collapsed }: { groups: ClientNavGroup[]; collapsed: b
 }
 
 /** Desktop sidebar: 240px expanded, 72px collapsed; the choice is remembered on this device. */
-export function Sidebar({ groups, homeHref, footer, scope }: { groups: ClientNavGroup[]; homeHref: string; footer: ReactNode; scope: { name: string; role: string } }) {
+export interface SidebarLabels { home: string; tagline: string; collapse: string; collapseSidebar: string; expandSidebar: string }
+
+export function Sidebar({ groups, homeHref, footer, scope, labels }: { groups: ClientNavGroup[]; homeHref: string; footer: ReactNode; scope: { name: string; role: string }; labels: SidebarLabels }) {
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { setCollapsed(localStorage.getItem('kv_sidebar') === 'collapsed'); }, []);
   const toggle = () => setCollapsed((c) => { localStorage.setItem('kv_sidebar', c ? 'open' : 'collapsed'); return !c; });
   return (
     <aside className={`sticky top-0 hidden h-screen shrink-0 flex-col bg-navy transition-[width] duration-200 lg:flex no-print ${collapsed ? 'w-[72px]' : 'w-[240px]'}`}>
       <div className={`flex h-16 shrink-0 items-center ${collapsed ? 'justify-center' : 'gap-2.5 px-4'}`}>
-        <Link href={homeHref} className="flex min-w-0 items-center gap-2.5" aria-label="Karyavahi home">
+        <Link href={homeHref} className="flex min-w-0 items-center gap-2.5" aria-label={labels.home}>
           <Logo size={30} />
           {!collapsed ? (
             <span className="min-w-0 leading-tight">
               <span className="block text-md font-semibold tracking-tight text-white">Karyavahi</span>
-              <span className="block truncate text-2xs text-navy-300">Education accountability</span>
+              <span className="block truncate text-2xs text-navy-300">{labels.tagline}</span>
             </span>
           ) : null}
         </Link>
@@ -113,9 +115,9 @@ export function Sidebar({ groups, homeHref, footer, scope }: { groups: ClientNav
       <div className={`min-h-0 flex-1 overflow-y-auto pb-4 ${collapsed ? 'px-2' : 'px-2.5'}`}><NavBody groups={groups} collapsed={collapsed} /></div>
       <div className={`shrink-0 border-t border-white/10 ${collapsed ? 'px-2 py-3' : 'px-4 py-3'}`}>
         {!collapsed ? footer : null}
-        <button type="button" onClick={toggle} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}
+        <button type="button" onClick={toggle} aria-label={collapsed ? labels.expandSidebar : labels.collapseSidebar} aria-expanded={!collapsed}
           className={`mt-2 flex w-full items-center gap-2 rounded-md py-1.5 text-xs text-navy-300 hover:bg-white/[0.05] hover:text-white ${collapsed ? 'justify-center' : 'px-2'}`}>
-          <Icon name={collapsed ? 'chevron-right' : 'chevron-left'} size={15} />{collapsed ? null : 'Collapse'}
+          <Icon name={collapsed ? 'chevron-right' : 'chevron-left'} size={15} />{collapsed ? null : labels.collapse}
         </button>
       </div>
     </aside>
@@ -225,5 +227,32 @@ export function Expand({ summary, children, count }: { summary: string; children
       </summary>
       <div className="border-t border-line">{children}</div>
     </details>
+  );
+}
+
+/**
+ * The phone tab bar for field roles: the four places they go most, within reach of a thumb.
+ * Hidden on wide screens, where the sidebar does the same job.
+ */
+export function BottomTabs({ tabs, label }: { tabs: (ClientNavItem & { icon: string })[]; label: string }) {
+  const path = usePathname();
+  return (
+    <nav aria-label={label} className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden no-print">
+      <ul className="mx-auto flex max-w-lg">
+        {tabs.map((t) => {
+          const on = matches(path, t.href);
+          return (
+            <li key={t.href} className="flex-1">
+              <Link href={t.href} aria-current={on ? 'page' : undefined}
+                className={`relative flex min-h-14 flex-col items-center justify-center gap-0.5 text-2xs font-medium ${on ? 'text-brand' : 'text-ink-soft'}`}>
+                <Icon name={t.icon} size={20} />
+                <span>{t.label}</span>
+                {t.badge ? <span className="tnum absolute right-[calc(50%-22px)] top-1.5 min-w-[18px] rounded-full bg-crit px-1 text-center text-2xs font-semibold leading-[18px] text-white">{t.badge > 99 ? '99+' : t.badge}</span> : null}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }

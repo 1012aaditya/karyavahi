@@ -1,18 +1,19 @@
 import Link from 'next/link';
 import { Suspense, type ReactNode } from 'react';
 import { getLanguage, getSession } from '@/lib/session';
-import { navGroups, homeFor, GROUP_LABEL, type BadgeKey } from '@/lib/nav';
+import { navGroups, homeFor, GROUP_LABEL, GROUP_LABEL_HI, type BadgeKey } from '@/lib/nav';
 import { t, pick } from '@/lib/i18n';
 import { nowIso, today } from '@/lib/clock';
 import { countUnread } from '@/lib/feed';
 import { countEvidenceToCheck, countTasks, approvalQueue } from '@/lib/cases';
 import { scopeName } from '@/lib/repo';
 import { ROLE_LABELS } from '@domain/permissions';
-import { Sidebar, HeaderTitle, MobileDrawer, UserMenu, UserMenuLink, UserMenuForm, LanguageToggle, type ClientNavGroup } from './Chrome';
+import { Sidebar, HeaderTitle, MobileDrawer, UserMenu, UserMenuLink, UserMenuForm, LanguageToggle, BottomTabs, type ClientNavGroup } from './Chrome';
 import { Icon } from './Icon';
 import { fmtDate } from './ui';
 import { AssistantDrawer } from './Chat';
 import { may } from '@/lib/guard';
+import { can } from '@/lib/authz';
 import { aiStatus } from '@/lib/ai/config';
 import { listComplaints } from '@/lib/complaints';
 import { verificationQueue, canDecide } from '@/lib/onboarding';
@@ -42,17 +43,29 @@ export default async function Shell({ children }: { children: ReactNode }) {
     accounts: verificationQueue(session).filter((r) => r.status === 'approval_pending' && canDecide(session, r).allowed).length,
   };
   const groups: ClientNavGroup[] = navGroups(session).map((g) => ({
-    key: g.key, label: GROUP_LABEL[g.key],
+    key: g.key, label: pick(lang, GROUP_LABEL[g.key], GROUP_LABEL_HI[g.key]),
     sections: g.sections.map((s) => ({
       href: s.href, icon: s.icon, label: t(lang, s.key), badge: s.badge ? badges[s.badge] : undefined,
       children: s.children.map((c) => ({ href: c.href, label: t(lang, c.key), badge: c.badge ? badges[c.badge] : undefined })),
     })),
   }));
 
+  // Field roles get a thumb-reach tab bar on phones.
+  const fieldTabs = homeFor(session) === '/today' ? [
+    { href: '/today', icon: 'home', label: t(lang, 'navToday') },
+    session.roles.some((r) => r.role === 'headmaster')
+      ? { href: '/school', icon: 'school', label: t(lang, 'navMySchool') }
+      : { href: '/schools', icon: 'school', label: t(lang, 'navSchools') },
+    { href: '/tasks', icon: 'clipboard', label: t(lang, 'navTasks'), badge: badges.tasks },
+    can(session, 'create_complaint')
+      ? { href: '/complaints/new', icon: 'plus', label: pick(lang, 'Raise', 'दर्ज करें') }
+      : { href: '/notifications', icon: 'bell', label: t(lang, 'navNotifications'), badge: badges.notifications },
+  ] : null;
+
   const footer = (
     <div className="space-y-1 text-xs text-navy-300">
       <p className="flex items-center gap-1.5" title={`Demo clock: ${nowIso()}`}>
-        <Icon name="calendar" size={13} />{t(lang, 'demoClock')}: <span className="tnum font-medium text-white">{fmtDate(today())}</span>
+        <Icon name="calendar" size={13} />{t(lang, 'demoClock')}: <span className="tnum font-medium text-white">{fmtDate(today(), false, lang)}</span>
       </p>
       <p className="flex items-center gap-1.5"><Icon name="info" size={13} />{pick(lang, 'Fictional demo data', 'काल्पनिक डेमो डेटा')}</p>
     </div>
@@ -60,7 +73,13 @@ export default async function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar groups={groups} homeHref={homeFor(session)} footer={footer} scope={{ name: scope, role: roleLabel }} />
+      <Sidebar groups={groups} homeHref={homeFor(session)} footer={footer} scope={{ name: scope, role: roleLabel }} labels={{
+        home: pick(lang, 'Karyavahi home', 'कार्यवाही मुखपृष्ठ'),
+        tagline: pick(lang, 'Education accountability', 'शिक्षा जवाबदेही'),
+        collapse: pick(lang, 'Collapse', 'छोटा करें'),
+        collapseSidebar: pick(lang, 'Collapse sidebar', 'साइडबार छोटा करें'),
+        expandSidebar: pick(lang, 'Expand sidebar', 'साइडबार बड़ा करें'),
+      }} />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="bg-amber-light px-4 py-1 text-center text-2xs font-semibold uppercase tracking-[0.1em] text-warn no-print" role="note">
@@ -81,7 +100,7 @@ export default async function Shell({ children }: { children: ReactNode }) {
               className="h-9 w-52 rounded-lg border border-line bg-white pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15 xl:w-64" />
           </form>
           <Link href="/search" className="btn-ghost px-2 md:hidden"><Icon name="search" size={19} label={t(lang, 'navSearch')} /></Link>
-          {may(session, 'ai.assistant') ? <Suspense fallback={null}><AssistantDrawer configured={aiStatus().configured} userKey={session.user_id} /></Suspense> : null}
+          {may(session, 'ai.assistant') ? <Suspense fallback={null}><AssistantDrawer configured={aiStatus().configured} userKey={session.user_id} label={pick(lang, 'Ask AI', 'AI से पूछें')} hint={pick(lang, 'Ask Karyavahi AI about this page', 'इस पृष्ठ के बारे में कार्यवाही AI से पूछें')} /></Suspense> : null}
           <Link href="/notifications" className="btn-ghost relative px-2" title={t(lang, 'navNotifications')}>
             <Icon name="bell" size={19} label={t(lang, 'navNotifications')} />
             {badges.notifications > 0 ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-crit" aria-label={`${badges.notifications} unread`} /> : null}
@@ -97,7 +116,8 @@ export default async function Shell({ children }: { children: ReactNode }) {
           </UserMenu>
         </header>
 
-        <main id="main-content" className="mx-auto w-full max-w-[1480px] flex-1 px-4 pb-16 pt-6 sm:px-6 lg:px-8 print-full">{children}</main>
+        <main id="main-content" className={`mx-auto w-full max-w-[1480px] flex-1 px-4 pt-6 sm:px-6 lg:px-8 lg:pb-16 print-full ${fieldTabs ? 'pb-28' : 'pb-16'}`}>{children}</main>
+        {fieldTabs ? <BottomTabs tabs={fieldTabs} label={pick(lang, 'Main sections', 'मुख्य भाग')} /> : null}
       </div>
     </div>
   );

@@ -164,6 +164,10 @@ export async function verifyEvidenceAction(_prev: State, form: FormData): Promis
 export async function submitEvidenceAction(_prev: State, form: FormData): Promise<State> {
   const s = await requireSession();
   const taskId = str(form, 'task_id');
+  const file = form.get('photo');
+  const photo = file instanceof File && file.size > 0
+    ? { bytes: new Uint8Array(await file.arrayBuffer()), name: file.name }
+    : null;
   const res = await attempt(
     () => {
       w.submitEvidence(s, {
@@ -171,12 +175,14 @@ export async function submitEvidenceAction(_prev: State, form: FormData): Promis
         note: str(form, 'note'),
         schoolId: str(form, 'school_id') || null,
         gps: (str(form, 'gps') || 'not_captured') as 'matched' | 'not_captured' | 'outside_radius',
+        photo,
       });
     },
-    'Proof submitted. Someone other than you has to check it.',
+    photo ? 'Proof and photo submitted. Someone other than you has to check it.' : 'Proof submitted. Someone other than you has to check it.',
   );
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath('/tasks');
+  revalidatePath('/today');
   return res;
 }
 
@@ -187,6 +193,7 @@ export async function acknowledgeTaskAction(_prev: State, form: FormData): Promi
   const res = await attempt(() => { w.acknowledgeTask(s, taskId); }, 'Marked as seen.');
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath('/tasks');
+  revalidatePath('/today');
   return res;
 }
 
@@ -196,6 +203,7 @@ export async function startTaskAction(_prev: State, form: FormData): Promise<Sta
   const res = await attempt(() => { w.startTask(s, taskId); }, 'Marked as started.');
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath('/tasks');
+  revalidatePath('/today');
   return res;
 }
 

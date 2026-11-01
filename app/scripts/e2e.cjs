@@ -175,11 +175,40 @@ const ok = (label, cond, extra = '') => {
   ok('the task shows who had it and why it moved', movedText.includes('This task was reassigned') && movedText.includes('CRC on medical leave until the 20th'));
   await page.screenshot({ path: `${SHOTS}/06d-reassigned.png`, fullPage: true });
 
+  // ---- My day: a headmaster takes the new task from "New" to proof with a photo ----
+  await signIn('hm.sch-01893@demo.karyavahi.test');
+  ok('the headmaster lands on My day', page.url().endsWith('/today'), page.url());
+  await page.reload({ waitUntil: 'networkidle' }); // now in English, set after the landing page loaded
+  const card = page.locator('li', { hasText: 'remedial hour' }).first();
+  ok('the new task is on My day, marked new', (await card.count()) === 1 && (await card.innerText()).includes('New'));
+  await card.getByRole('button', { name: 'Seen it' }).click();
+  await card.getByRole('button', { name: 'Seen it' }).waitFor({ state: 'detached', timeout: 15000 });
+  await card.getByRole('button', { name: 'Started' }).click();
+  await card.getByRole('button', { name: 'Started' }).waitFor({ state: 'detached', timeout: 15000 });
+  ok('seen and started are each one tap, on the same screen', page.url().endsWith('/today'));
+  await card.locator('summary', { hasText: 'Hand in proof' }).click();
+  // A small JPEG; the server checks the bytes and computes the hash itself.
+  const photo = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/yQALCAABAAEBAREA/8wABgAQEAX/2gAIAQEAAD8A0s8g/9k=', 'base64');
+  await card.locator('input[name=photo]').setInputFiles({ name: 'register.jpg', mimeType: 'image/jpeg', buffer: photo });
+  await card.locator('textarea[name=note]').fill('Attendance register for week 1, signed by the class teacher.');
+  await card.getByRole('button', { name: 'Hand in', exact: true }).click();
+  await page.getByText(/Proof and photo submitted/).waitFor({ timeout: 15000 }).catch(() => {});
+  await page.reload({ waitUntil: 'networkidle' });
+  const after = await page.locator('li', { hasText: 'remedial hour' }).first().innerText();
+  ok('the proof counts against the task', /Proof: 1\/3/.test(after), after.replace(/\s+/g, ' ').slice(0, 160));
+  await page.screenshot({ path: `${SHOTS}/06e-myday.png`, fullPage: true });
+  const taskLink = await page.locator('li', { hasText: 'remedial hour' }).first().locator('a[href^="/tasks/"]').first().getAttribute('href');
+  await page.goto(`${BASE}${taskLink}`, { waitUntil: 'networkidle' });
+  const img = page.locator('img[src^="/api/evidence/"]').first();
+  ok('the task page shows the photo', (await img.count()) === 1);
+  const served = await page.request.get(`${BASE}${await img.getAttribute('src')}`);
+  ok('the photo is served, intact, as an image', served.status() === 200 && (served.headers()['content-type'] ?? '').startsWith('image/jpeg'), String(served.status()));
+
   // ---- the other roles ----
   const roles = [
     ['state.lead@demo.karyavahi.test', 'overview', '07-state'],
     ['deo.rmp@demo.karyavahi.test', 'overview', '08-district'],
-    ['crc.clu-001@demo.karyavahi.test', 'field', '09-field'],
+    ['crc.clu-001@demo.karyavahi.test', 'today', '09-field'],
     ['auditor.state@demo.karyavahi.test', 'audit', '10-audit'],
   ];
   for (const [email, path, shot] of roles) {
@@ -209,8 +238,9 @@ const ok = (label, cond, extra = '') => {
   await page.getByRole('button', { name: 'Account menu' }).click();
   const en2 = page.getByRole('menuitem', { name: 'Switch to English' });
   if (await en2.count()) { await en2.first().click(); await page.waitForLoadState('networkidle'); await page.waitForTimeout(500); }
+  ok('the headmaster lands on My day', page.url().includes('/today'), page.url());
+  await page.goto(`${BASE}/school`, { waitUntil: 'networkidle' });
   const hmText = await page.locator('body').innerText();
-  ok('the headmaster lands on their own school', page.url().includes('/school'), page.url());
   ok('the headmaster is told what they cannot see',
     /not shown to a headmaster|refused to this role/i.test(hmText));
   await page.screenshot({ path: `${SHOTS}/11-headmaster.png`, fullPage: true });

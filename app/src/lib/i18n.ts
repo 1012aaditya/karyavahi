@@ -47,6 +47,8 @@ export const T: Dict = {
   navJobs: { en: 'System jobs', hi: 'सिस्टम कार्य' },
   navAi: { en: 'AI activity log', hi: 'AI लॉग' },
   navOverview: { en: 'Dashboard', hi: 'डैशबोर्ड' },
+  navToday: { en: 'My day', hi: 'आज का काम' },
+  navMySchool: { en: 'My school', hi: 'मेरा विद्यालय' },
   navExecutionAll: { en: 'All field work', hi: 'सभी क्षेत्र कार्य' },
   navHotspots: { en: 'Learning hotspots', hi: 'अधिगम हॉटस्पॉट' },
   navExecution: { en: 'Field operations', hi: 'क्षेत्र संचालन' },

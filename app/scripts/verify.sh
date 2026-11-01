@@ -39,6 +39,9 @@ npx tsx --conditions=react-server scripts/scope-test.mts 2>&1 | grep -vE 'Experi
 step 'the plan composer and the task generator'
 npx tsx --conditions=react-server scripts/plan-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
 
+step 'My day and photo proof'
+npx tsx --conditions=react-server scripts/myday-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
+
 step 'sign-in sessions and request checks'
 npx tsx --conditions=react-server scripts/session-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
 

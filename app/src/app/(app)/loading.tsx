@@ -1,12 +1,15 @@
+import { getLanguage } from '@/lib/session';
+
 /**
  * Shown while a page renders. Every page reads the database per request, so without this the
  * screen stays on the previous page with no sign that anything is happening. The shape follows
  * the common layout: a title, a row of figures, and two panels.
  */
-export default function Loading() {
+export default async function Loading() {
+  const lang = await getLanguage();
   return (
     <div className="space-y-5" aria-busy="true" aria-live="polite">
-      <span className="sr-only">Loading…</span>
+      <span className="sr-only">{lang === 'hi' ? 'लोड हो रहा है…' : 'Loading…'}</span>
       <div className="space-y-2">
         <div className="skeleton h-3 w-24" />
         <div className="skeleton h-7 w-80 max-w-full" />

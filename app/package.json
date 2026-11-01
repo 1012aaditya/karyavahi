@@ -19,6 +19,8 @@
     "test:integrity": "tsx --conditions=react-server scripts/integrity-test.mts",
     "test:scope": "tsx --conditions=react-server scripts/scope-test.mts",
     "test:plan": "tsx --conditions=react-server scripts/plan-test.mts",
+    "test:myday": "tsx --conditions=react-server scripts/myday-test.mts",
+    "test:hindi": "node scripts/hindi-check.mjs",
     "crawl": "node scripts/crawl.mjs",
     "e2e": "node scripts/e2e.cjs",
     "db:init": "node scripts/db-init.mjs",

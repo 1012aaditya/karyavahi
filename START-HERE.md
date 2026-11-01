@@ -58,6 +58,9 @@ The login page lists one account per role. The most interesting path through the
    **CASE-0127** and press **Open the plan composer**: pick an intervention and schools, preview
    how success will be judged, and submit. The district officer (`deo.amp@demo.karyavahi.test`)
    approves it, and the block officer then turns it into tasks with **Review and assign the tasks**.
+   Then sign in as one of that plan's headmasters (for example `hm.sch-01893@demo.karyavahi.test`):
+   they land on **My day**, where the new task can be marked seen, started and given proof with a
+   photo, on a phone-sized screen and in Hindi.
 5. Try something you should not be able to do — sign in as the cluster coordinator and open
    `/approvals`, or as a headmaster and open `/audit`. The refusal explains itself.
 

@@ -19,16 +19,16 @@ import { appendAudit } from './write';
  */
 
 export const BLOCKER_TYPES = [
-  { key: 'staff_unavailable', label: 'Staff unavailable', level: 'block', fix: 'Reassign within the cluster or request a temporary deputation (INT-11).' },
-  { key: 'budget_unavailable', label: 'Budget unavailable', level: 'district', fix: 'Raise with the DEO for release from the block contingency head.' },
-  { key: 'materials_unavailable', label: 'Teaching materials unavailable', level: 'block', fix: 'Request kits from the BRC store or a neighbouring block.' },
-  { key: 'training_incomplete', label: 'Training incomplete', level: 'block', fix: 'Schedule a make-up orientation with the BRC before delivery starts.' },
-  { key: 'school_closure', label: 'School closure', level: 'block', fix: 'Extend the deadline by the closure length; record the reason.' },
-  { key: 'low_attendance', label: 'Low attendance', level: 'block', fix: 'Pair with an attendance follow-up drive (INT-09) before continuing.' },
-  { key: 'connectivity', label: 'Connectivity issues', level: 'block', fix: 'Allow offline submission and sync at the cluster resource centre.' },
-  { key: 'approval_pending', label: 'Administrative approval pending', level: 'district', fix: 'Escalate to the approving officer with the case reference.' },
-  { key: 'unreasonable_deadline', label: 'Unreasonable deadline', level: 'block', fix: 'Reset the deadline with a written reason (audited).' },
-  { key: 'external_dependency', label: 'External dependency', level: 'district', fix: 'Name the dependency owner and set a follow-up date.' },
+  { key: 'staff_unavailable', label: 'Staff unavailable', hi: 'कर्मचारी उपलब्ध नहीं', level: 'block', fix: 'Reassign within the cluster or request a temporary deputation (INT-11).' },
+  { key: 'budget_unavailable', label: 'Budget unavailable', hi: 'बजट उपलब्ध नहीं', level: 'district', fix: 'Raise with the DEO for release from the block contingency head.' },
+  { key: 'materials_unavailable', label: 'Teaching materials unavailable', hi: 'शिक्षण सामग्री उपलब्ध नहीं', level: 'block', fix: 'Request kits from the BRC store or a neighbouring block.' },
+  { key: 'training_incomplete', label: 'Training incomplete', hi: 'प्रशिक्षण अधूरा', level: 'block', fix: 'Schedule a make-up orientation with the BRC before delivery starts.' },
+  { key: 'school_closure', label: 'School closure', hi: 'विद्यालय बंद', level: 'block', fix: 'Extend the deadline by the closure length; record the reason.' },
+  { key: 'low_attendance', label: 'Low attendance', hi: 'कम उपस्थिति', level: 'block', fix: 'Pair with an attendance follow-up drive (INT-09) before continuing.' },
+  { key: 'connectivity', label: 'Connectivity issues', hi: 'नेटवर्क की समस्या', level: 'block', fix: 'Allow offline submission and sync at the cluster resource centre.' },
+  { key: 'approval_pending', label: 'Administrative approval pending', hi: 'प्रशासनिक स्वीकृति लंबित', level: 'district', fix: 'Escalate to the approving officer with the case reference.' },
+  { key: 'unreasonable_deadline', label: 'Unreasonable deadline', hi: 'अव्यावहारिक समय-सीमा', level: 'block', fix: 'Reset the deadline with a written reason (audited).' },
+  { key: 'external_dependency', label: 'External dependency', hi: 'बाहरी निर्भरता', level: 'district', fix: 'Name the dependency owner and set a follow-up date.' },
 ] as const;
 
 export type BlockerType = (typeof BLOCKER_TYPES)[number]['key'];

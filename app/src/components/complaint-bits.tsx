@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { Complaint } from '@/lib/complaints';
-import { STATUS, slaState } from '@/lib/complaints';
+import { STATUS, STATUS_HI, slaState } from '@/lib/complaints';
 import { Icon } from './Icon';
 
 /** Shared complaint presentation. */
@@ -11,18 +11,20 @@ const TONE = {
   warn: 'border-warn/30 bg-warn-light text-warn', critical: 'border-crit/30 bg-crit-light text-crit',
 } as const;
 
-export function ComplaintStatus({ status }: { status: string }) {
+export function ComplaintStatus({ status, lang = 'en' }: { status: string; lang?: 'en' | 'hi' }) {
   const s = STATUS[status] ?? { label: status, tone: 'neutral' as const };
-  return <span className={`chip ${TONE[s.tone]}`}>{s.label}</span>;
+  return <span className={`chip ${TONE[s.tone]}`}>{lang === 'hi' ? STATUS_HI[status] ?? s.label : s.label}</span>;
 }
 
-export function PriorityChip({ p }: { p: string }) {
+const PRIORITY_HI: Record<string, string> = { critical: 'अति गंभीर', high: 'अधिक', medium: 'मध्यम', low: 'कम' };
+
+export function PriorityChip({ p, lang = 'en' }: { p: string; lang?: 'en' | 'hi' }) {
   const cls = p === 'critical' ? TONE.critical : p === 'high' ? TONE.warn : TONE.neutral;
-  return <span className={`chip ${cls}`}>{p[0].toUpperCase() + p.slice(1)}</span>;
+  return <span className={`chip ${cls}`}>{lang === 'hi' ? PRIORITY_HI[p] ?? p : p[0].toUpperCase() + p.slice(1)}</span>;
 }
 
-export function SlaChip({ c }: { c: Complaint }) {
-  const s = slaState(c);
+export function SlaChip({ c, lang = 'en' }: { c: Complaint; lang?: 'en' | 'hi' }) {
+  const s = slaState(c, lang);
   if (s.tone === 'none') return null;
   const cls = s.tone === 'crit' ? 'text-crit' : s.tone === 'warn' ? 'text-warn' : 'text-ink-faint';
   return <span className={`inline-flex items-center gap-1 text-xs ${cls}`}><Icon name="clock" size={12} />{s.label}</span>;

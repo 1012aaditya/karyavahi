@@ -53,6 +53,8 @@ export default async function SchoolHome() {
   const look = lookupsFor(lang, { users: todo.map((t) => t.owner_user_id), schools: [schoolId] });
 
   const completed = rounds().filter((r) => r.status === 'completed');
+  const CATEGORY: Record<string, [string, string]> = { primary: ['Primary', 'प्राथमिक'], upper_primary: ['Upper primary', 'उच्च प्राथमिक'], composite: ['Composite', 'संयुक्त'] };
+  const PURPOSE: Record<string, [string, string]> = { routine: ['Routine', 'नियमित'], spot_assessment: ['Spot assessment', 'त्वरित आकलन'], coaching: ['Coaching', 'सहयोग'], spot_check: ['Spot check', 'जाँच'] };
   const comps = competencies();
 
   return (
@@ -87,7 +89,7 @@ export default async function SchoolHome() {
           <div className="card-pad">
             <Facts cols={4}>
               <Field label={pick(lang, 'Village', 'गाँव')}>{s.village}</Field>
-              <Field label={pick(lang, 'Category', 'श्रेणी')}>{s.category.replace(/_/g, ' ')}</Field>
+              <Field label={pick(lang, 'Category', 'श्रेणी')}>{CATEGORY[s.category] ? pick(lang, ...CATEGORY[s.category]) : s.category.replace(/_/g, ' ')}</Field>
               <Field label={pick(lang, 'Total enrolment', 'कुल नामांकन')}><span className="tnum">{fmtInt(s.enrolment_total)}</span></Field>
               <Field label={pick(lang, 'Teachers in position', 'कार्यरत शिक्षक')}>
                 <span className="tnum">{s.teachers_in_position} / {s.teachers_sanctioned}</span>
@@ -107,12 +109,12 @@ export default async function SchoolHome() {
         </Card>
       ) : null}
 
-      <Card>
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <ComplaintsPanel s={session} mode="mine" />
-        <MapPanel title={pick(lang, 'Your school', 'आपका विद्यालय')} height={260} />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <ComplaintsPanel s={session} mode="mine" lang={lang} />
+        <MapPanel title={pick(lang, 'Your school', 'आपका विद्यालय')} height={260} lang={lang} />
       </div>
 
+      <Card>
       <CardHead
           title={pick(lang, 'How your children are doing', 'आपके बच्चों की प्रगति')}
           hint={pick(lang, 'Share reaching the grade benchmark in each round.', 'प्रत्येक दौर में ग्रेड मानक तक पहुँचने वाले बच्चों का प्रतिशत।')}
@@ -145,7 +147,10 @@ export default async function SchoolHome() {
                           xLabels={completed.map((r) => r.code)}
                           series={g.rows}
                           height={190}
-                          caption={`Class ${grade} ${g.label}: percentage of assessed children at the grade benchmark in each round at this school.`}
+                          lang={lang}
+                          caption={pick(lang,
+                            `Class ${grade} ${g.label}: percentage of assessed children at the grade benchmark in each round at this school.`,
+                            `कक्षा ${grade} ${g.label}: इस विद्यालय में प्रत्येक दौर में ग्रेड मानक तक पहुँचे आकलित बच्चों का प्रतिशत।`)}
                         />
                       </div>
                     ))}
@@ -168,7 +173,8 @@ export default async function SchoolHome() {
               }]}
               yLabel="% present"
               height={190}
-              caption="Average daily attendance as a percentage, by month, at this school."
+              lang={lang}
+              caption={pick(lang, 'Average daily attendance as a percentage, by month, at this school.', 'इस विद्यालय में माह के अनुसार औसत दैनिक उपस्थिति, प्रतिशत में।')}
             />
           </div>
         </Card>
@@ -181,8 +187,8 @@ export default async function SchoolHome() {
             {visits.map((v) => (
               <li key={v.id} className="px-4 py-2.5 sm:px-5">
                 <div className="flex flex-wrap items-baseline gap-x-3">
-                  <span className="tnum w-24 shrink-0 text-sm text-ink-faint">{fmtDate(v.visit_date)}</span>
-                  <Pill>{v.purpose.replace(/_/g, ' ')}</Pill>
+                  <span className="tnum w-24 shrink-0 text-sm text-ink-faint">{fmtDate(v.visit_date, false, lang)}</span>
+                  <Pill>{PURPOSE[v.purpose] ? pick(lang, ...PURPOSE[v.purpose]) : v.purpose.replace(/_/g, ' ')}</Pill>
                   <span className="text-sm text-ink-soft">{v.visitor_role.toUpperCase()}</span>
                 </div>
                 {v.notes ? <p className="mt-0.5 pl-[6.75rem] text-sm text-ink-soft">{v.notes}</p> : null}

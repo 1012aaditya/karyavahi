@@ -66,7 +66,7 @@ const IDS = new Map(accounts.map((a) => [a.id, idsFor(a)]));
 db.close();
 
 const COMMON = [
-  '/', '/beo', '/district', '/state', '/field', '/school', '/admin', '/admin/jobs', '/admin/outbox',
+  '/', '/today', '/beo', '/district', '/state', '/field', '/school', '/admin', '/admin/jobs', '/admin/outbox',
   '/cases', '/cases?status=open', '/cases?status=closed', '/cases?severity=critical',
   '/findings', '/findings?status=rejected_noise', '/findings?status=rejected_data_quality',
   '/tasks', '/tasks?filter=overdue', '/tasks?filter=verified', '/tasks?filter=all',
@@ -103,7 +103,8 @@ async function fetchRetry(url, init) {
   for (let attempt = 1; ; attempt++) {
     try { return await fetch(url, init); }
     catch (e) {
-      if (!['ECONNRESET', 'ECONNREFUSED'].includes(e?.cause?.code) || attempt >= 30) throw e;
+      // The dev server restarts itself under memory pressure; any of these means "try again".
+      if (!['ECONNRESET', 'ECONNREFUSED', 'UND_ERR_SOCKET'].includes(e?.cause?.code) || attempt >= 30) throw e;
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
