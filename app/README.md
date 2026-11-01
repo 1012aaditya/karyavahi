@@ -173,7 +173,14 @@ suggested from who covers it: the school's headmaster, the case's cluster coordi
 in the block), the block resource coordinator with the fewest open tasks, the district officer.
 The officer may change owners and due dates but not drop or add tasks, and the independent
 spot-check must go to someone who is not delivering the work. Every owner is notified. A case can
-no longer be moved to "Work assigned" without its tasks. `npm run test:plan` checks all of it.
+no longer be moved to "Work assigned" without its tasks.
+
+A task whose owner cannot do it (leave, transfer, another duty) is moved from its own page by
+the block or district officer (`reassignTask`). The new owner must cover the task's school the
+same way, the independent check stays independent, and a reason is required; it is kept on the
+task with the previous owner, on the case timeline and in the audit chain, and both people are
+notified. Started work goes back to "assigned" for the new owner to acknowledge. A task with proof
+waiting to be checked, or already verified, stays where it is. `npm run test:plan` checks all of it.
 
 A refusal is shown, with its reason, next to the button that caused it. Illegal transitions,
 moves without authority, approvals of your own plan, hand-run sweeps and self-verification

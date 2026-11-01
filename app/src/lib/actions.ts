@@ -118,6 +118,22 @@ export async function assignTasksAction(_prev: State, form: FormData): Promise<S
   return res;
 }
 
+/** Give a task to someone else, with the reason kept on the record. */
+export async function reassignTaskAction(_prev: State, form: FormData): Promise<State> {
+  const s = await requireSession();
+  const taskId = str(form, 'task_id');
+  const res = await attempt(() => {
+    w.reassignTask(s, {
+      taskId, newOwnerUserId: str(form, 'owner'), reason: str(form, 'reason'),
+      taskVersion: Number(str(form, 'task_version')),
+    });
+  }, 'Task reassigned. Both the new and the previous owner have been told.');
+  revalidatePath(`/tasks/${taskId}`);
+  revalidatePath('/tasks');
+  if (res.ok) redirect(`/tasks/${taskId}?done=${encodeURIComponent(res.ok)}`);
+  return res;
+}
+
 export async function setConclusionAction(_prev: State, form: FormData): Promise<State> {
   const s = await requireSession();
   const caseId = str(form, 'case_id');

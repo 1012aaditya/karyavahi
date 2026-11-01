@@ -19,15 +19,19 @@ import {
 } from '@/components/labels';
 import { ActionForm, ReasonBox, Disclose } from '@/components/ActionForm';
 import {
-  acknowledgeTaskAction, startTaskAction, submitEvidenceAction, verifyEvidenceAction,
+  acknowledgeTaskAction, startTaskAction, submitEvidenceAction, verifyEvidenceAction, reassignTaskAction,
 } from '@/lib/actions';
+import { reassignView } from '@/lib/plans';
 
 /** One task: what it asks for, what proof it needs, and what has been submitted so far. */
 
-export default async function TaskPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TaskPage({
+  params, searchParams,
+}: { params: Promise<{ id: string }>; searchParams: Promise<{ done?: string }> }) {
   const session = await pageSession();
   const lang = await getLanguage();
   const { id } = await params;
+  const { done } = await searchParams;
 
   const t = taskById(session, id);
   if (!t) notFound();
@@ -42,6 +46,10 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   const verifiedCount = evidence.filter((e) => e.status === 'verified').length;
   const overdueDays = t.is_overdue ? daysAgo(t.due_date) : 0;
   const canVerifyHere = may(session, 'evidence.verify');
+  const reassign = reassignView(session, t.id);
+  const reassignable = reassign && !reassign.refusal;
+  const choosable = reassign?.options.filter((o) => !o.blocked) ?? [];
+  const prevOwner = t.reassigned_from ? userNames([t.reassigned_from]).get(t.reassigned_from) ?? t.reassigned_from : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -65,6 +73,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           </div>
         }
       />
+
+      {done ? <Callout tone="good" title={pick(lang, 'Done', 'पूर्ण')}>{done}</Callout> : null}
 
       <Card>
         <CardHead title={pick(lang, 'What is being asked', 'क्या करना है')} />
@@ -117,7 +127,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           ) : null}
           {t.reassign_reason ? (
             <Callout tone="warn" title={pick(lang, 'This task was reassigned', 'यह काम पुनः सौंपा गया')}>
-              {t.reassign_reason}
+              {prevOwner ? <>{pick(lang, 'From', 'पहले')} {prevOwner}: </> : null}{t.reassign_reason}
             </Callout>
           ) : null}
 
@@ -136,6 +146,53 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           ) : null}
         </div>
       </Card>
+
+      {reassignable ? (
+        <Card>
+          <CardHead
+            title={pick(lang, 'Give this task to someone else', 'यह काम किसी और को सौंपें')}
+            hint={pick(
+              lang,
+              'For when the owner cannot do it: leave, transfer, another duty. The new owner must cover the same school, and the reason stays on the record.',
+              'जब ज़िम्मेदार व्यक्ति यह न कर सके: छुट्टी, स्थानांतरण, अन्य ड्यूटी। नया व्यक्ति उसी विद्यालय को देखता हो, और कारण दर्ज रहेगा।',
+            )}
+          />
+          <div className="card-pad">
+            {choosable.length === 0 ? (
+              <p className="text-sm text-ink-soft">
+                {pick(lang, 'Nobody else holds this role for this school', 'इस विद्यालय के लिए यह पद किसी और के पास नहीं है')}
+                {reassign!.options.length ? pick(lang, ' without breaking the independent check.', ' जो स्वतंत्र जाँच न तोड़े।') : '.'}
+              </p>
+            ) : (
+              <Disclose label={pick(lang, 'Reassign', 'पुनः सौंपें')}>
+                <ActionForm
+                  action={reassignTaskAction}
+                  hidden={{ task_id: t.id, task_version: String(reassign!.task.version) }}
+                  label={pick(lang, 'Reassign the task', 'काम पुनः सौंपें')}
+                  confirm={['acknowledged', 'in_progress'].includes(t.status)
+                    ? pick(lang, 'The task goes back to "assigned" so the new owner can acknowledge it. Proof already submitted stays with the task.', 'काम फिर "सौंपा गया" होगा ताकि नया व्यक्ति उसे देखे। जमा सबूत बने रहेंगे।')
+                    : undefined}
+                >
+                  <label className="mb-2 block">
+                    <span className="label">{pick(lang, 'New owner', 'नया ज़िम्मेदार')} <span className="text-crit">*</span></span>
+                    <select name="owner" required className="input mt-1" defaultValue="">
+                      <option value="" disabled>{pick(lang, 'Choose a person', 'व्यक्ति चुनें')}</option>
+                      {reassign!.options.map((o) => (
+                        <option key={o.id} value={o.id} disabled={!!o.blocked}>
+                          {o.name} — {o.blocked ? pick(lang, `not allowed: ${o.blocked}`, `अनुमति नहीं: ${o.blocked}`) : o.note}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <ReasonBox required label={pick(lang, 'Why it is moving', 'क्यों बदला जा रहा है')} placeholder={pick(lang, 'For example: CRC on medical leave until the 20th.', 'उदाहरण: CRC 20 तारीख तक चिकित्सा अवकाश पर।')} />
+                </ActionForm>
+              </Disclose>
+            )}
+          </div>
+        </Card>
+      ) : reassign?.refusal?.code === 'wrong_status' && reassign.options.length > 0 && t.status !== 'verified' ? (
+        <p className="text-sm text-ink-soft">{reassign.refusal.message}</p>
+      ) : null}
 
       {isMine ? (
         <Card>

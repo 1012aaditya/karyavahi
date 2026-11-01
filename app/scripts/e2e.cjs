@@ -158,6 +158,23 @@ const ok = (label, cond, extra = '') => {
   ok('the case is now "Work assigned"', assignedText.includes('Work assigned'));
   await page.screenshot({ path: `${SHOTS}/06c-assigned.png`, fullPage: true });
 
+  // ---- the cluster coordinator goes on leave: the officer moves their task ----
+  const spot = page.locator('a[href^="/tasks/TSK-"]', { hasText: 'Spot-assess' }).first();
+  const taskHref = await spot.getAttribute('href');
+  await page.goto(`${BASE}${taskHref}`, { waitUntil: 'networkidle' });
+  await page.locator('summary', { hasText: /^Reassign$/ }).click();
+  const target = await page.locator('select[name=owner] option:not([disabled])').first().getAttribute('value');
+  await page.selectOption('select[name=owner]', target);
+  await page.fill('textarea[name=reason]', 'CRC on medical leave until the 20th');
+  await page.getByRole('button', { name: 'Reassign the task' }).click();
+  await page.waitForURL(/\/tasks\/TSK-\d+\?done=/);
+  // The redirect is a client-side navigation: wait for the page itself, not the loading screen.
+  await page.getByText('This task was reassigned').waitFor({ timeout: 15000 });
+  const movedText = await page.locator('body').innerText();
+  ok('reassigning a task confirms both owners were told', movedText.includes('Task reassigned'));
+  ok('the task shows who had it and why it moved', movedText.includes('This task was reassigned') && movedText.includes('CRC on medical leave until the 20th'));
+  await page.screenshot({ path: `${SHOTS}/06d-reassigned.png`, fullPage: true });
+
   // ---- the other roles ----
   const roles = [
     ['state.lead@demo.karyavahi.test', 'overview', '07-state'],

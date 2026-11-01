@@ -9,7 +9,10 @@ import { canTransition, reasonRequired, closureEligibility, isPlanDecision } fro
 import { evaluateOutcome, OUTCOME_NOTE } from '@domain/outcome';
 import { settingsAt, settingsById } from '@domain/catalog';
 import type { CaseStatus, OutcomeSchoolRow } from '@domain/types';
-import { composeRefusal, orderSchools, previewPlan, preRegistrationFor, taskDrafts, assignRefusal, type PlanCase } from './plans';
+import {
+  composeRefusal, orderSchools, previewPlan, preRegistrationFor, taskDrafts, assignRefusal, reassignRefusal, breaksIndependence,
+  ownerOptions, type PlanCase, type ReassignTask,
+} from './plans';
 import { matchForCase } from './studio';
 
 /**
@@ -633,6 +636,82 @@ export function assignTasks(
     if (moved === 0) throw new Refused('This case changed while you were reviewing the tasks. Reload and check them again.', 'stale');
     transitionCase(s, c.id, 'assigned');
     return { taskIds };
+  });
+}
+
+/**
+ * Give a task to someone else: a coordinator on leave, a headmaster transferred out. The new
+ * owner must cover the task's school the same way the first one did, the independent check stays
+ * independent, and the reason is kept on the task, the case timeline and the audit chain. Work
+ * already acknowledged or started goes back to "assigned", because the new owner has not yet
+ * seen it; proof already submitted stays where it is.
+ */
+export function reassignTask(
+  s: Session,
+  o: { taskId: string; newOwnerUserId: string; reason: string; taskVersion: number },
+): void {
+  const t = one<ReassignTask>(
+    `select id, case_id, plan_id, school_id, owner_user_id, owner_role, cross_source, status, version from tasks where id = ?`,
+    o.taskId,
+  );
+  if (!t) throw new Refused('No such task.', 'not_found');
+  const c = loadCaseForWrite(s, t.case_id);
+  const refusal = reassignRefusal(s, asPlanCase(c), t);
+  if (refusal) {
+    appendAudit({
+      actorUserId: s.user_id, actorRole: actingRole(s), action: 'task.reassign_refused',
+      entityType: 'task', entityId: t.id, reason: refusal.message, result: 'failure',
+    });
+    throw new Refused(refusal.message, refusal.code);
+  }
+  const reason = o.reason.trim();
+  if (reason.length < 5) throw new Refused('Say why the task is moving to someone else.', 'reason_required');
+  if (o.newOwnerUserId === t.owner_user_id) throw new Refused('That person already holds this task.', 'same_owner');
+  const candidate = ownerOptions(asPlanCase(c), t.owner_role, t.school_id).find((x) => x.id === o.newOwnerUserId);
+  if (!candidate) {
+    throw new Refused(`This task must go to a ${t.owner_role.toUpperCase()} who covers it; the person chosen does not.`, 'owner');
+  }
+  if (breaksIndependence(t.plan_id, t.id, !!t.cross_source, o.newOwnerUserId)) {
+    throw new Refused(
+      t.cross_source
+        ? 'This is the independent check, so it cannot go to someone delivering work on the same plan.'
+        : 'That person holds the independent check on this plan, so they cannot also deliver the work it checks.',
+      'not_independent',
+    );
+  }
+  if (t.version !== o.taskVersion) {
+    throw new Refused('This task changed while you were looking at it. Reload and check it again.', 'stale');
+  }
+
+  tx(() => {
+    const changed = run(
+      `update tasks set owner_user_id = ?, reassigned_from = ?, reassign_reason = ?,
+         status = case when status in ('acknowledged','in_progress') then 'assigned' else status end,
+         acknowledged_at = case when status in ('acknowledged','in_progress') then null else acknowledged_at end,
+         version = version + 1
+       where id = ? and version = ?`,
+      o.newOwnerUserId, t.owner_user_id, reason, t.id, o.taskVersion,
+    );
+    if (changed === 0) throw new Refused('This task changed while you were looking at it. Reload and check it again.', 'stale');
+    const title = one<{ title_en: string }>('select title_en from tasks where id = ?', t.id)!.title_en;
+    appendAudit({
+      actorUserId: s.user_id, actorRole: actingRole(s), action: 'task.reassigned',
+      entityType: 'task', entityId: t.id,
+      before: { owner_user_id: t.owner_user_id, status: t.status },
+      after: { owner_user_id: o.newOwnerUserId }, reason,
+    });
+    addCaseEvent({
+      caseId: c.id, actorUserId: s.user_id, actorLabel: s.user_id, kind: 'task_reassigned',
+      summary: `Task reassigned: ${reason}`, related: t.id,
+    });
+    notify({
+      userId: o.newOwnerUserId, kind: 'assignment', title: 'Task reassigned to you',
+      body: `${title} · ${reason}`, entityType: 'task', entityId: t.id, link: `/tasks/${t.id}`,
+    });
+    notify({
+      userId: t.owner_user_id, kind: 'assignment', title: 'A task has moved to someone else',
+      body: `${title} · ${reason}`, entityType: 'task', entityId: t.id, link: `/tasks/${t.id}`,
+    });
   });
 }
 

@@ -1,7 +1,7 @@
 import 'server-only';
 import { all, one, j } from './db';
 import type { Session } from './session';
-import { moveRefusal, may } from './guard';
+import { moveRefusal, may, roleCovers } from './guard';
 import { competency, intervention } from './repo';
 import { matchForCase, feasibility, type InterventionMatch } from './studio';
 import { today, addDays } from './clock';
@@ -306,4 +306,65 @@ export function assignRefusal(s: Session, c: PlanCase): { code: string; message:
   if (r) return r;
   if (!may(s, 'task.assign')) return { code: 'role', message: 'Your role cannot assign tasks.' };
   return null;
+}
+
+// ------------------------------------------------------------------ reassignment
+/** Task states in which the work can still move to someone else. Once proof is in, or checked,
+ *  the task stays with the person who did it. */
+export const REASSIGNABLE = ['assigned', 'acknowledged', 'in_progress', 'sent_back'] as const;
+
+/**
+ * Whether giving this task to this person would break the independent check: the check's owner
+ * must not deliver any of the plan's work, and nobody delivering the work may hold the check.
+ */
+export function breaksIndependence(planId: string, taskId: string, crossSource: boolean, userId: string): boolean {
+  return (one<{ c: number }>(
+    `select count(*) c from tasks where plan_id = ? and id <> ? and owner_user_id = ? and cross_source = ?`,
+    planId, taskId, userId, crossSource ? 0 : 1,
+  )?.c ?? 0) > 0;
+}
+
+export interface ReassignTask {
+  id: string; case_id: string; plan_id: string; school_id: string | null; owner_user_id: string;
+  owner_role: RoleCode; cross_source: number; status: string; version: number;
+}
+
+/** Whether this user may reassign the task: a block or district officer whose role covers the
+ *  case, while the task has no proof waiting or accepted. */
+export function reassignRefusal(s: Session, c: PlanCase, t: ReassignTask): { code: string; message: string } | null {
+  const officer = s.roles.filter((r) => r.role === 'beo' || r.role === 'deo');
+  if (officer.length === 0 || !may(s, 'task.assign')) {
+    return { code: 'role', message: 'Only the block or district officer can give a task to someone else.' };
+  }
+  if (!officer.some((r) => roleCovers(r, c))) {
+    return { code: 'area', message: "Your role does not cover this case's area." };
+  }
+  if (!(REASSIGNABLE as readonly string[]).includes(t.status)) {
+    return {
+      code: 'wrong_status',
+      message: t.status === 'verified'
+        ? 'This task is done and verified, so it stays with the person who did it.'
+        : 'Proof for this task is waiting to be checked. Decide on it first; then the task can move if it is sent back.',
+    };
+  }
+  return null;
+}
+
+/** Everything the task page needs to offer reassignment, or null when the task is out of scope. */
+export function reassignView(s: Session, taskId: string): { task: ReassignTask; refusal: { code: string; message: string } | null; options: (OwnerOption & { blocked: string | null })[] } | null {
+  const t = one<ReassignTask>(
+    `select t.id, t.case_id, t.plan_id, t.school_id, t.owner_user_id, t.owner_role, t.cross_source, t.status, t.version
+       from tasks t where t.id = ?`, taskId,
+  );
+  const c = t ? planCase(s, t.case_id) : null;
+  if (!t || !c) return null;
+  const options = ownerOptions(c, t.owner_role, t.school_id)
+    .filter((o) => o.id !== t.owner_user_id)
+    .map((o) => ({
+      ...o,
+      blocked: breaksIndependence(t.plan_id, t.id, !!t.cross_source, o.id)
+        ? (t.cross_source ? 'delivers work on this plan' : 'holds the independent check')
+        : null,
+    }));
+  return { task: t, refusal: reassignRefusal(s, c, t), options };
 }

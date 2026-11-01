@@ -223,6 +223,57 @@ try {
   const someHm = made.find((t) => t.school_id)?.owner_user_id;
   if (someHm) ok('a headmaster with a task can open the case', cs.getCase(loadSession(someHm)!, CASE) !== null);
 
+  console.log('\n--- reassigning a task ---');
+  // On the plan just assigned: one resource coordinator delivers, the other holds the check.
+  const brcDelivery = made.find((t) => !t.cross_source && one<{ r: string }>('select owner_role r from tasks where id = ?', t.id)?.r === 'brc');
+  const brcCheck = made.find((t) => t.cross_source === 1);
+  const tv = (id: string) => one<{ version: number }>('select version from tasks where id = ?', id)!.version;
+  if (brcDelivery && brcCheck) {
+    refused('delivery work cannot go to the person holding the independent check',
+      () => w.reassignTask(beo, { taskId: brcDelivery.id, newOwnerUserId: brcCheck.owner_user_id, reason: 'BRC on election duty', taskVersion: tv(brcDelivery.id) }), 'not_independent');
+    refused('nor can the check go to the person delivering the work',
+      () => w.reassignTask(beo, { taskId: brcCheck.id, newOwnerUserId: brcDelivery.owner_user_id, reason: 'BRC on election duty', taskVersion: tv(brcCheck.id) }), 'not_independent');
+  }
+
+  // A live seeded task: CASE-0070, Rampur Sadar, its cluster coordinator's delivery task.
+  const rBeo = S('beo.blk-01@demo.karyavahi.test');
+  const rDeo = S('deo.rmp@demo.karyavahi.test');
+  const T = 'TSK-00895';
+  const before = one<{ owner_user_id: string; status: string; version: number; plan_id: string }>('select owner_user_id, status, version, plan_id from tasks where id = ?', T)!;
+  const rpc = plans.planCase(rBeo, 'CASE-0070')!;
+  const otherCrc = plans.ownerOptions(rpc, 'crc', null).find((o) => o.id !== before.owner_user_id)!;
+  const hmHere = one<{ user_id: string }>(`select user_id from user_roles where role = 'headmaster' and scope_id = 'SCH-00002'`)!.user_id;
+  const base = { taskId: T, newOwnerUserId: otherCrc.id, reason: 'CRC on medical leave until the 20th', taskVersion: before.version };
+  ok(`${T} is in progress with the cluster coordinator`, before.status === 'in_progress' && !!otherCrc);
+  refused('the cluster coordinator cannot reassign their own task', () => w.reassignTask(loadSession(before.owner_user_id)!, base), 'role');
+  refused('a resource coordinator cannot reassign it', () => w.reassignTask(S('brc1.blk-01@demo.karyavahi.test'), base), 'role');
+  refused('a headmaster on the case cannot', () => w.reassignTask(loadSession(hmHere)!, base), 'role');
+  refused("another block's officer cannot", () => w.reassignTask(otherBeo, base), 'scope');
+  refused('a reason is required', () => w.reassignTask(rBeo, { ...base, reason: '' }), 'reason_required');
+  refused('it cannot be "reassigned" to the same person', () => w.reassignTask(rBeo, { ...base, newOwnerUserId: before.owner_user_id }), 'same_owner');
+  refused('a cluster task cannot go to a headmaster', () => w.reassignTask(rBeo, { ...base, newOwnerUserId: hmHere }), 'owner');
+  refused('a stale form is refused', () => w.reassignTask(rBeo, { ...base, taskVersion: before.version - 1 }), 'stale');
+  const doneTask = one<{ id: string; version: number }>(`select t.id, t.version from tasks t join cases c on c.id = t.case_id where c.block_id = 'BLK-01' and t.status = 'verified' limit 1`)!;
+  refused('a verified task stays with whoever did it', () => w.reassignTask(rBeo, { ...base, taskId: doneTask.id, taskVersion: doneTask.version }), 'wrong_status');
+  ok('refusals by the wrong role are in the audit trail',
+    Number(one<{ c: number }>(`select count(*) c from audit_events where action = 'task.reassign_refused' and entity_id = ?`, T)?.c) >= 3);
+  ok('nothing changed on the task', one<{ o: string }>('select owner_user_id o from tasks where id = ?', T)?.o === before.owner_user_id);
+
+  const notes0 = Number(one<{ c: number }>(`select count(*) c from notifications where entity_id = ?`, T)?.c ?? 0);
+  w.reassignTask(rBeo, base);
+  const after = one<{ owner_user_id: string; status: string; acknowledged_at: string | null; reassigned_from: string; reassign_reason: string; version: number }>(
+    'select owner_user_id, status, acknowledged_at, reassigned_from, reassign_reason, version from tasks where id = ?', T)!;
+  ok('the block officer moves it to another cluster coordinator', after.owner_user_id === otherCrc.id);
+  ok('the previous owner and the reason are kept on the task', after.reassigned_from === before.owner_user_id && after.reassign_reason === base.reason);
+  ok('started work goes back to "assigned" for the new owner to acknowledge', after.status === 'assigned' && after.acknowledged_at === null);
+  ok('the task is one version on', after.version === before.version + 1);
+  ok('both the new and the previous owner are notified', Number(one<{ c: number }>(`select count(*) c from notifications where entity_id = ?`, T)?.c) - notes0 === 2);
+  ok('it is in the audit trail with the reason', feed.auditFor(auditor, 'task', T).some((a) => a.action === 'task.reassigned' && a.reason === base.reason));
+  ok('and on the case timeline', cs.caseTimeline(rBeo, 'CASE-0070').some((e) => e.kind === 'task_reassigned' && e.related_entity === T));
+  ok('the new owner can open the task', cs.taskById(loadSession(otherCrc.id)!, T) !== null);
+  w.reassignTask(rDeo, { ...base, newOwnerUserId: before.owner_user_id, reason: 'Back from leave early', taskVersion: after.version });
+  ok('the district officer can move it back', one<{ o: string }>('select owner_user_id o from tasks where id = ?', T)?.o === before.owner_user_id);
+
   console.log('\n--- the audit chain still verifies ---');
   const chain = feed.verifyAuditChain(auditor);
   ok('links and contents hold', chain.linked && chain.contentOk, JSON.stringify(chain).slice(0, 160));
