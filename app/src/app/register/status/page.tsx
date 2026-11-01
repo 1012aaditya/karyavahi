@@ -5,6 +5,7 @@ import { AuthFrame } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
 import { ActionForm, ReasonBox } from '@/components/ActionForm';
 import { verifyEmailAction, affiliationAction, respondInfoAction } from '@/lib/actions';
+import { demoCodeFor } from '@/lib/reg-code';
 
 /**
  * Request status, looked up by reference + email (no account exists yet). Shows the applicant
@@ -14,9 +15,11 @@ import { verifyEmailAction, affiliationAction, respondInfoAction } from '@/lib/a
 const STEPS = ['email_verification_pending', 'institutional_verification_pending', 'approval_pending', 'active'];
 const STEP_LABEL = ['Email', 'Affiliation', 'Approval', 'Active'];
 
-export default async function StatusPage({ searchParams }: { searchParams: Promise<{ id?: string; email?: string; code?: string }> }) {
+export default async function StatusPage({ searchParams }: { searchParams: Promise<{ id?: string; email?: string }> }) {
   const sp = await searchParams;
   const r = sp.id && sp.email ? publicRequest(sp.id, sp.email) : null;
+  // Shown only to the browser that submitted this request; never read from the address.
+  const code = r?.status === 'email_verification_pending' ? await demoCodeFor(r.id) : null;
   const verifier = r?.verifier_user_id ? userNames([r.verifier_user_id]).get(r.verifier_user_id) : null;
   const step = r ? (r.status === 'info_requested' ? 2 : r.status === 'rejected' ? -1 : STEPS.indexOf(r.status)) : -1;
 
@@ -52,9 +55,9 @@ export default async function StatusPage({ searchParams }: { searchParams: Promi
             {r.status === 'email_verification_pending' ? (
               <section className="card p-5">
                 <h2 className="text-md font-semibold text-ink">Verify your email</h2>
-                {sp.code ? <p className="mt-2 rounded-lg border border-warn/30 bg-warn-light px-3 py-2 text-sm text-ink"><Icon name="info" size={14} className="mr-1 inline text-warn" />Demo mode: no email is sent. Your code is <strong className="font-mono text-md">{sp.code}</strong>.</p> : <p className="mt-1 text-sm text-ink-faint">Demo mode: the code was shown when you submitted. Seeded demo requests use a fixed code shown to the demo administrator.</p>}
+                {code ? <p className="mt-2 rounded-lg border border-warn/30 bg-warn-light px-3 py-2 text-sm text-ink"><Icon name="info" size={14} className="mr-1 inline text-warn" />Demo mode: no email is sent. Your code is <strong className="font-mono text-md">{code}</strong>.</p> : <p className="mt-1 text-sm text-ink-faint">Demo mode: the code was shown when you submitted. Seeded demo requests use a fixed code shown to the demo administrator.</p>}
                 <ActionForm action={verifyEmailAction} hidden={{ id: r.id, email: r.email }} label="Verify" className="mt-3">
-                  <input name="code" inputMode="numeric" required maxLength={6} placeholder="6-digit code" className="input mb-2 w-48 font-mono" defaultValue={sp.code ?? ''} />
+                  <input name="code" inputMode="numeric" required maxLength={6} placeholder="6-digit code" className="input mb-2 w-48 font-mono" defaultValue={code ?? ''} />
                 </ActionForm>
               </section>
             ) : null}

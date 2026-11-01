@@ -130,6 +130,8 @@ const resub = cs.caseApprovals(beo, 'CASE-0130').filter((a) => a.decision === 'p
 ok('resubmitting opens exactly one pending approval', resub.length === 1, String(resub.length));
 ok('it records who submitted it', resub[0]?.submitted_by === beo.user_id && resub[0]?.plan_id === p130);
 ok('the plan is marked submitted again', one<{ status: string }>('select status from case_plans where id = ?', p130)?.status === 'submitted');
+ok('the new approval names the lever it was submitted under, and the role that lever needs',
+  resub[0]?.lever === 'block' && resub[0]?.required_role === 'beo' && one<{ l: string }>('select lever l from approvals where id = ?', resub[0]!.id)?.l === 'block');
 refused('the resubmitter cannot approve it either', () => w.decidePlan(beo, { caseId: 'CASE-0130', planId: p130, decision: 'approved' }), 'own_submission');
 w.decidePlan(deo, { caseId: 'CASE-0130', planId: p130, decision: 'approved' });
 ok('the district officer approves the resubmitted plan, and the row is decided',
@@ -152,6 +154,43 @@ ok('the system itself (no session) can still run it', typeof w.reminderSweep(nul
 refused('the state team cannot move the demo clock', () => w.setDemoClock(state, '2026-11-20T06:30:00Z'), 'role');
 w.setDemoClock(admin, '2026-11-20T06:30:00.000Z');
 ok('the demo admin can', one<{ value: string }>(`select value from app_state where key = 'demo_clock'`)?.value.startsWith('2026-11-20') === true);
+
+console.log('\n--- an approval waits on the role its own plan\'s lever needs ---');
+{
+  const { all } = await import('../src/lib/db');
+  const { requiredRoleFor, LEVER_DECIDERS } = await import('../src/lib/guard');
+  type Row = { id: string; case_id: string; plan_id: string; required_role: string; lever: string | null; plan_lever: string | null; case_lever: string; decision: string; current: number };
+  const rows = all<Row>(`select a.id, a.case_id, a.plan_id, a.required_role, a.lever, i.lever plan_lever, c.lever case_lever, a.decision,
+                                (a.plan_id = c.current_plan_id) current
+                           from approvals a join cases c on c.id = a.case_id
+                           left join case_plans p on p.id = a.plan_id left join interventions i on i.id = p.intervention_id`);
+  ok(`every approval (${rows.length}) records the lever it was decided under`, rows.every((r) => !!r.lever), rows.filter((r) => !r.lever).map((r) => r.id).join(', '));
+  ok('for the seeded ones that is the lever of the approval\'s own plan', rows.filter((r) => r.plan_lever).every((r) => r.lever === r.plan_lever || r.decision === 'pending'));
+  const bad = rows.filter((r) => r.lever && r.required_role !== requiredRoleFor(r.lever as 'block'));
+  ok('and every required role agrees with that lever (block: BEO; district and PAB: DEO)', bad.length === 0, bad.map((r) => `${r.id} ${r.lever}/${r.required_role}`).join(', '));
+  const moved = rows.filter((r) => r.lever !== r.case_lever);
+  ok(`approvals that differ from the case's lever today (${moved.length}) are all for an earlier plan or a PAB referral`,
+    moved.every((r) => !r.current || r.case_lever === 'pab'), moved.filter((r) => r.current && r.case_lever !== 'pab').map((r) => r.id).join(', '));
+  const pending = rows.filter((r) => r.decision === 'pending');
+  ok(`every pending approval (${pending.length}) waits on a role the decision gate accepts for the case`,
+    pending.every((r) => LEVER_DECIDERS[r.case_lever as 'block'].includes(r.required_role as 'beo')));
+  const old = rows.find((r) => r.lever !== r.case_lever && !r.current)!;
+  const shown = cs.caseApprovals(state, old.case_id).find((a) => a.id === old.id)!;
+  ok(`the case page shows ${old.id} under its own plan's lever (${old.lever}), not the case's current one (${old.case_lever})`,
+    shown.lever === old.lever && shown.required_role === requiredRoleFor(old.lever as 'block'));
+}
+
+console.log('\n--- the AI executive briefing follows its permission ---');
+{
+  const { may } = await import('../src/lib/guard');
+  const br = await import('../src/lib/ai/briefing');
+  const crc = S('crc.clu-001@demo.karyavahi.test');
+  ok('the permission matrix gives it to district and state officers', br.mayReadBriefing(deo) && br.mayReadBriefing(state) && may(deo, 'ai.executive_briefing'));
+  ok('…and not to a block officer or a field coordinator, who still have the assistant', !br.mayReadBriefing(beo) && !br.mayReadBriefing(crc) && may(beo, 'ai.assistant'));
+  const r = await br.generateBriefing(beo);
+  ok('asking for one as a block officer is refused before any model is called', r.status === 'error' && r.message === br.BRIEFING_REFUSAL, JSON.stringify(r));
+  ok('and no briefing is handed back from the store either', br.cachedBriefing(beo) === null);
+}
 
 { const { db: dbf } = await import('../src/lib/db'); try { dbf().close(); } catch { /* already closed */ } }
 swap(BACKUP, LIVE);

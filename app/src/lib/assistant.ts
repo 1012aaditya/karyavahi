@@ -2,6 +2,7 @@ import 'server-only';
 import { all, one } from './db';
 import { casesPred, tasksPred, evidencePred, findingsPred, and } from './scope';
 import type { Session } from './session';
+import { independentOf } from './duty';
 import { today } from './clock';
 import { pick } from './i18n';
 import type { Language } from '@domain/types';
@@ -52,7 +53,7 @@ export const QUESTIONS: QuestionDef[] = [
       const ep = and(
         evidencePred(s, 'e'),
         { sql: `e.status = 'pending'`, params: [] },
-        { sql: 'e.submitted_by <> ?', params: [s.user_id] },
+        independentOf(s.user_id, 'e'),
       );
       const proof = Number(one<{ c: number }>(`select count(*) c from evidence e where ${ep.sql}`, ...ep.params)?.c ?? 0);
       const mine = Number(one<{ c: number }>(

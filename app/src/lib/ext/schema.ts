@@ -112,6 +112,8 @@ function geojson(u: GenUnit): string {
 
 export function ensureExtensions(c: DatabaseSync): void {
   c.exec(DDL);
+  // First, so deriving the demo content below can use the indexes too.
+  migratePerf(c);
   const v = one<{ value: string }>(c, `select value from ext_meta where key = 'version'`)?.value;
   if (v !== EXT_VERSION) {
     c.exec('begin immediate');
@@ -130,6 +132,88 @@ export function ensureExtensions(c: DatabaseSync): void {
   }
   ensureRealGeography(c);
   migrateIntegrity(c);
+  migrateApprovalLever(c);
+}
+
+// ---------------------------------------------------------------- speed
+/**
+ * Indexes for the columns pages filter and join on that the seed was loaded without, and a
+ * counter that moves whenever learning data changes. Additive only, once per database (a demo
+ * reset restores the pristine file, so it runs again there), and before the demo content is
+ * derived, because deriving the reporting lines looks people up by role and place.
+ *
+ * - user_roles (role, scope_id): "who is the CRC of this cluster" — asked once per account when
+ *   the reporting lines are derived, and again for every task owner the plan composer offers
+ * - users lower(email): sign-in by email
+ * - tasks school_id, evidence submitted_by: the map's per-school task counts and the "proof I
+ *   submitted" half of every evidence scope check
+ * - learning_data_gen: bumped by a trigger on every insert, update or delete in assessment_results
+ *   or schools. learning-cache.ts keeps the expensive learning sums only while it is unchanged,
+ *   so an imported round shows up on the next request, whichever code path imported it.
+ */
+export const PERF_VERSION = 'perf-v1';
+export const LEARNING_GEN_KEY = 'learning_data_gen';
+
+const PERF_INDEXES: [name: string, table: string, cols: string][] = [
+  ['ix_user_roles_role_scope', 'user_roles', '(role, scope_id)'],
+  ['ix_users_email_lower', 'users', '(lower(email))'],
+  ['ix_tasks_school', 'tasks', '(school_id)'],
+  ['ix_evi_submitter', 'evidence', '(submitted_by)'],
+];
+
+function migratePerf(c: DatabaseSync): void {
+  if (one<{ value: string }>(c, `select value from ext_meta where key = 'perf'`)?.value === PERF_VERSION) return;
+  c.exec('begin immediate');
+  try {
+    for (const [name, table, cols] of PERF_INDEXES) exec(c, `create index if not exists "${name}" on "${table}" ${cols}`);
+    exec(c, `insert into ext_meta (key, value) values (?, '0') on conflict(key) do nothing`, LEARNING_GEN_KEY);
+    const bump = `insert into ext_meta (key, value) values ('${LEARNING_GEN_KEY}', '1')
+                    on conflict(key) do update set value = cast(value as integer) + 1`;
+    for (const table of ['assessment_results', 'schools']) {
+      for (const ev of ['insert', 'update', 'delete']) {
+        c.exec(`create trigger if not exists "kv_gen_${table}_${ev}" after ${ev} on "${table}" begin ${bump}; end`);
+      }
+    }
+    exec(c, `insert into ext_meta (key, value) values ('perf', ?) on conflict(key) do update set value = excluded.value`, PERF_VERSION);
+    c.exec('commit');
+  } catch (e) {
+    try { c.exec('rollback'); } catch { /* already rolled back */ }
+    throw e;
+  }
+}
+
+// ---------------------------------------------------------------- approvals
+/**
+ * Which lever each approval was decided under.
+ *
+ * A case's lever is the lever of its current plan: drafting a new plan (a block-level coaching
+ * plan replacing a district-level one, say) moves it, and a PAB referral sets it to 'pab'. An
+ * approval belongs to one plan, so the role it needs comes from the lever in force when that plan
+ * was submitted, not from whatever the case's lever is today. The seed stored only the role;
+ * this records the lever beside it (from the approval's own plan) and makes the role agree with
+ * it through requiredRoleFor(), the same rule the decision gate in guard.ts applies.
+ */
+export const APPROVALS_VERSION = 'approvals-v1';
+
+function migrateApprovalLever(c: DatabaseSync): void {
+  if (one<{ value: string }>(c, `select value from ext_meta where key = 'approvals'`)?.value === APPROVALS_VERSION) return;
+  c.exec('begin immediate');
+  try {
+    if (q(c, `select 1 from pragma_table_info('approvals') where name = 'lever'`).length === 0) {
+      exec(c, 'alter table approvals add column lever text');
+    }
+    exec(c, `update approvals set lever = coalesce(
+                (select i.lever from case_plans p join interventions i on i.id = p.intervention_id where p.id = approvals.plan_id),
+                (select cs.lever from cases cs where cs.id = approvals.case_id))
+              where lever is null`);
+    exec(c, `update approvals set required_role = case lever when 'block' then 'beo' else 'deo' end
+              where lever is not null and required_role is not (case lever when 'block' then 'beo' else 'deo' end)`);
+    exec(c, `insert into ext_meta (key, value) values ('approvals', ?) on conflict(key) do update set value = excluded.value`, APPROVALS_VERSION);
+    c.exec('commit');
+  } catch (e) {
+    try { c.exec('rollback'); } catch { /* already rolled back */ }
+    throw e;
+  }
 }
 
 // ---------------------------------------------------------------- integrity
@@ -376,7 +460,13 @@ function seedRealGeography(c: DatabaseSync, up: UpGeo) {
 // ---------------------------------------------------------------- reporting lines
 function seedReporting(c: DatabaseSync) {
   exec(c, `delete from reporting_lines where source = 'derived_from_seed'`);
-  const first = (role: string, scope: string) => one<{ user_id: string }>(c, `select ur.user_id from user_roles ur join users u on u.id = ur.user_id where ur.role = ? and ur.scope_id = ? and u.status = 'active' order by ur.user_id limit 1`, role, scope)?.user_id ?? null;
+  // The first active holder of each role in each place, read once rather than once per account.
+  const firstHolder = new Map<string, string>();
+  for (const r of q<{ user_id: string; role: string; scope_id: string }>(c, `select ur.user_id, ur.role, ur.scope_id from user_roles ur join users u on u.id = ur.user_id where u.status = 'active' order by ur.user_id`)) {
+    const k = `${r.role}|${r.scope_id}`;
+    if (!firstHolder.has(k)) firstHolder.set(k, r.user_id);
+  }
+  const first = (role: string, scope: string) => firstHolder.get(`${role}|${scope}`) ?? null;
   const stateAdmin = one<{ user_id: string }>(c, `select user_id from user_roles where role = 'state_admin' order by user_id limit 1`)?.user_id ?? null;
   const rows = q<{ user_id: string; role: string; scope_id: string }>(c, `select user_id, role, scope_id from user_roles order by user_id`);
   const ins = c.prepare(`insert into reporting_lines (user_id, manager_user_id, relation, source, updated_at, updated_by) values (?,?,?,?,?,null) on conflict(user_id) do nothing`);

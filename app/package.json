@@ -22,6 +22,8 @@
     "test:myday": "tsx --conditions=react-server scripts/myday-test.mts",
     "test:hindi": "node scripts/hindi-check.mjs",
     "test:map": "tsx --conditions=react-server scripts/map-test.mts",
+    "test:security": "tsx --conditions=react-server scripts/security-test.mts",
+    "perf": "node scripts/perf.mjs",
     "geo:fetch": "node scripts/fetch-up-boundaries.mjs",
     "crawl": "node scripts/crawl.mjs",
     "e2e": "node scripts/e2e.cjs",

@@ -216,9 +216,6 @@ export interface TaskDraft {
   dueDate: string;
 }
 
-const openTaskCount = (userId: string) => Number(one<{ n: number }>(
-  `select count(*) n from tasks where owner_user_id = ? and verified_at is null`, userId,
-)?.n ?? 0);
 
 /**
  * Who can hold a task of this role on this case. The headmaster of the school; the case's
@@ -227,12 +224,16 @@ const openTaskCount = (userId: string) => Number(one<{ n: number }>(
  * so a person is offered only for the area their role actually covers.
  */
 export function ownerOptions(c: PlanCase, role: RoleCode, schoolId: string | null): OwnerOption[] {
-  const holders = (sql: string, ...params: string[]) => all<{ id: string; full_name: string; scope_id: string }>(
-    `select u.id, u.full_name, ur.scope_id from user_roles ur join users u on u.id = ur.user_id
+  // Each person's open tasks (not yet verified) come back with them, in the same query.
+  const holders = (sql: string, ...params: string[]) => all<{ id: string; full_name: string; scope_id: string; open: number }>(
+    `select u.id, u.full_name, ur.scope_id,
+            (select count(*) from tasks t where t.owner_user_id = u.id and t.verified_at is null) open
+       from user_roles ur join users u on u.id = ur.user_id
       where ur.role = ? and u.status = 'active' and ${sql} order by u.id`, role, ...params,
   );
-  const withLoad = (rows: { id: string; full_name: string; scope_id: string }[], note: (r: { scope_id: string }) => string) =>
-    rows.map((r) => ({ id: r.id, name: r.full_name, note: `${note(r)} · ${openTaskCount(r.id)} open` }));
+  const load = new Map<string, number>();
+  const withLoad = (rows: { id: string; full_name: string; scope_id: string; open: number }[], note: (r: { scope_id: string }) => string) =>
+    rows.map((r) => { load.set(r.id, Number(r.open)); return { id: r.id, name: r.full_name, note: `${note(r)} · ${Number(r.open)} open` }; });
 
   switch (role) {
     case 'headmaster':
@@ -244,7 +245,7 @@ export function ownerOptions(c: PlanCase, role: RoleCode, schoolId: string | nul
     }
     case 'brc': {
       const opts = withLoad(holders(`ur.scope_type = 'block' and ur.scope_id = ?`, c.block_id), () => 'this block');
-      return opts.sort((a, b) => openTaskCount(a.id) - openTaskCount(b.id) || a.id.localeCompare(b.id));
+      return opts.sort((a, b) => (load.get(a.id) ?? 0) - (load.get(b.id) ?? 0) || a.id.localeCompare(b.id));
     }
     case 'beo':
       return withLoad(holders(`ur.scope_type = 'block' and ur.scope_id = ?`, c.block_id), () => 'this block');
