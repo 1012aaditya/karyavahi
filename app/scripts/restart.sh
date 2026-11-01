@@ -22,7 +22,12 @@ if [ "${1:-}" = "--reset" ]; then
   echo "restored the pristine seed"
 fi
 
-(setsid nohup npm run start > "$LOG" 2>&1 < /dev/null &)
+# setsid detaches the server from this shell on Linux; macOS has no setsid, and nohup is enough there.
+if command -v setsid >/dev/null; then
+  (setsid nohup npm run start > "$LOG" 2>&1 < /dev/null &)
+else
+  (nohup npm run start > "$LOG" 2>&1 < /dev/null &)
+fi
 for i in $(seq 1 30); do
   sleep 1
   if [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/login 2>/dev/null)" = "200" ]; then

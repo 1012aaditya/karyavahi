@@ -61,7 +61,9 @@ const ACCEPTED = new Set(['CRC', 'BRC', 'BEO', 'DEO', 'HM', 'AI', 'PAB', 'GPS', 
   'NCERT', 'LGD', 'ODbL', 'ODC', 'BY', 'SD', 'PRABANDH', 'ShikshaLokam', 'ELEVATE', 'cQube', 'English', 'z', 'Opus',
   // Products, organisations and laws named inside Hindi sentences on the roadmap and sources pages.
   'MoU', 'Glific', 'Meta', 'Exotel', 'VSK', 'OpenAPI', 'TRAI', 'DLT', 'SQLite', 'Postgres', 'pgvector', 'Android', 'DPDP',
-  'UP', 'ISB', 'IIPS', 'TLM', 'RTE', 'NAS', 'DiD']);
+  'UP', 'ISB', 'IIPS', 'TLM', 'RTE', 'NAS', 'DiD',
+  // Keyboard keys, and the model id shown beside "connected" when a Claude key is configured.
+  'Enter', 'Shift', 'claude', 'opus']);
 /** Names of more than one word, removed before the words are checked. */
 const PHRASES = ['India Data Portal', 'Meta Cloud API', 'J-PAL', 'API v1', 'UDISE+', 'karyavahi-seed v1.0', 'seed 20261024'];
 /** Record ids ("CASE-0184", "TSK-00412") and assessment round codes ("R4"). */

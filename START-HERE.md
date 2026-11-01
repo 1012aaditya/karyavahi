@@ -3,7 +3,8 @@
 **DEMO MODE — NOT ACTUAL GOVERNMENT STATISTICS.** Schools, enrolment, teachers and locations are
 real (UDISE+ via India Data Portal, about 2020-21; names withheld). Learning results are simulated
 and calibrated to PRS 2024; costs are from the UP PAB 2025-26 minutes. People, cases and outcomes are
-fictional. Nothing is connected to a live UDISE+, NAS, a state VSK, WhatsApp or IVR. Every source,
+fictional. Nothing is connected to a live UDISE+, NAS, a state VSK or IVR; WhatsApp runs on Meta's test
+number, for registered test phones only. Every source,
 with its terms: open **/sources** in the app (linked from the demo strip at the top of every page).
 
 This package is self-contained. The database is already built, so there is nothing to generate.
