@@ -5,12 +5,12 @@ import { listReports, reportTypeCounts } from '@/lib/feed';
 import { userNames, scopeName } from '@/lib/repo';
 import { may } from '@/lib/guard';
 import { pick } from '@/lib/i18n';
-import { Card, CardHead, PageHead, Callout, Toolbar, Empty, Mono, fmtDate } from '@/components/ui';
+import { Card, PageHead, Callout, Toolbar, Empty, Mono, fmtDate } from '@/components/ui';
 import { Pill, AiDrafted } from '@/components/labels';
 import { FilterChips } from '@/components/lists';
 import { Icon } from '@/components/Icon';
 import { REPORT_TYPES } from '@/lib/reports';
-import { ReportsRail } from '@/components/ReportsRail';
+import { REPORT_ICON } from '@/components/ReportsRail';
 
 /** Generated reports: action-taken reports, review packs, escalations and briefs. */
 
@@ -57,9 +57,25 @@ export default async function ReportsPage({
         meta={<>{scopeName(session.scope_type, session.scope_id)} · {Object.values(counts).reduce((a, b) => a + b, 0)} saved</>}
         right={<div className="flex gap-2"><Link href="/impact" className="btn-quiet"><Icon name="target" size={15} />Outcome verification</Link><Link href="/reports/new" className="btn-primary"><Icon name="plus" size={15} />New report</Link></div>}
       />
-      <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-      <ReportsRail session={session} />
-      <div className="min-w-0">
+      {/* Make a report: every kind, as a picture you can pick, instead of a menu down the side. */}
+      <section aria-label={pick(lang, 'Make a report', 'रिपोर्ट बनाएँ')}>
+        <h2 className="label mb-2">{pick(lang, 'Make a report', 'रिपोर्ट बनाएँ')}</h2>
+        <ul className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {REPORT_TYPES.map((r, i) => (
+            <li key={r.key}>
+              <Link href={`/reports/new?type=${r.key}`} title={r.blurb}
+                className="group flex h-full flex-col rounded-2xl border border-line bg-white p-4 transition-colors hover:border-brand/40 hover:bg-brand-light/40">
+                <span className={`grid h-10 w-10 place-items-center rounded-xl ${['bg-brand-light text-brand', 'bg-good-light text-good', 'bg-crit-light text-crit', 'bg-amber-light text-warn'][i % 4]}`}><Icon name={REPORT_ICON[r.key] ?? 'file'} size={19} /></span>
+                <span className="mt-3 text-sm font-semibold leading-snug text-ink group-hover:text-brand">{r.label}</span>
+                <span className="mt-1 line-clamp-2 text-xs text-ink-faint">{r.blurb}</span>
+                {counts[r.key] ? <span className="tnum mt-auto pt-2 text-2xs text-ink-soft">{counts[r.key]} {pick(lang, 'saved', 'सहेजी')}</span> : null}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <div className="mt-6">
       <Toolbar>
         <form method="get" action="/reports" className="relative">
           {sp.type ? <input type="hidden" name="type" value={sp.type} /> : null}
@@ -78,66 +94,31 @@ export default async function ReportsPage({
           ]}
         />
       </Toolbar>
-      <Card>
-        <CardHead title={pick(lang, 'Generated reports', 'निर्मित रिपोर्ट')} hint={`${reports.length} ${pick(lang, 'shown', 'दिखाई')}`} />
-        {reports.length === 0 ? <Empty /> : (
-          <>
-          <ul className="divide-y divide-line md:hidden">
-            {reports.map((r) => (
-              <li key={r.id}>
-                <Link href={`/reports/${r.id}`} className="block px-4 py-3">
-                  <span className="block text-base font-medium text-ink">{r.title}</span>
-                  <span className="mt-0.5 block text-xs text-ink-faint"><span className="font-mono">{r.id}</span> · {fmtDate(r.generated_at)} · {r.case_ids.length} cases</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-          <div className="hidden overflow-x-auto md:block">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">{pick(lang, 'Report', 'रिपोर्ट')}</th>
-                  <th scope="col">{pick(lang, 'Type', 'प्रकार')}</th>
-                  <th scope="col">{pick(lang, 'Scope', 'दायरा')}</th>
-                  <th scope="col">{pick(lang, 'Period', 'अवधि')}</th>
-                  <th scope="col">{pick(lang, 'Cases', 'प्रकरण')}</th>
-                  <th scope="col">{pick(lang, 'Generated', 'निर्मित')}</th>
-                  <th scope="col"><span className="sr-only">Download</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {reports.map((r) => (
-                  <tr key={r.id}>
-                    <td className="max-w-sm">
-                      <Link href={`/reports/${r.id}`} className="font-medium text-ink hover:text-brand">{r.title}</Link>
-                      <p className="text-xs text-ink-faint">
-                        <Mono>{r.id}</Mono>
-                        {r.narrative_model ? <> · <AiDrafted lang={lang} model={r.narrative_model} /></> : null}
-                      </p>
-                    </td>
-                    <td className="text-sm">
-                      <Pill>{pick(lang, TYPE_LABEL[r.report_type]?.en ?? REPORT_TYPES.find((x) => x.key === r.report_type)?.label ?? r.report_type, TYPE_LABEL[r.report_type]?.hi ?? r.report_type)}</Pill>
-                    </td>
-                    <td className="text-sm">{scopeName(r.scope_type, r.scope_id)}</td>
-                    <td className="tnum text-xs">{r.period_start} → {r.period_end}</td>
-                    <td className="tnum text-sm">{r.case_ids.length}</td>
-                    <td className="text-sm">
-                      <span className="tnum">{fmtDate(r.generated_at)}</span>
-                      <span className="block whitespace-nowrap text-xs text-ink-faint">{users.get(r.generated_by) ?? r.generated_by}</span>
-                    </td>
-                    <td className="whitespace-nowrap text-right">
-                      <a href={`/api/reports/${r.id}/export?format=xlsx`} className="btn-ghost btn-sm" title="Download Excel"><Icon name="download" size={14} />XLSX</a>
-                      <a href={`/api/reports/${r.id}/export?format=csv`} className="btn-ghost btn-sm" title="Download CSV">CSV</a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          </>
-        )}
-      </Card>
-      </div>
+      <p className="mb-3 text-sm text-ink-soft"><span className="font-medium text-ink">{pick(lang, 'Saved reports', 'सहेजी रिपोर्ट')}</span> · {reports.length} {pick(lang, 'shown', 'दिखाई')}</p>
+      {reports.length === 0 ? <Card><Empty /></Card> : (
+        <ul className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+          {reports.map((r) => (
+            <li key={r.id} className="flex flex-col rounded-2xl border border-line bg-white p-4">
+              <span className="flex items-center gap-2 text-xs text-ink-faint">
+                <span className="grid h-7 w-7 place-items-center rounded-lg bg-paper-sunk text-ink-soft"><Icon name={REPORT_ICON[r.report_type] ?? 'file'} size={14} /></span>
+                <span className="truncate">{pick(lang, TYPE_LABEL[r.report_type]?.en ?? REPORT_TYPES.find((x) => x.key === r.report_type)?.label ?? r.report_type, TYPE_LABEL[r.report_type]?.hi ?? r.report_type)}</span>
+                <span className="ml-auto font-mono">{r.id}</span>
+              </span>
+              <Link href={`/reports/${r.id}`} className="mt-2 line-clamp-2 text-md font-semibold leading-snug text-ink hover:text-brand">{r.title}</Link>
+              <span className="mt-1 text-xs text-ink-soft">{scopeName(r.scope_type, r.scope_id)} · <span className="tnum">{r.period_start} → {r.period_end}</span></span>
+              <span className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                <Pill>{r.case_ids.length} {pick(lang, 'cases', 'प्रकरण')}</Pill>
+                {r.narrative_model ? <AiDrafted lang={lang} model={r.narrative_model} /> : null}
+              </span>
+              <span className="mt-auto flex items-center gap-2 border-t border-line pt-3 text-xs">
+                <span className="min-w-0 truncate text-ink-faint"><span className="tnum">{fmtDate(r.generated_at)}</span> · {users.get(r.generated_by) ?? r.generated_by}</span>
+                <a href={`/api/reports/${r.id}/export?format=xlsx`} className="btn-ghost btn-sm ml-auto" title="Download Excel"><Icon name="download" size={14} />XLSX</a>
+                <a href={`/api/reports/${r.id}/export?format=csv`} className="btn-ghost btn-sm" title="Download CSV">CSV</a>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       </div>
     </div>
   );

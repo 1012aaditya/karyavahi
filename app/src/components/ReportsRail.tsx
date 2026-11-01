@@ -10,7 +10,7 @@ import { Icon } from './Icon';
  * re-exports. Saved reports come from listReports, which is already scope-filtered.
  */
 
-const ICON: Record<string, string> = {
+export const REPORT_ICON: Record<string, string> = {
   atr: 'clipboard', learning_impact: 'target', exceptions: 'alert', review_pack: 'briefcase',
   block_performance: 'map', intervention_effectiveness: 'flask', data_quality: 'database', executive_summary: 'file',
 };
@@ -28,7 +28,7 @@ export function ReportsRail({ session, active, activeReport }: { session: Sessio
               <li key={r.key}>
                 <Link href={`/reports/new?type=${r.key}`} aria-current={on ? 'page' : undefined} title={r.blurb}
                   className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm ${on ? 'bg-white font-semibold text-ink shadow-[inset_3px_0_0_rgb(var(--c-brand))] ring-1 ring-line' : 'text-ink-soft hover:bg-white hover:text-ink'}`}>
-                  <Icon name={ICON[r.key] ?? 'file'} size={15} className={on ? 'text-brand' : 'text-ink-faint'} />
+                  <Icon name={REPORT_ICON[r.key] ?? 'file'} size={15} className={on ? 'text-brand' : 'text-ink-faint'} />
                   <span className="truncate">{r.label}</span>
                 </Link>
               </li>

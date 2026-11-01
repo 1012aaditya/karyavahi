@@ -6,6 +6,8 @@ import { rounds, settingVersions } from '@/lib/repo';
 import { pick } from '@/lib/i18n';
 import { Card, CardHead, PageHead, Grid, Stat, Toolbar, Callout } from '@/components/ui';
 import { FindingTable, FilterChips } from '@/components/lists';
+import type { Finding } from '@/lib/cases';
+import type { Language } from '@domain/types';
 
 /**
  * The detection queue, including what the detector chose NOT to open.
@@ -70,6 +72,8 @@ export default async function FindingsPage({
           )}
         </Callout>
 
+        <DetectionPicture findings={findings} materiality={settings.detection.materiality_pp} z={settings.detection.z_threshold} lang={lang} />
+
         <Toolbar>
           <FilterChips base="/findings" param="status" options={options} current={sp.status} lang={lang} />
         </Toolbar>
@@ -113,5 +117,59 @@ export default async function FindingsPage({
         </Card>
       </div>
     </div>
+  );
+}
+
+const DOT: Record<string, { cls: string; en: string; hi: string }> = {
+  case_opened: { cls: 'fill-crit stroke-white', en: 'Case opened', hi: 'प्रकरण खुला' },
+  monitoring: { cls: 'fill-amber stroke-white', en: 'Watching', hi: 'निगरानी' },
+  rejected_noise: { cls: 'fill-ink-faint/60 stroke-white', en: 'Noise', hi: 'अस्थिरता' },
+  rejected_data_quality: { cls: 'fill-white stroke-ink-faint', en: 'Data too thin', hi: 'डेटा अपर्याप्त' },
+};
+
+/**
+ * The detection rule as a picture: every candidate placed by how far it fell behind the district
+ * (across) and how sure the test is (down). A case opens only in the shaded corner, where both
+ * thresholds are crossed, so anyone can see why a dot did or did not become a case.
+ */
+function DetectionPicture({ findings, materiality, z, lang }: { findings: Finding[]; materiality: number; z: number; lang: Language }) {
+  if (findings.length === 0) return null;
+  const W = 1200, H = 280, L = 44, R = 12, T = 12, B = 34;
+  const x0 = Math.min(-25, ...findings.map((f) => f.relative_change_pp)) - 1, x1 = Math.max(8, ...findings.map((f) => f.relative_change_pp)) + 1;
+  const y0 = Math.min(-6, ...findings.map((f) => f.z_score)) - 0.3, y1 = Math.max(2, ...findings.map((f) => f.z_score)) + 0.3;
+  const sx = (v: number) => L + ((v - x0) / (x1 - x0)) * (W - L - R);
+  const sy = (v: number) => T + ((y1 - v) / (y1 - y0)) * (H - T - B);
+  const ticksX = Array.from({ length: Math.floor(x1 / 5) - Math.ceil(x0 / 5) + 1 }, (_, i) => (Math.ceil(x0 / 5) + i) * 5);
+  const ticksY = Array.from({ length: Math.floor(y1 / 2) - Math.ceil(y0 / 2) + 1 }, (_, i) => (Math.ceil(y0 / 2) + i) * 2);
+  return (
+    <section className="rounded-2xl border border-line bg-white p-4 sm:p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h2 className="text-md font-semibold text-ink">{pick(lang, 'Why a dip became a case — or did not', 'गिरावट प्रकरण क्यों बनी — या नहीं')}</h2>
+          <p className="text-xs text-ink-faint">{pick(lang, `Each dot is one cluster, class and skill. A case opens only in the shaded corner: at least ${materiality} pp behind the district and z at or below −${z}.`, `हर बिंदु एक संकुल-कक्षा-दक्षता है। प्रकरण केवल छायांकित कोने में खुलता है।`)}</p>
+        </div>
+        <p className="flex flex-wrap gap-3 text-2xs text-ink-soft">
+          {Object.entries(DOT).map(([k, d]) => (
+            <span key={k} className="inline-flex items-center gap-1"><svg width="10" height="10" aria-hidden><circle cx="5" cy="5" r="4" className={d.cls} strokeWidth={1.5} /></svg>{pick(lang, d.en, d.hi)}</span>
+          ))}
+        </p>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="mt-3 h-auto w-full" role="img" aria-label={pick(lang, 'Detection candidates by relative drop and test strength', 'सापेक्ष गिरावट और परीक्षण के अनुसार उम्मीदवार')}>
+        <rect x={L} y={sy(-z)} width={sx(-materiality) - L} height={H - B - sy(-z)} className="fill-crit-light" />
+        {ticksX.map((t) => <g key={`x${t}`}><line x1={sx(t)} x2={sx(t)} y1={T} y2={H - B} className="stroke-line" strokeWidth={t === 0 ? 1.2 : 0.6} /><text x={sx(t)} y={H - B + 14} textAnchor="middle" className="fill-ink-faint text-[10px]">{t > 0 ? `+${t}` : t}</text></g>)}
+        {ticksY.map((t) => <g key={`y${t}`}><line x1={L} x2={W - R} y1={sy(t)} y2={sy(t)} className="stroke-line" strokeWidth={t === 0 ? 1.2 : 0.6} /><text x={L - 6} y={sy(t) + 3} textAnchor="end" className="fill-ink-faint text-[10px]">{t}</text></g>)}
+        <line x1={sx(-materiality)} x2={sx(-materiality)} y1={T} y2={H - B} className="stroke-crit" strokeDasharray="4 3" />
+        <line x1={L} x2={W - R} y1={sy(-z)} y2={sy(-z)} className="stroke-crit" strokeDasharray="4 3" />
+        <text x={(L + W - R) / 2} y={H - 4} textAnchor="middle" className="fill-ink-soft text-[10px]">{pick(lang, 'Change against the district, percentage points', 'ज़िले की तुलना में बदलाव, प्रतिशत अंक')}</text>
+        <text x={12} y={(T + H - B) / 2} textAnchor="middle" transform={`rotate(-90 12 ${(T + H - B) / 2})`} className="fill-ink-soft text-[10px]">z</text>
+        {findings.map((f) => (
+          <a key={f.id} href={`/findings/${f.id}`}>
+            <circle cx={sx(f.relative_change_pp)} cy={sy(f.z_score)} r={f.status === 'case_opened' ? 5 : 4} strokeWidth={1.5} className={DOT[f.status]?.cls ?? 'fill-ink-faint'}>
+              <title>{`${f.id} · ${f.relative_change_pp.toFixed(1)} pp · z ${f.z_score.toFixed(2)} · ${DOT[f.status]?.en ?? f.status}`}</title>
+            </circle>
+          </a>
+        ))}
+      </svg>
+    </section>
   );
 }
