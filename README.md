@@ -8,12 +8,34 @@ Karyavahi is a case ledger for school education. Each drop in learning becomes a
 |---|---|
 | **Live demo** | <https://karyavahi.onrender.com> (no password; pick an account on the sign-in page) |
 | **Demo video (3 min)** | *YouTube link is added here before submission* |
+| **For judges** | [Sign-in and a 10-minute test path](#for-judges-sign-in-and-a-10-minute-test-path) |
 | **Run it locally** | [Setup](#run-it-locally), about 5 minutes |
 | **How AI is used** | [AI services and models](#ai-services-and-models), [How Claude is kept honest](#how-claude-is-kept-honest) |
 
 > **Demo data.** The schools, enrolment, teacher counts and locations are real public data (UDISE+ via India Data Portal). School names and UDISE codes are withheld, and map pins are moved a few hundred metres. The learning results are simulated and calibrated to PRS 2024. The people, cases and outcomes are fictional. These are not government statistics.
 
 ![The command centre: a block officer's area on the map, with what needs them today](docs/screenshots/02-command-centre.png)
+
+## For judges: sign-in and a 10-minute test path
+
+**There are no passwords.** Open <https://karyavahi.onrender.com/login> and pick an account, or type its address. The free server sleeps when idle, so the very first load can take up to a minute.
+
+| Sign in as | Role | Try this |
+|---|---|---|
+| `beo.blk-01@demo.karyavahi.test` | Block officer, Rampur Sadar (opens in Hindi; **English** button in the header) | Home map, then **CASE-0184**: the drop, why, Claude's explanation (**Ask Claude**), the plan and its costs |
+| `deo.rmp@demo.karyavahi.test` | District officer, Rampur | **Approvals**: approve the plan the block officer submitted (the same person can't approve their own plan) |
+| `hm.sch-00002@demo.karyavahi.test` | Headmaster, on a phone or a narrow window | **My day** in Hindi: **मेरा दिन सुनें** (listen), then hand in a photo as proof. Turn on airplane mode first: it is saved on the phone and sent when the network returns |
+| `state.lead@demo.karyavahi.test` | State team | **Hotspots**: Uttar Pradesh map, double-click to go from district to block to cluster to school |
+| `auditor.state@demo.karyavahi.test` | Auditor | **Audit**: the hash chain re-checked over every entry; **AI activity**: every Claude call, its tools and cited records |
+| `admin@demo.karyavahi.test` | Demo admin | Move the demo clock, import the next round of results (`app/samples/R4_midline_BLK-01_with_errors.csv`) and watch new cases open |
+
+**Want your own account?** Open [/register](https://karyavahi.onrender.com/register) and go through the real sign-up:
+1. Use any made-up name and an address ending in **`@demo.karyavahi.test`**. The demo never collects real people's emails.
+2. Type the verification code, which is shown on screen (no email is sent).
+3. The officer one level up must approve the request: the block officer for a headmaster, CRC or BRC (for Rampur Sadar, `beo.blk-01@demo.karyavahi.test`), the district officer for a block officer (for Rampur, `deo.rmp@demo.karyavahi.test`), and the state team for district and state roles. Sign in as that officer and approve it.
+4. Sign in with your new account and use everything.
+
+The demo resets to its starting data **every night at 03:00 India time**, so accounts and changes made during testing are cleared then. Nothing you do can break it for long.
 
 ---
 
