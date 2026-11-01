@@ -16,8 +16,13 @@ export const dynamic = 'force-dynamic';
 const text = (body: string, status: number) =>
   new Response(body, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
 
+// One line per call in the server log, so a silent webhook can be told apart from a refused one.
+// Never the body, a phone number or a token: only what happened and the status returned.
+const note = (what: string, status: number) => console.log(`[whatsapp webhook] ${what} -> ${status}`);
+
 export async function GET(req: Request) {
   const r = verifyHandshake(new URL(req.url).searchParams);
+  note(r.status === 200 ? 'verification handshake accepted' : 'verification handshake refused (verify token or mode did not match)', r.status);
   return text(r.body, r.status);
 }
 
@@ -26,6 +31,9 @@ export async function POST(req: Request) {
   let raw: Uint8Array;
   try { raw = new Uint8Array(await req.arrayBuffer()); } catch { return text('Bad request', 400); }
   const r = acceptWebhook(raw, req.headers.get('x-hub-signature-256'));
+  note(r.status === 200 ? `event received (${raw.length} bytes)`
+    : r.status === 401 ? (req.headers.get('x-hub-signature-256') ? 'refused: signature did not match WHATSAPP_APP_SECRET' : 'refused: no signature header')
+    : `refused: ${r.body}`, r.status);
   if (r.work) after(r.work);
   return text(r.body, r.status);
 }
