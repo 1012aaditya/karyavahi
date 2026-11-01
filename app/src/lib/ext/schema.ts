@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { generateGeography, unionUnit, toMultiPolygon, type GenUnit } from './geogen';
+import { ensureCollabTables } from './collab-schema';
 
 /**
  * Extension schema: geography, organisational hierarchy, complaints and onboarding.
@@ -90,6 +91,8 @@ function geojson(u: GenUnit): string {
 
 export function ensureExtensions(c: DatabaseSync): void {
   c.exec(DDL);
+  // Round import and case threads keep their own version markers (see collab-schema.ts).
+  ensureCollabTables(c);
   const v = one<{ value: string }>(c, `select value from ext_meta where key = 'version'`)?.value;
   if (v === EXT_VERSION) return;
   c.exec('begin immediate');

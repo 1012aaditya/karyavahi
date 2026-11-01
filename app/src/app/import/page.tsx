@@ -10,6 +10,11 @@ import {
   Card, CardHead, PageHead, Callout, Grid, Stat, Empty, Mono, fmtDate, fmtInt,
 } from '@/components/ui';
 import { Pill, ProvenanceChip } from '@/components/labels';
+import { ActionForm } from '@/components/ActionForm';
+import { RoundImport } from '@/components/RoundImport';
+import { setClockAction } from '@/lib/actions';
+import { roundIsOpen } from '@/lib/write-import';
+import { hasRole } from '@/lib/scope';
 
 /**
  * Data import.
@@ -21,7 +26,7 @@ import { Pill, ProvenanceChip } from '@/components/labels';
 
 const ERROR_EXPLANATION: Record<string, { en: string; hi: string }> = {
   unknown_school_id: {
-    en: 'The school id is not in the register. Usually a typo or a school that has since merged.',
+    en: 'The school id is not in the register, or not in the uploader\'s own area. Usually a typo, a merged school, or a file sent to the wrong officer.',
     hi: 'विद्यालय आईडी पंजी में नहीं है। आमतौर पर टाइपिंग त्रुटि या विलय।',
   },
   proficient_exceeds_assessed: {
@@ -29,11 +34,14 @@ const ERROR_EXPLANATION: Record<string, { en: string; hi: string }> = {
     hi: 'मानक तक पहुँचे बच्चों की संख्या आकलित बच्चों से अधिक है। यह असंभव है, अतः पंक्ति ख़ारिज।',
   },
   duplicate_row: {
-    en: 'The same school, grade and competency appears twice in one file. Accepting both would double-count.',
+    en: 'The same school, grade and competency appears twice in one file, or is already on record for the round. Accepting both would double-count.',
     hi: 'एक ही विद्यालय, कक्षा और दक्षता दो बार आई है। दोनों लेने पर दोहरी गिनती होगी।',
   },
-  invalid_date: { en: 'The date could not be read.', hi: 'तिथि पढ़ी नहीं जा सकी।' },
-  missing_required: { en: 'A required column was blank.', hi: 'आवश्यक स्तंभ रिक्त है।' },
+  invalid_date: { en: 'The date could not be read, falls outside the round\'s assessment window, or is after today on the demo clock.', hi: 'तिथि पढ़ी नहीं जा सकी, या दौर की अवधि से बाहर है।' },
+  missing_required: {
+    en: 'A required value was blank, or was not one the register recognises (the round being imported, grade 1–3, competency L1–L3 or N1–N3).',
+    hi: 'आवश्यक मान रिक्त है, या पंजी में मान्य नहीं (दौर, कक्षा 1–3, दक्षता)।',
+  },
   non_numeric: { en: 'A count column contained something that is not a number.', hi: 'संख्या स्तंभ में अंक नहीं हैं।' },
 };
 
@@ -56,6 +64,7 @@ export default async function ImportPage() {
   const rejections = rejectionCodeCounts(session);
   const users = userNames(batches.map((b) => b.uploaded_by));
   const nextRound = rounds().find((r) => r.status === 'scheduled');
+  const canMoveClock = hasRole(session, 'demo_admin', 'state_admin');
   const totalRows = batches.reduce((t, b) => t + b.total_rows, 0);
   const totalRejected = batches.reduce((t, b) => t + b.rejected_rows, 0);
 
@@ -92,23 +101,41 @@ export default async function ImportPage() {
             )}
           </Callout>
 
-          <Callout tone="warn" title={pick(lang, 'Uploading is not wired up in this demo', 'इस डेमो में अपलोड सक्रिय नहीं है')}>
-            {pick(
-              lang,
-              'This build does not accept a file: the import batches below are the ones the seed generated, with their real rejected rows. The sample files are in the project under samples/ — assessment_upload_valid.csv, assessment_upload_with_errors.csv (seven kinds of error), and assessment_R4_midline_BLK-01_SIMULATED.csv for the November round. Wiring the upload to the same validator the seed used is the obvious next step, and it is deliberately not faked here.',
-              'यह संस्करण फ़ाइल स्वीकार नहीं करता: नीचे के बैच बीज द्वारा बनाए गए हैं, उनकी वास्तविक ख़ारिज पंक्तियों सहित। नमूना फ़ाइलें samples/ में हैं।',
-            )}
-          </Callout>
-
-          {nextRound ? (
-            <Callout tone="note" title={pick(lang, 'The November round', 'नवंबर दौर')}>
+          {nextRound && !roundIsOpen(nextRound) ? (
+            <Callout tone="note" title={pick(lang, `${nextRound.code} has not opened yet`, `${nextRound.code} अभी खुला नहीं`)}>
               {pick(
                 lang,
-                `${nextRound.code} (${nextRound.label}) has no data yet — it opens on ${nextRound.window_start}, and the demo clock is currently ${today()}. Cases sitting at "waiting for the next assessment" are waiting on exactly this. Move the clock forward from the demo admin page to see what happens next.`,
-                `${nextRound.code} का कोई डेटा नहीं — यह ${nextRound.window_start} से शुरू होता है, और डेमो घड़ी ${today()} पर है।`,
+                `${nextRound.code} (${nextRound.label}) has no data yet. Results can be imported once its assessment window opens on ${nextRound.window_start}; the demo clock is currently ${today()}. Cases sitting at "waiting for the next assessment" are waiting on exactly this. The demo administrator moves the clock forward (20 Nov 2026 is a good day: the window is open and every sample row is dated on or before it).`,
+                `${nextRound.code} का कोई डेटा नहीं — आकलन अवधि ${nextRound.window_start} से खुलती है, और डेमो घड़ी ${today()} पर है। डेमो प्रशासक घड़ी आगे बढ़ा सकते हैं।`,
               )}
+              {canMoveClock ? (
+                <div className="mt-2">
+                  <ActionForm action={setClockAction} hidden={{ date: '2026-11-20' }} label={pick(lang, 'Move the demo clock to 20 Nov 2026', 'डेमो घड़ी 20 नवंबर 2026 पर करें')} />
+                </div>
+              ) : null}
             </Callout>
           ) : null}
+        </div>
+      </Card>
+
+      <Card>
+        <CardHead
+          title={pick(lang, 'Import an assessment round', 'आकलन दौर आयात करें')}
+          hint={pick(
+            lang,
+            'Check a file first (nothing is saved), then commit it. Detection then runs on the new round and opens cases for new hotspots.',
+            'पहले फ़ाइल जाँचें (कुछ सहेजा नहीं जाता), फिर दर्ज करें। उसके बाद नए दौर पर विश्लेषण चलता है।',
+          )}
+        />
+        <div className="card-pad space-y-3">
+          <Callout tone="method" title={pick(lang, 'Sample files', 'नमूना फ़ाइलें')}>
+            {pick(
+              lang,
+              'In the project folder: app/samples/R4_midline_BLK-01_with_errors.csv (Rampur Sadar block, with one row of each kind of mistake) and app/samples/R4_midline_BLK-01.csv (the same rows, clean). Make a file for another district or the whole state with: npm run gen:r4 -- --scope DST-01 (or --scope all). A block officer can import only their own block\'s schools; a DEO their district; the state team the whole state.',
+              'प्रोजेक्ट फ़ोल्डर में: app/samples/R4_midline_BLK-01_with_errors.csv और app/samples/R4_midline_BLK-01.csv। खंड अधिकारी केवल अपने खंड के विद्यालय आयात कर सकते हैं।',
+            )}
+          </Callout>
+          <RoundImport lang={lang} />
         </div>
       </Card>
 

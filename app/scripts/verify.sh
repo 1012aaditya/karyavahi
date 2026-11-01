@@ -27,6 +27,12 @@ npx tsx --conditions=react-server scripts/smoke.ts 2>&1 | grep -vE 'Experimental
 step 'write layer, lifecycle, refusals and the audit chain'
 npx tsx --conditions=react-server scripts/write-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -12
 
+step 'round import and the live detection run'
+npx tsx --conditions=react-server scripts/import-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
+
+step 'case threads, mentions and followers'
+npx tsx --conditions=react-server scripts/threads-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
+
 if [ "$FULL" = "--full" ]; then
   step 'production build'
   npm run build 2>&1 | tail -4

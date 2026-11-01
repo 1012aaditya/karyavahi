@@ -7,7 +7,7 @@ let chromium, launchOpts = {};
 try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require('playwright-core')); launchOpts = { channel: 'chrome' }; }
 const SHOTS = process.env.KARYAVAHI_SHOTS ?? '/tmp/karyavahi-shots';
 require('node:fs').mkdirSync(SHOTS, { recursive: true });
-const BASE = 'http://localhost:3000';
+const BASE = process.env.KV_BASE ?? 'http://localhost:3000';
 
 let fails = 0;
 const ok = (label, cond, extra = '') => {

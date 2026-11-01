@@ -55,6 +55,29 @@ The login page lists one account per role. The most interesting path through the
 5. Try something you should not be able to do — sign in as the cluster coordinator and open
    `/approvals`, or as a headmaster and open `/audit`. The refusal explains itself.
 
+### Bring in the November round (R4) and watch new cases appear
+
+1. Sign in as `admin@demo.karyavahi.test`, go to **Administration → Data import** and press
+   **Move the demo clock to 20 Nov 2026**. (R4's assessment window opens on 16 Nov; before that
+   the app refuses the upload and says why.)
+2. Sign in as `beo.blk-01@demo.karyavahi.test`, open **Data import**, **Choose file** and pick
+   `app/samples/R4_midline_BLK-01_with_errors.csv`, then press **Check the file**. Nothing is
+   saved yet: you see 2,340 good rows and 9 bad ones, each with the reason it was refused.
+3. Press **Commit 2,340 rows and run detection**. The rows are saved as a new import batch, the
+   detector compares R4 with July's round, and two new cases open in your queue.
+4. Try the same file again — it is recognised as already imported and adds nothing.
+
+To make your own file: `npm run gen:r4` (Rampur Sadar block), `npm run gen:r4 -- --errors`,
+`npm run gen:r4 -- --scope DST-01` (a district, for `deo.rmp@`) or `-- --scope all` (the state).
+
+### Talk about a case
+
+Open any case (for example one of the new ones, or CASE-0184) and scroll to **Discussion**.
+Write a comment and type `@` to mention someone — only people who can open that case are
+offered. Officers can tick **Record this as a decision**, which also adds it to the case
+timeline. **Edit** your own comments; **Follow / Unfollow** decides whether new comments reach
+your notifications. Sign in as the person you mentioned and check the bell.
+
 ## Folder layout
 
 ```
@@ -76,6 +99,8 @@ check running in the interface are the same code that generated and validated th
 | `npm run build` then `npm start` | production build |
 | `npm run db:init -- --force` | discard demo changes, start from the seed again |
 | `npm run typecheck` | TypeScript, no emit |
+| `npm run gen:r4` | write an R4 (November) results file into `app/samples/` |
+| `npm run test:import` / `npm run test:threads` | the round-import and case-thread tests (stop the server first) |
 
 `npm run verify` and `verify:full` need a bash shell — on Windows use Git Bash or WSL. Running
 the app itself needs no bash.
