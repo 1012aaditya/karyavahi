@@ -1,5 +1,5 @@
 import 'server-only';
-import { all, one } from './db';
+import { all, inList } from './db';
 import type { Session } from './session';
 import { listTasks, type Task } from './cases';
 import { listComplaints, type Complaint } from './complaints';
@@ -46,15 +46,33 @@ export function myDay(s: Session): MyDay {
   const week = addDays(d, 7);
   const mine = listTasks(s, { ownerUserId: s.user_id, status: [...OPEN, 'submitted'], limit: 200 });
 
+  // Proof counts, the latest reason for a send-back, and case titles: three queries for the
+  // whole list rather than three per task. These tasks are the reader's own (listTasks applied
+  // the scope), so the lookups are keyed by their ids only.
+  const taskIds = mine.map((t) => t.id);
+  const caseIds = [...new Set(mine.map((t) => t.case_id))];
+  const pieces = new Map<string, number>();
+  const rejection = new Map<string, string | null>();
+  const titles = new Map<string, string>();
+  const tl = inList(taskIds);
+  if (tl) {
+    for (const r of all<{ task_id: string; c: number }>(
+      `select task_id, count(*) c from evidence where task_id in (${tl.clause}) and status <> 'rejected' group by task_id`, ...tl.params,
+    )) pieces.set(r.task_id, Number(r.c));
+    // Newest rejection first, so the first row seen for a task is the one to show.
+    for (const r of all<{ task_id: string; r: string | null }>(
+      `select task_id, rejection_reason r from evidence where task_id in (${tl.clause}) and status = 'rejected'
+        order by task_id, verified_at desc`, ...tl.params,
+    )) if (!rejection.has(r.task_id)) rejection.set(r.task_id, r.r);
+  }
+  const cl = inList(caseIds);
+  if (cl) for (const r of all<{ id: string; title: string }>(`select id, title from cases where id in (${cl.clause})`, ...cl.params)) titles.set(r.id, r.title);
+
   const enrich = (t: Task): DayTask => ({
     ...t,
-    rejection: t.status === 'sent_back'
-      ? one<{ r: string | null }>(
-        `select rejection_reason r from evidence where task_id = ? and status = 'rejected' order by verified_at desc limit 1`, t.id,
-      )?.r ?? null
-      : null,
-    pieces: Number(one<{ c: number }>(`select count(*) c from evidence where task_id = ? and status <> 'rejected'`, t.id)?.c ?? 0),
-    caseTitle: one<{ title: string }>('select title from cases where id = ?', t.case_id)?.title ?? t.case_id,
+    rejection: t.status === 'sent_back' ? rejection.get(t.id) ?? null : null,
+    pieces: pieces.get(t.id) ?? 0,
+    caseTitle: titles.get(t.case_id) ?? t.case_id,
     dueIn: daysBetween(d, t.due_date),
     isNew: t.status === 'assigned',
   });

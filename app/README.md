@@ -325,6 +325,77 @@ if Google refuses it, the same map is drawn without background tiles, and a note
 small dashboard maps always use the plain map. `npm run test:map` checks the geography, the
 access rules and the thresholds.
 
+## Speed, and five loose ends closed (backend hardening)
+
+**How fast.** `node scripts/perf.mjs http://localhost:3012` signs in as five roles (state lead,
+district officer, block officer, cluster coordinator, headmaster) and times 74 pages and map
+calls against a production build (`npx next build && npx next start -p 3012`), printing the
+first hit and the median of three. `--json out.json` saves a run and `--compare out.json` prints
+it beside a new one. Measured on this machine, production build, before → after:
+
+| Page or call | Who | Before (median) | After (median) |
+|---|---|---|---|
+| `/api/geo/map` (the whole state) | state lead | 685 ms | 62 ms |
+| `/api/geo/map?h=urban` | state lead | 698 ms | 64 ms |
+| `/api/geo/map` (their district / block) | DEO / BEO | 226 / 218 ms | 19 / 12 ms |
+| `/overview` | state / DEO / BEO | 266 / 402 / 170 ms | 24 / 19 / 14 ms |
+| `/cases/CASE-0184` | DEO | 74 ms | 19 ms |
+| slowest of all 74 | | 698 ms | 64 ms |
+| first request after a demo reset (sets up the extra tables) | | ~2.2 s | ~0.95 s |
+
+Every page was already under a second on a production build; the 13–54 s seen earlier was the
+development server (`next dev` compiles each page on its first visit, and runs React in its slow
+checking mode) on a busy machine. On `next dev` the same pages took 0.1–1.7 s once compiled.
+
+What changed:
+
+- **Learning sums are kept until the data changes** (`src/lib/learning-cache.ts`). The hotspot
+  engine, the map and the learning trend add up ~150,000 assessment rows; the state map did it
+  nine times per request. Each answer is now kept, keyed by its SQL and parameters (so a block
+  officer never gets the state's answer), and dropped the moment `assessment_results` or `schools`
+  change: a trigger bumps `learning_data_gen` in `ext_meta` on every insert, update or delete, so
+  an imported round shows on the next request with no timer and no restart.
+- **Indexes** through the extension schema, marked `perf-v1` in `ext_meta` (like `integrity-v1`):
+  `user_roles (role, scope_id)`, `users lower(email)`, `tasks (school_id)`, `evidence (submitted_by)`.
+  The seed already had the others the pages need (tasks by owner/case/plan, evidence by
+  task/case, cases by geography, assessment results by school and round, visits, notifications,
+  audit by entity). Deriving the reporting lines after a reset no longer asks "who is this
+  cluster's CRC" 2,300 times.
+- **Per-row queries folded into one**: My day's proof counts, send-back reasons and case titles
+  (`myday.ts`); the open-task count beside every person the plan composer offers, which was also
+  re-queried inside a sort (`plans.ts`). `school-now.ts` was already batched. The badge counts in
+  the top bar cost under 2 ms in total, so they were left alone.
+
+**Loose ends.** Each has a test.
+
+- **Checking proof** (`src/lib/duty.ts`). Only the submitter was barred, so after a reassignment
+  the previous owner could accept the new owner's proof, and a task's owner could accept proof
+  someone else uploaded for it. Now nobody checks proof for a task they own, held before (from
+  `tasks.reassigned_from` or the audit trail), or handed in any proof for. The same rule filters
+  every "proof waiting on you" queue and badge, so the app never offers a check it would refuse.
+  (`write-test`)
+- **Registration code** (`src/lib/reg-code.ts`). The emailed-code stand-in travelled in the
+  address (`/register/status?…&code=123456`), where history, logs and Referer headers keep it.
+  It now sits in a 30-minute, http-only cookie for `/register` holding the request id and code,
+  so only the browser that applied sees it. (`session-test` over HTTP)
+- **Who may sign in** (`src/lib/sign-in.ts`). Any account could be signed into by address alone,
+  including one registered with a real address. The rule: an active account with a role whose
+  email is on `demo.karyavahi.test` (the `.test` domain is reserved and never delegated, so it
+  cannot be anyone's mailbox). Not just the seven `is_demo_account` personas: the walkthroughs and
+  the crawl sign in other fictional officers and headmasters. Registration accepts only demo
+  addresses too, so an approved request can always sign in; a refused address gets the same
+  answer as an unknown one, and is not echoed into the URL. (`security-test`, `session-test`)
+- **Approvals' required role.** It disagreed with the case's lever for 35 of the 268 seeded approvals. Each
+  one matched the lever of *its own* plan: a case's lever moves when a new plan is drafted or the
+  case goes to the PAB. Approvals now record that lever (`approvals.lever`, migration
+  `approvals-v1`), the role always comes from it through `requiredRoleFor()` in `guard.ts` (the
+  same table the decision gate uses), and new approvals are written the same way. (`authority-test`)
+- **AI executive briefing.** The permission matrix gives `ai.executive_briefing` to district and
+  state officers only, but `/api/ai/briefing` checked `ai.assistant`, so a block officer could get
+  one. The route and `lib/ai/briefing.ts` now ask `mayReadBriefing()`; a block officer's overview
+  shows the computed summary (`overview.plainBrief`), which is what it shows today.
+  (`authority-test`, `session-test`)
+
 ## Known limits
 
 - **Uploading a data file is not implemented.** The import wizard's validation behaviour is

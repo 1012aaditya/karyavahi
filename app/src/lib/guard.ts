@@ -97,6 +97,17 @@ export function roleCovers(r: Pick<RoleAssignment, 'scope_type' | 'scope_id'>, c
 
 export type MoveRefusalCode = 'lever' | 'role' | 'area' | 'own_submission';
 
+/** Who may decide a plan under each lever, most junior first. The first is the role an approval
+ *  names as required (approvals.required_role); the decision gate below accepts any of them. */
+export const LEVER_DECIDERS: Readonly<Record<Lever, readonly RoleCode[]>> = {
+  block: ['beo', 'deo'],
+  district: ['deo', 'state_admin'],
+  pab: ['deo', 'state_admin'],
+};
+
+/** The role an approval of a plan under this lever waits on. */
+export const requiredRoleFor = (lever: Lever): RoleCode => LEVER_DECIDERS[lever]?.[0] ?? 'deo';
+
 const roleNames = (roles: readonly RoleCode[]) =>
   roles.map((r) => (r === 'beo' ? 'BEO' : r === 'deo' ? 'DEO' : ROLE_LABELS[r].en.toLowerCase())).join(' or ');
 
@@ -115,7 +126,7 @@ export function moveRefusal(
   let allowed = rolesForTransition(from, to);
   if (isPlanDecision(from, to)) {
     if (!canDecideLever(s, c.lever)) return { code: 'lever', message: leverMessage(s, c.lever) };
-    const leverRoles: RoleCode[] = c.lever === 'block' ? ['beo', 'deo'] : ['deo', 'state_admin'];
+    const leverRoles = LEVER_DECIDERS[c.lever] ?? LEVER_DECIDERS.district;
     allowed = allowed.filter((r) => leverRoles.includes(r));
   }
   const held = s.roles.filter((r) => allowed.includes(r.role));

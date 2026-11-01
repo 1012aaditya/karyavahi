@@ -93,6 +93,36 @@ if (BASE) {
   ok('signing out redirects to sign in', out.status === 303);
   const after = await page(t);
   ok('the old token stops working after sign-out', after.status >= 300 && after.status < 400, `status ${after.status}`);
+
+  console.log('\n--- who may sign in without a password ---');
+  const hm = one<{ id: string }>(`select u.id from users u join user_roles ur on ur.user_id = u.id where ur.role = 'headmaster' and u.is_demo_account = 0 order by u.id limit 1`)!.id;
+  const hmIn = await post('/api/sign-in', { user_id: hm }, { origin: BASE });
+  ok('a fictional headmaster (not a featured persona) still signs in, as the crawl and walkthrough need', hmIn.status === 303 && !!cookieOf(hmIn) && !(hmIn.headers.get('location') ?? '').includes('/login'), hmIn.headers.get('location') ?? '');
+  const real = await post('/api/sign-in', { email: 'someone.real@gmail.com' }, { origin: BASE });
+  const realTo = real.headers.get('location') ?? '';
+  ok('an address off the demo domain is refused like an unknown one', real.status === 303 && !cookieOf(real) && realTo.includes('error=unknown-email'), realTo);
+  ok('…and the address is not echoed into the URL', !realTo.includes('gmail'), realTo);
+
+  console.log('\n--- the registration code stays out of the address ---');
+  const reg = one<{ id: string; email: string; email_code: string }>(`select id, email, email_code from registration_requests where status = 'email_verification_pending' order by id limit 1`);
+  if (reg) {
+    const statusUrl = `/register/status?id=${reg.id}&email=${encodeURIComponent(reg.email)}`;
+    const viaUrl = await (await fetch(`${BASE}${statusUrl}&code=424242`)).text();
+    // (Next echoes the request's own URL inside the page payload, so look at what is displayed.)
+    ok('a code put in the URL is ignored, not displayed or filled in', !viaUrl.includes('Your code is') && !viaUrl.includes('value="424242"'));
+    ok('and the real code is not on the page for someone who only knows the reference and email', !viaUrl.includes(reg.email_code));
+    const own = await (await fetch(`${BASE}${statusUrl}`, { headers: { cookie: `kv_reg_code=${reg.id}.${reg.email_code}` } })).text();
+    ok('the browser that submitted the request sees its code (from its cookie)', own.includes('Your code is') && own.includes(reg.email_code));
+    const other = await (await fetch(`${BASE}${statusUrl}`, { headers: { cookie: `kv_reg_code=REG-9999.${reg.email_code}` } })).text();
+    ok('a code cookie for another request shows nothing', !other.includes('Your code is'));
+  } else console.log('  --   (no request waiting on email verification)');
+
+  console.log('\n--- the AI executive briefing ---');
+  const as = async (email: string) => cookieOf(await post('/api/sign-in', { email }, { origin: BASE }));
+  const beoBrief = await fetch(`${BASE}/api/ai/briefing`, { headers: { cookie: `kv_session=${await as('beo.blk-01@demo.karyavahi.test')}` } });
+  ok('a block officer is refused the AI executive briefing (ai.executive_briefing)', beoBrief.status === 403, `status ${beoBrief.status}`);
+  // A district officer's request is not made here: with a model key configured it would generate
+  // a real briefing. authority-test checks that the permission lets them through.
 }
 
 run('delete from sessions where user_agent = ?', TAG);

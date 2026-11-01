@@ -418,7 +418,13 @@ export async function registerAction(_prev: State, form: FormData): Promise<Stat
       scopeType: str(form, 'scope_type'), scopeId: str(form, 'scope_id'), affiliationRef: str(form, 'affiliation_ref') || undefined,
     });
   }, 'Request created.');
-  if (res.ok) redirect(`/register/status?id=${out.id}&email=${encodeURIComponent(str(form, 'email'))}&code=${out.code}`);
+  if (res.ok) {
+    // The demo shows the code on screen instead of emailing it; it goes in a cookie for this
+    // browser, never in the address (see reg-code.ts).
+    const { rememberDemoCode } = await import('./reg-code');
+    await rememberDemoCode(out.id, out.code);
+    redirect(`/register/status?id=${out.id}&email=${encodeURIComponent(str(form, 'email'))}`);
+  }
   return res;
 }
 
@@ -426,7 +432,11 @@ export async function verifyEmailAction(_prev: State, form: FormData): Promise<S
   const { verifyEmail } = await import('./onboarding');
   const id = str(form, 'id'); const email = str(form, 'email');
   const res = await attempt(() => verifyEmail(id, email, str(form, 'code')), 'Email verified.');
-  if (res.ok) redirect(`/register/status?id=${id}&email=${encodeURIComponent(email)}`);
+  if (res.ok) {
+    const { forgetDemoCode } = await import('./reg-code');
+    await forgetDemoCode();
+    redirect(`/register/status?id=${id}&email=${encodeURIComponent(email)}`);
+  }
   return res;
 }
 

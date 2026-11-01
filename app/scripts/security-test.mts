@@ -162,7 +162,7 @@ try {
   ok('its designated authority is set', !!newUser && org.managerOf(newUser) !== null);
   refused('a duplicate of an existing account cannot be approved', () => onb.decideRegistration(beo, 'REG-0004', 'approve', ''), /already belongs/);
   refused('a BEO cannot approve a DEO-level request', () => onb.decideRegistration(beo, 'REG-0003', 'approve', ''));
-  refused('the demo admin role cannot be requested', () => onb.createRegistration({ fullName: 'X Y', email: 'x@y.test', role: 'demo_admin', scopeType: 'state', scopeId: 'STA-01' }));
+  refused('the demo admin role cannot be requested', () => onb.createRegistration({ fullName: 'X Y', email: 'x.y@demo.karyavahi.test', role: 'demo_admin', scopeType: 'state', scopeId: 'STA-01' }), /cannot be requested/);
   const ch = onb.requestChange(beo, 'beo', 'block', 'BLK-02', 'Transferred by state order.');
   refused('you cannot approve your own change request', () => onb.decideRegistration(beo, ch, 'approve', ''));
   ok('requesting a change does not change your role', loadSession(beo.user_id)!.scope_id === 'BLK-01');
@@ -182,6 +182,30 @@ try {
   console.log('\n— existing case scoping still holds —');
   ok('BEO of BLK-01 still sees 14 cases', listCases(beo, { limit: 500 }).length === 14);
   ok('BLK-09 BEO cannot see CASE-0184', !listCases(beo9, { limit: 500 }).some((c) => c.id === 'CASE-0184'));
+
+  console.log('\n— who may sign in without a password —');
+  {
+    const si = await import('../src/lib/sign-in');
+    const { run } = await import('../src/lib/db');
+    const signedIn = (r: ReturnType<typeof si.resolveSignIn>) => ('session' in r ? r.session.user_id : r.error);
+    // An account whose address could be a real person's, as an older registration could have made.
+    run(`insert into users (id, full_name, email, preferred_language, preferred_channel, is_demo_account, status, created_at, provenance)
+         values ('USR-REAL1', 'Real Person', 'real.person@gmail.com', 'en', 'in_app', 0, 'active', '2026-10-01T00:00:00.000Z', 'test')`);
+    run(`insert into user_roles (id, user_id, role, scope_type, scope_id, granted_at, granted_by) values ('UR-REAL1', 'USR-REAL1', 'headmaster', 'school', 'SCH-00030', '2026-10-01', 'test')`);
+    ok('a featured demo persona signs in by email', signedIn(si.resolveSignIn({ email: 'BEO.BLK-01@demo.karyavahi.test' })) === beo.user_id);
+    ok('so does any other fictional officer on the demo domain (the walkthroughs use them)', signedIn(si.resolveSignIn({ email: 'beo.blk-17@demo.karyavahi.test' })) === uid('beo.blk-17@demo.karyavahi.test'));
+    const hmId = one<{ id: string }>(`select u.id from users u join user_roles ur on ur.user_id = u.id where ur.role = 'headmaster' and u.is_demo_account = 0 order by u.id limit 1`)!.id;
+    ok('and a headmaster picked by id, as the route crawl does', signedIn(si.resolveSignIn({ userId: hmId })) === hmId);
+    ok('an account on a real-looking address cannot be signed into by email', signedIn(si.resolveSignIn({ email: 'real.person@gmail.com' })) === 'unknown-email');
+    ok('…and gets the same answer as an address with no account, so it cannot be probed', signedIn(si.resolveSignIn({ email: 'nobody.at.all@gmail.com' })) === 'unknown-email');
+    ok('…nor by its user id', signedIn(si.resolveSignIn({ userId: 'USR-REAL1' })) === 'unknown-account');
+    ok('a malformed address is called malformed', signedIn(si.resolveSignIn({ email: 'not-an-address' })) === 'invalid-email');
+    ok('an unknown demo address is unknown', signedIn(si.resolveSignIn({ email: 'nobody@demo.karyavahi.test' })) === 'unknown-email');
+    org.setAccountStatus(beo, hm2.user_id, 'suspended', 'Test suspension for sign-in');
+    ok('a suspended demo account cannot sign in', signedIn(si.resolveSignIn({ userId: hm2.user_id })) === 'unknown-account');
+    org.setAccountStatus(beo, hm2.user_id, 'active', 'Test complete');
+    refused('registration refuses an address that could be a real person\'s', () => onb.createRegistration({ fullName: 'Real Person', email: 'someone@gmail.com', role: 'headmaster', scopeType: 'school', scopeId: 'SCH-00031' }), /only accepts fictional addresses/);
+  }
 } finally {
   const { db: dbf } = await import('../src/lib/db');
   try { dbf().close(); } catch {}

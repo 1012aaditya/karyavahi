@@ -120,6 +120,47 @@ for (const t of mine) {
 }
 if (!selfVerified) console.log('  --   (no pending self-submitted proof in the seed to test against)');
 
+console.log('\n— nobody checks proof for work they took part in —');
+{
+  const { run } = await import('../src/lib/db');
+  // Someone else's pending proof in BLK-01, and four officers who could otherwise check it.
+  const e = one<{ id: string; task_id: string; case_id: string; submitted_by: string; school_id: string | null }>(
+    `select e.id, e.task_id, e.case_id, e.submitted_by, e.school_id from evidence e join cases c on c.id = e.case_id
+      where e.status = 'pending' and c.block_id = 'BLK-01' and e.submitted_by <> ? order by e.id desc limit 1`, crc.user_id)!;
+  const task = one<{ owner_user_id: string; reassigned_from: string | null }>('select owner_user_id, reassigned_from from tasks where id = ?', e.task_id)!;
+  const [brcA, brcB] = repo.usersByRole('brc', 'BLK-01', 2).map((u) => loadSession(u.id)!);
+  ok('the setup has two block resource coordinators who may check proof', !!brcA && !!brcB && brcA.user_id !== brcB.user_id);
+  const queued = (s: typeof beo) => cs.evidenceToCheck(s, { limit: 500 }).some((x) => x.id === e.id);
+  ok('before anything changes, a coordinator is offered this proof to check', queued(brcA));
+
+  run('update tasks set reassigned_from = ? where id = ?', brcA.user_id, e.task_id);
+  refused('the person who held the task before it was reassigned cannot check its proof',
+    () => w.verifyEvidence(brcA, { evidenceId: e.id, accept: true }), 'separation_of_duties');
+  ok('…and it is not in their queue or badge', !queued(brcA) && cs.countEvidenceToCheck(brcA) === cs.evidenceToCheck(brcA, { limit: 500 }).length);
+  run('update tasks set reassigned_from = ? where id = ?', task.reassigned_from, e.task_id);
+
+  run('update tasks set owner_user_id = ? where id = ?', brcB.user_id, e.task_id);
+  refused("the task's owner cannot check proof someone else handed in for it",
+    () => w.verifyEvidence(brcB, { evidenceId: e.id, accept: true }), 'separation_of_duties');
+  ok('…and it is not in the owner\'s queue', !queued(brcB));
+  run('update tasks set owner_user_id = ? where id = ?', task.owner_user_id, e.task_id);
+
+  run(`insert into evidence (id, task_id, case_id, school_id, evidence_type, summary, submitted_by, submitted_role, submitted_at, status, provenance)
+       values ('EVD-TEST-01', ?, ?, ?, 'photo', 'an earlier piece', ?, 'deo', '2026-10-01T00:00:00.000Z', 'rejected', 'test')`,
+    e.task_id, e.case_id, e.school_id, deo.user_id);
+  refused('someone who handed in other proof for the same task cannot check this piece',
+    () => w.verifyEvidence(deo, { evidenceId: e.id, accept: true }), 'separation_of_duties');
+  run(`delete from evidence where id = 'EVD-TEST-01'`);
+
+  w.appendAudit({ actorUserId: beo.user_id, actorRole: 'beo', action: 'task.reassigned', entityType: 'task', entityId: e.task_id,
+    before: { owner_user_id: brcB.user_id, status: 'assigned' }, after: { owner_user_id: task.owner_user_id }, reason: 'test: an earlier owner' });
+  refused('an earlier owner found only in the audit trail cannot check it either',
+    () => w.verifyEvidence(brcB, { evidenceId: e.id, accept: true }), 'separation_of_duties');
+  ok('the refusals are in the audit chain with the reason',
+    (one<{ c: number }>(`select count(*) c from audit_events where entity_id = ? and action = 'evidence.verify_refused' and reason like 'verifier took part%'`, e.id)?.c ?? 0) >= 3);
+  ok('an officer who took no part is still offered it', queued(brcA) && queued(beo));
+}
+
 const toCheck = cs.evidenceToCheck(beo, { limit: 5 });
 ok('the BEO has proof to check that is not their own', toCheck.length > 0);
 if (toCheck.length > 0) {

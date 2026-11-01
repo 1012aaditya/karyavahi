@@ -2,6 +2,8 @@ import 'server-only';
 import { all, one, j, bool, num, type Param } from './db';
 import { and, casesPred, canSeeCase, findingsPred, tasksPred, evidencePred, type Pred } from './scope';
 import type { Session } from './session';
+import { independentOf } from './duty';
+import { requiredRoleFor } from './guard';
 import { isOverdue, today, addDays } from './clock';
 import type {
   CaseStatus, Severity, Lever, OutcomeCategory, DqCheck, DriverSchool, FactorObservation,
@@ -69,6 +71,9 @@ export interface Approval {
   decided_by: string | null; decided_at: string | null; reason: string | null;
   original_plan: Record<string, unknown>; edited_plan: Record<string, unknown> | null;
   ai_drafted: boolean;
+  /** The lever this plan was submitted under, which sets required_role (see requiredRoleFor).
+   *  Not the case's lever today: that moves with each new plan and with a PAB referral. */
+  lever: Lever | null;
 }
 
 export interface Task {
@@ -148,6 +153,8 @@ const toPlan = (r: Record<string, unknown>): CasePlan => ({
 
 const toApproval = (r: Record<string, unknown>): Approval => ({
   ...(r as unknown as Approval),
+  lever: (r.lever as Lever | null) ?? null,
+  required_role: r.lever ? requiredRoleFor(r.lever as Lever) : (r.required_role as RoleCode),
   original_plan: j(r.original_plan, {} as Record<string, unknown>),
   edited_plan: j(r.edited_plan, null as Record<string, unknown> | null),
   ai_drafted: bool(r.ai_drafted),
@@ -464,13 +471,14 @@ export function countTasks(s: Session, f: TaskFilter = {}): number {
   return Number(one<{ c: number }>(`select count(*) c from tasks t where ${p.sql}`, ...p.params)?.c ?? 0);
 }
 
-/** Proof waiting on this user, excluding anything they submitted themselves — the
- *  separation-of-duties rule from verify_evidence(). */
+/** Proof waiting on this user, excluding anything they took part in (submitted, own the task,
+ *  held it before, or handed in other proof for it) — the separation-of-duties rule that
+ *  verifyEvidence() enforces (duty.ts). */
 export function evidenceToCheck(s: Session, opts: { blockId?: string; districtId?: string; limit?: number } = {}): Evidence[] {
   const parts: Pred[] = [
     evidencePred(s, 'e'),
     { sql: `e.status = 'pending'`, params: [] },
-    { sql: 'e.submitted_by <> ?', params: [s.user_id] },
+    independentOf(s.user_id, 'e'),
   ];
   if (opts.blockId) parts.push({ sql: 'exists (select 1 from cases cb where cb.id = e.case_id and cb.block_id = ?)', params: [opts.blockId] });
   if (opts.districtId) parts.push({ sql: 'exists (select 1 from cases cd where cd.id = e.case_id and cd.district_id = ?)', params: [opts.districtId] });
@@ -484,7 +492,7 @@ export function countEvidenceToCheck(s: Session, opts: { blockId?: string; distr
   const parts: Pred[] = [
     evidencePred(s, 'e'),
     { sql: `e.status = 'pending'`, params: [] },
-    { sql: 'e.submitted_by <> ?', params: [s.user_id] },
+    independentOf(s.user_id, 'e'),
   ];
   if (opts.blockId) parts.push({ sql: 'exists (select 1 from cases cb where cb.id = e.case_id and cb.block_id = ?)', params: [opts.blockId] });
   if (opts.districtId) parts.push({ sql: 'exists (select 1 from cases cd where cd.id = e.case_id and cd.district_id = ?)', params: [opts.districtId] });

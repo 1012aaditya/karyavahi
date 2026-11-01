@@ -115,6 +115,43 @@ try {
   ok('an area is critical when half its schools are serious', now.areaLevel(['critical', 'significant', 'stable', 'stable']) === 'critical');
   ok('30% serious is significant, 15% moderate', now.areaLevel(['critical', 'stable', 'stable']) === 'significant' && now.areaLevel(['significant', ...Array(5).fill('stable')]) === 'moderate');
   ok('unknown schools do not count either way', now.areaLevel(['insufficient', 'insufficient']) === 'insufficient');
+
+  console.log('\n--- speed: indexes, and learning sums kept until the data changes ---');
+  {
+    const { run } = await import('../src/lib/db');
+    const lc = await import('../src/lib/learning-cache');
+    const hs = await import('../src/lib/hotspots');
+    const indexes = new Set(all<{ name: string }>(`select name from sqlite_master where type = 'index'`).map((r) => r.name));
+    const want = ['ix_user_roles_role_scope', 'ix_users_email_lower', 'ix_tasks_school', 'ix_evi_submitter'];
+    ok('the perf-v1 indexes exist', want.every((n) => indexes.has(n)), want.filter((n) => !indexes.has(n)).join(', '));
+    ok('and the migration left its marker', one<{ value: string }>(`select value from ext_meta where key = 'perf'`)?.value === 'perf-v1');
+    const plan = all<{ detail: string }>(`explain query plan select ur.user_id from user_roles ur where ur.role = 'crc' and ur.scope_id = 'CLU-001'`).map((r) => r.detail).join(' ');
+    ok('"who is the CRC of this cluster" uses an index', /ix_user_roles_role_scope/.test(plan), plan);
+
+    const st = S('state.lead@demo.karyavahi.test');
+    const deo = S('deo.rmp@demo.karyavahi.test');
+    const first = hs.hotspotUnits(st, {});
+    const t0 = lc.learningCacheStats();
+    const again = hs.hotspotUnits(st, {});
+    const t1 = lc.learningCacheStats();
+    ok('asking the same question twice reuses the kept sums', t1.hits > t0.hits && t1.misses === t0.misses, JSON.stringify([t0, t1]));
+    ok('and the answer is the same', JSON.stringify(first.units) === JSON.stringify(again.units));
+    const deoUnits = hs.hotspotUnits(deo, {}).units.map((u) => u.id);
+    ok('another reader with a different area gets their own area, not the kept state answer', deoUnits.length > 0 && deoUnits.every((id) => id.startsWith('BLK-')) && first.units.every((u) => u.id.startsWith('DST-')));
+
+    // An import changes a result: the next request must see it, with no restart and no timer.
+    const gen0 = one<{ value: string }>(`select value from ext_meta where key = 'learning_data_gen'`)!.value;
+    const pair = hs.roundPair()!;
+    const dst = first.units[0];
+    run(`update assessment_results set n_proficient = 0 where round_id = ? and school_id in (select id from schools where district_id = ?)`, pair.curr.id, dst.id);
+    const gen1 = one<{ value: string }>(`select value from ext_meta where key = 'learning_data_gen'`)!.value;
+    ok('changing assessment results moves the counter', Number(gen1) > Number(gen0), `${gen0} → ${gen1}`);
+    const after = hs.hotspotUnits(st, {}).units.find((u) => u.id === dst.id)!;
+    ok(`the next answer reflects the change at once (${dst.id}: ${dst.currPct}% → ${after.currPct}%)`, after.currPct === 0 && dst.currPct !== 0);
+    run(`insert into schools (id, name, cluster_id, block_id, district_id, state_id) select 'SCH-TEST', 'Test school', cluster_id, block_id, district_id, state_id from schools limit 1`);
+    ok('adding a school moves the counter too', Number(one<{ value: string }>(`select value from ext_meta where key = 'learning_data_gen'`)!.value) > Number(gen1));
+    run(`delete from schools where id = 'SCH-TEST'`);
+  }
 } catch (e) {
   fail++;
   console.log(`  FAIL the test crashed: ${(e as Error).stack}`);

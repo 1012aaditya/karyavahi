@@ -1,7 +1,8 @@
 import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import { all, one, run, tx, nextId, nextIdFor, nextSeq, j, restorePristine } from './db';
-import { Refused, actingRole, may, moveRefusal, require_, requireDecideLever } from './guard';
+import { Refused, actingRole, may, moveRefusal, require_, requireDecideLever, requiredRoleFor } from './guard';
+import { involvement, INVOLVEMENT_MESSAGE } from './duty';
 import { casesPred, hasRole } from './scope';
 import type { Session } from './session';
 import { nowIso, today, addDays } from './clock';
@@ -187,10 +188,11 @@ function openApproval(s: Session, c: CaseCore, planId: string): void {
     'select intervention_id, school_ids, version, drafted_by, pre_registration from case_plans where id = ?', planId,
   );
   run(
-    `insert into approvals (id, case_id, plan_id, required_role, submitted_by, submitted_at, decision,
+    `insert into approvals (id, case_id, plan_id, required_role, lever, submitted_by, submitted_at, decision,
        decided_by, decided_at, reason, original_plan, edited_plan, ai_drafted)
-     values (?,?,?,?,?,?,'pending',null,null,null,?,null,?)`,
-    nextIdFor('approval', 'approvals', 'APR-', 5), c.id, planId, c.lever === 'block' ? 'beo' : 'deo', s.user_id, nowIso(),
+     values (?,?,?,?,?,?,?,'pending',null,null,null,?,null,?)`,
+    // The lever in force now is the one the decision gate (moveRefusal) will apply to this plan.
+    nextIdFor('approval', 'approvals', 'APR-', 5), c.id, planId, requiredRoleFor(c.lever), c.lever, s.user_id, nowIso(),
     JSON.stringify({
       intervention_id: plan?.intervention_id, school_ids: j(plan?.school_ids, []), version: plan?.version,
       pre_registration: j(plan?.pre_registration, null),
@@ -733,14 +735,17 @@ export function verifyEvidence(
   }
   require_(s, 'evidence.verify');
 
-  // Separation of duties: the rule that makes the proof mean anything.
-  if (e.submitted_by === s.user_id) {
+  // Separation of duties: the rule that makes the proof mean anything. Not only the submitter:
+  // whoever owns the task, held it before, or handed in proof for it is too close to check it.
+  const involved = involvement(s.user_id, e);
+  if (involved) {
     appendAudit({
       actorUserId: s.user_id, actorRole: actingRole(s), action: 'evidence.verify_refused',
       entityType: 'evidence', entityId: o.evidenceId,
-      reason: 'submitter cannot verify their own evidence', result: 'failure',
+      reason: involved === 'submitted' ? 'submitter cannot verify their own evidence' : `verifier took part in the task (${involved.replace('_', ' ')})`,
+      result: 'failure',
     });
-    throw new Refused('You cannot verify evidence you submitted yourself.', 'separation_of_duties');
+    throw new Refused(INVOLVEMENT_MESSAGE[involved], 'separation_of_duties');
   }
   if (e.status !== 'pending') {
     throw new Refused(`This proof has already been ${e.status}.`, 'already_decided');
