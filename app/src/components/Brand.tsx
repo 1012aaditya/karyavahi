@@ -54,13 +54,13 @@ export function AuthFrame({ children, right }: { children: ReactNode; right?: Re
             <span>
               <strong className="font-semibold text-warn">Demo mode — not actual government statistics.</strong>{' '}
               Schools, enrolment, teachers and locations are real (UDISE+ via India Data Portal, about 2020-21; names withheld). Learning results are simulated and calibrated to PRS 2024; costs are from the UP PAB 2025-26 minutes. People, cases and outcomes are fictional.{' '}
-              <Link href="/sources" className="link">Sources and credits</Link>
+              <Link href="/sources" className="link">Sources and credits</Link> · <Link href="/roadmap" className="link">Roadmap</Link>
             </span>
           ) : (
             <span>
               <strong className="font-semibold text-warn">Demo mode — fictional seed data — not actual government statistics.</strong>{' '}
               Every school, person, score, cost and outcome is generated. Nothing is connected to UDISE+, NAS, ASER, a state VSK, WhatsApp or IVR.{' '}
-              <Link href="/sources" className="link">Sources</Link>
+              <Link href="/sources" className="link">Sources</Link> · <Link href="/roadmap" className="link">Roadmap</Link>
             </span>
           )}
         </p>

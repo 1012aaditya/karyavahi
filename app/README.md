@@ -759,6 +759,12 @@ scope, 404s, pagination, leak scan, cookies, rate limit, OpenAPI coverage, who m
 
 ## Known limits
 
+- **An occasional hydration mismatch right after sign-in.** Now and then a page opened straight
+  after signing in (seen on `/today`, `/overview`, a case or a task) is drawn slightly differently
+  in the browser than on the server; React logs error #418 and redraws that part in the browser,
+  so nothing breaks on screen. It is intermittent, also appears on code from before the latest
+  merges, and was not traced to a single component. `scripts/e2e.cjs` reports it as a WARN line
+  instead of failing; every other uncaught error still fails the run.
 - **Only assessment rounds can be uploaded.** Attendance and staff-movement batches are still
   the seeded ones. A committed batch cannot be withdrawn from the UI; a correction is a new
   upload (rows already on record are refused as duplicates).

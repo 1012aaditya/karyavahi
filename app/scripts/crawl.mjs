@@ -91,7 +91,7 @@ const COMMON = [
   '/account', '/admin/accounts', '/admin/accounts?tab=users', '/admin/hierarchy', '/admin/geography', '/register', '/register/status',
   // the read-only API for state dashboards: the key manager (state team and demo admin; everyone
   // else is shown a refusal) and the plain-words API guide (every signed-in role)
-  '/admin/api-keys', '/developers',
+  '/admin/api-keys', '/developers', '/sources', '/roadmap',
 ];
 
 // Real failure signatures. Next serialises its own 404 component into every page's payload,
