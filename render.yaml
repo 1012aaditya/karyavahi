@@ -13,7 +13,8 @@ services:
     region: singapore
     # The app imports the shared domain rules from ../src, so the whole repository is built; the
     # commands run inside app/.
-    buildCommand: cd app && npm ci && npm run build
+    # db:prewarm prepares the database during the build, so a woken instance starts in seconds.
+    buildCommand: cd app && npm ci && npm run build && npm run db:prewarm
     startCommand: cd app && npm start
     healthCheckPath: /
     autoDeploy: true

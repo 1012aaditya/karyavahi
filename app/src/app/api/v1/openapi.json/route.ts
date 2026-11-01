@@ -1,3 +1,4 @@
+import { publicOrigin } from '@/lib/http';
 import { publicJson } from '@/lib/api/http';
 import { openApiDocument } from '@/lib/api/openapi';
 
@@ -6,5 +7,5 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export function GET(req: Request) {
-  return publicJson(openApiDocument(new URL(req.url).origin));
+  return publicJson(openApiDocument(publicOrigin(req)));
 }

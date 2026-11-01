@@ -1,3 +1,5 @@
+import { NextResponse } from 'next/server';
+
 /**
  * Request checks for the plain POST route handlers (sign-in, sign-out, language). Server
  * actions get Next's own Origin check; these handlers do not, so they call this instead.
@@ -42,4 +44,21 @@ export function sameSitePath(url: string | null, headers: Headers, fallback = '/
   } catch {
     return fallback;
   }
+}
+
+/**
+ * A 303 to a path on this site, sent as a relative Location. Behind a proxy (Render, Cloudflare)
+ * the server's own request URL is its internal address (http://localhost:10000), so an absolute
+ * redirect built from it would send the browser there. A relative Location is resolved by the
+ * browser against the address it actually used.
+ */
+export function redirectToPath(path: string): NextResponse {
+  return new NextResponse(null, { status: 303, headers: { Location: localPath(path) } });
+}
+
+/** This site's public origin as the browser sees it (proxy headers first, then the request URL). */
+export function publicOrigin(req: Request): string {
+  const host = requestHost(req.headers);
+  if (!host) return new URL(req.url).origin;
+  return `${isHttps(req.headers, req.url) ? 'https' : 'http'}://${host}`;
 }

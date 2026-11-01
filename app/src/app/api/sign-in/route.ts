@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { SESSION_COOKIE, createSession, sessionCookieOptions } from '@/lib/session';
 import { resolveSignIn, isDemoAddress } from '@/lib/sign-in';
 import { homeFor } from '@/lib/nav';
-import { isCrossSite, isHttps } from '@/lib/http';
+import { isCrossSite, isHttps, redirectToPath } from '@/lib/http';
 
 /**
  * Demo sign-in. Takes either a user id (the demo persona picker) or an email address (the
@@ -27,17 +27,17 @@ export async function POST(req: Request) {
   if ('error' in r) return back(req, from, r.error, email);
   const { session } = r;
 
-  const res = NextResponse.redirect(new URL(homeFor(session), req.url), 303);
+  const res = redirectToPath(homeFor(session));
   const token = createSession(session.user_id, req.headers.get('user-agent'));
   res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(isHttps(req.headers, req.url)));
   return res;
 }
 
 function back(req: Request, path: string, error: string, email: string) {
-  const url = new URL(path, req.url);
+  const url = new URL(path, 'http://x');
   url.searchParams.set('error', error);
   // Echoed back to refill the form, but only a fictional demo address: anything else might be a
   // real person's, and an address does not belong in a URL that logs and history keep.
   if (email && isDemoAddress(email)) url.searchParams.set('email', email);
-  return NextResponse.redirect(url, 303);
+  return redirectToPath(url.pathname + url.search);
 }
