@@ -23,8 +23,16 @@ import {
 } from '@/lib/actions';
 import { reassignView } from '@/lib/plans';
 import { EvidenceSummary } from '@/components/EvidenceSummary';
+import { involvement, INVOLVEMENT_MESSAGE, type Involvement } from '@/lib/duty';
 
 /** One task: what it asks for, what proof it needs, and what has been submitted so far. */
+
+const INVOLVEMENT_HI: Record<Involvement, string> = {
+  submitted: 'यह आपने जमा किया है, अतः आप इसे नहीं जाँच सकते।',
+  owner: 'यह काम आपको सौंपा गया है, अतः इसका सबूत कोई और जाँचेगा।',
+  former_owner: 'यह काम पहले आपके पास था, अतः इसका सबूत कोई और जाँचेगा।',
+  delivered: 'इस काम का सबूत आपने भी जमा किया है, अतः कोई और जाँचेगा।',
+};
 
 export default async function TaskPage({
   params, searchParams,
@@ -47,6 +55,8 @@ export default async function TaskPage({
   const verifiedCount = evidence.filter((e) => e.status === 'verified').length;
   const overdueDays = t.is_overdue ? daysAgo(t.due_date) : 0;
   const canVerifyHere = may(session, 'evidence.verify');
+  // The same separation-of-duties rule verifyEvidence() enforces, so no button is offered that would be refused.
+  const tooClose = new Map(evidence.map((e) => [e.id, involvement(session.user_id, e)]));
   const reassign = reassignView(session, t.id);
   const reassignable = reassign && !reassign.refusal;
   const choosable = reassign?.options.filter((o) => !o.blocked) ?? [];
@@ -287,7 +297,7 @@ export default async function TaskPage({
                       <p className="mt-1 border-l-2 border-crit/40 pl-2 text-sm text-crit">{e.rejection_reason}</p>
                     ) : null}
                   </div>
-                  {canVerifyHere && e.status === 'pending' && e.submitted_by !== session.user_id ? (
+                  {canVerifyHere && e.status === 'pending' && !tooClose.get(e.id) ? (
                     <div className="flex shrink-0 flex-col items-end gap-2 no-print">
                       <ActionForm lang={lang}
                         action={verifyEvidenceAction}
@@ -304,9 +314,9 @@ export default async function TaskPage({
                         </ActionForm>
                       </Disclose>
                     </div>
-                  ) : e.status === 'pending' && e.submitted_by === session.user_id ? (
+                  ) : e.status === 'pending' && tooClose.get(e.id) && (canVerifyHere || tooClose.get(e.id) === 'submitted') ? (
                     <p className="max-w-[14rem] shrink-0 text-right text-xs text-ink-faint">
-                      {pick(lang, 'You submitted this, so you cannot check it.', 'यह आपने जमा किया है, अतः आप इसे नहीं जाँच सकते।')}
+                      {pick(lang, INVOLVEMENT_MESSAGE[tooClose.get(e.id)!], INVOLVEMENT_HI[tooClose.get(e.id)!])}
                     </p>
                   ) : null}
                 </div>

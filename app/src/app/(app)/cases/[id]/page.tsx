@@ -275,6 +275,7 @@ export default async function CasePage({
         { id: 'work', label: pick(lang, 'Work', 'काम'), badge: overdueTasks ? String(overdueTasks) : undefined, tone: 'crit' },
         { id: 'proof', label: pick(lang, 'Proof', 'सबूत'), badge: pendingProof ? String(pendingProof) : undefined, tone: 'warn' },
         { id: 'outcome', label: pick(lang, 'Outcome', 'परिणाम'), badge: outcomes.length ? String(outcomes.length) : undefined },
+        { id: 'discussion', label: pick(lang, 'Discussion', 'चर्चा') },
         { id: 'history', label: pick(lang, 'History', 'इतिहास') },
       ]} />
 
@@ -490,7 +491,7 @@ export default async function CasePage({
         </Card>
       ) : null}
 
-      <div className="scroll-mt-36"><CaseThread session={session} caseId={c.id} lang={lang} /></div>
+      <div id="discussion" className="scroll-mt-36"><CaseThread session={session} caseId={c.id} lang={lang} /></div>
 
       <div id="history" className="scroll-mt-36"><TimelinePanel events={timeline} names={names} lang={lang} /></div>
 

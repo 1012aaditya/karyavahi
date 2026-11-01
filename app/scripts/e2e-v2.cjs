@@ -19,6 +19,8 @@ async function login(browser, email) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 } });
   const r = await ctx.request.post(`${BASE}/api/sign-in`, { form: { email }, maxRedirects: 0 });
   if (r.status() !== 303) throw new Error(`sign-in ${email}: ${r.status()}`);
+  // Field staff read in Hindi by default; these checks are written against the English wording.
+  await ctx.addCookies([{ name: 'kv_lang', value: 'en', url: BASE }]);
   return ctx;
 }
 
@@ -71,7 +73,7 @@ function zipEntries(buf) {
   page.on('pageerror', (e) => errors.push(`${page.url()}: ${e.message}`));
 
   await page.goto(`${BASE}/overview`, { waitUntil: 'networkidle' });
-  ok('overview: requires-your-attention list', await page.getByText(/Requires your attention/).count() > 0);
+  ok('overview: needs-you-now panel', await page.getByText('Needs you now').count() > 0);
   ok('overview: KPI links to approvals', await page.locator('a[href="/approvals"]').count() > 0);
   ok('overview: no demo-clock controls on the home page', await page.getByText('Reset the demo').count() === 0);
 
@@ -82,7 +84,7 @@ function zipEntries(buf) {
   await page.getByText('Most affected competencies').waitFor({ timeout: 15000 });
   ok('hotspots: selecting a cluster opens its detail', await page.getByText('Most affected competencies').count() > 0);
   ok('hotspots: CASE-0184 listed for Rampur cluster', await page.getByText('CASE-0184').count() > 0);
-  ok('hotspots: illustrative-boundary disclaimer shown', await page.getByText(/illustrative boundaries/).count() > 0);
+  ok('hotspots: boundary source and simulated-data note shown', await page.getByText(/OpenStreetMap|Illustrative geography/).count() > 0);
 
   await page.goto(`${BASE}/cases?tab=approval`, { waitUntil: 'networkidle' });
   ok('cases: pending-approval tab lists CASE-0184', await page.getByText('CASE-0184').count() > 0);
@@ -113,7 +115,7 @@ function zipEntries(buf) {
   ok('reports: csv carries the disclaimer', csv.includes('NOT ACTUAL GOVERNMENT STATISTICS'));
 
   // Blocker: report one on an overdue task this officer can manage.
-  await page.goto(`${BASE}/execution?tab=overdue`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/execution?tab=overdue&view=table`, { waitUntil: 'networkidle' });
   const taskLink = page.locator('table a[href^="/tasks/"]').first();
   if (await taskLink.count()) {
     const href = await taskLink.getAttribute('href');
@@ -164,11 +166,15 @@ function zipEntries(buf) {
     await cp2.getByRole('button', { name: /^Acknowledge$/ }).waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
     await cp2.reload({ waitUntil: 'networkidle' });
     ok('the CRC acknowledges it in the UI', await cp2.getByText('Acknowledged', { exact: true }).count() > 0 && await cp2.getByRole('button', { name: /^Acknowledge$/ }).count() === 0);
-    const restricted = await cp2.goto(`${BASE}/complaints/CMP-0005`, { waitUntil: 'networkidle' });
-    ok('the accused CRC gets a 404 on the restricted complaint about them', restricted.status() === 404);
+    // The loading screen streams the page before the access check, so a refusal arrives as the
+    // not-found page with status 200 rather than 404. What matters is that nothing of it leaks.
+    const leaks = (html) => /Visit records entered without visits|coaching visits on dates when no one came/.test(html);
+    await cp2.goto(`${BASE}/complaints/CMP-0005`, { waitUntil: 'networkidle' });
+    ok('the accused CRC is shown nothing of the restricted complaint about them',
+      await cp2.getByText('Nothing at this address').count() > 0 && !leaks(await cp2.content()));
     const deoCtx = await login(browser, 'deo.rmp@demo.karyavahi.test');
     const dres = await deoCtx.request.get(`${BASE}/complaints/CMP-0005`);
-    ok('a senior DEO not on its route also gets a 404', dres.status() === 404);
+    ok('a senior DEO not on its route is shown nothing of it either', [200, 404].includes(dres.status()) && !leaks(await dres.text()));
   }
 
   // ---- the real map
@@ -176,8 +182,10 @@ function zipEntries(buf) {
     const mp = await beo.newPage();
     mp.on('pageerror', (e) => errors.push(`map: ${e.message}`));
     await mp.goto(`${BASE}/hotspots`, { waitUntil: 'networkidle' });
-    await mp.locator('canvas.maplibregl-canvas').first().waitFor({ timeout: 30000 }).catch(() => {});
-    ok('MapLibre canvas renders', await mp.locator('canvas.maplibregl-canvas').count() > 0);
+    // Google Maps when a browser key is configured, MapLibre otherwise.
+    const mapDrawn = 'canvas.maplibregl-canvas, .gm-style';
+    await mp.locator(mapDrawn).first().waitFor({ timeout: 30000 }).catch(() => {});
+    ok('the map renders', await mp.locator(mapDrawn).count() > 0);
     ok('map opens at the officer’s block', await mp.getByRole('navigation', { name: 'Geographic breadcrumb' }).getByText('Rampur Sadar').count() > 0);
     await mp.getByRole('toolbar', { name: 'Map tools' }).getByRole('button', { name: 'Layers' }).click();
     await mp.getByRole('checkbox', { name: /Open complaints/ }).check();

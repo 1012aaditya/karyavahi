@@ -109,7 +109,7 @@ const ok = (label, cond, extra = '') => {
   await composer.getByRole('button', { name: 'Post comment' }).click();
   await composer.getByText(/Decision recorded/).waitFor({ timeout: 15000 });
   await page.reload({ waitUntil: 'networkidle' });
-  ok('the decision is marked in the thread', (await page.locator('#discussion').locator('..').getByText('Decision', { exact: true }).count()) > 0);
+  ok('the decision is marked in the thread', (await page.locator('#discussion').getByText('Decision', { exact: true }).count()) > 0);
   ok('the decision is in the case history', (await page.getByText(/decision recorded/i).count()) > 0);
 
   const first = page.locator('li[id^="comment-"]').first();

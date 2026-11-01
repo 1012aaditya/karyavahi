@@ -29,7 +29,6 @@ export function CaseThread({ session, caseId, lang }: { session: Session; caseId
   return (
     <Card>
       <CardHead
-        id="discussion"
         title={pick(lang, 'Discussion', 'चर्चा')}
         hint={`${comments.length} ${pick(lang, comments.length === 1 ? 'comment' : 'comments', 'टिप्पणियाँ')} · ${watch.followers} ${pick(lang, watch.followers === 1 ? 'person following' : 'people following', 'अनुसरणकर्ता')}. ${followHint}`}
         right={
