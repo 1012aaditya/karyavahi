@@ -208,11 +208,63 @@ export default async function CasePage({
           </div>
         </div>
         <div className="mt-5"><LifecycleStepper status={c.status} reopenCount={c.reopen_count} /></div>
-        <dl className="mt-5 flex flex-wrap gap-x-10 gap-y-3 border-t border-line pt-4 text-sm">
-          <div><dt className="label">{pick(lang, 'Opened', 'खोला गया')}</dt><dd className="mt-0.5 font-medium text-ink">{fmtDate(c.created_at)} <span className="font-normal text-ink-faint">· {c.origin === 'detected' ? pick(lang, 'detector', 'पहचान-तंत्र') : pick(lang, 'officer', 'अधिकारी')}</span></dd></div>
-          <div><dt className="label">{pick(lang, 'Tasks', 'काम')}</dt><dd className="mt-0.5 font-medium text-ink">{tasks.filter((t) => t.status === 'verified').length}/{tasks.length} {pick(lang, 'verified', 'सत्यापित')}{overdueTasks ? <span className="ml-1 text-crit">· {overdueTasks} late</span> : null}</dd></div>
-          <div><dt className="label">{pick(lang, 'Proof', 'सबूत')}</dt><dd className="mt-0.5 font-medium text-ink">{evidence.filter((e) => e.status === 'verified').length}/{evidence.length} {pick(lang, 'verified', 'सत्यापित')}{pendingProof ? <span className="ml-1 text-warn">· {pendingProof} pending</span> : null}</dd></div>
-        </dl>
+        {/* The case at a glance, as pictures: the drop, how far beyond the district, work and proof. */}
+        <div className="mt-5 grid gap-3 border-t border-line pt-5 sm:grid-cols-2 xl:grid-cols-4">
+          {finding ? (
+            <div className="rounded-xl bg-paper-sunk/70 p-3.5">
+              <p className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{pick(lang, 'The drop', 'गिरावट')}</p>
+              <p className="mt-1.5 flex items-baseline gap-2">
+                <span className="tnum text-lg font-semibold text-ink-soft">{fmtPct(finding.prev_value_pct)}</span>
+                <Icon name="arrow-right" size={16} className="text-crit" />
+                <span className="tnum text-2xl font-semibold text-crit">{fmtPct(finding.curr_value_pct)}</span>
+              </p>
+              <p className="tnum mt-0.5 text-xs text-ink-soft">{finding.change_pp > 0 ? '+' : '−'}{Math.abs(finding.change_pp).toFixed(1)} pp {pick(lang, 'at grade level', 'ग्रेड स्तर पर')} · {pick(lang, 'district', 'ज़िला')} {finding.district_change_pp > 0 ? '+' : '−'}{Math.abs(finding.district_change_pp).toFixed(1)} pp</p>
+            </div>
+          ) : null}
+          {finding ? (
+            <div className="rounded-xl bg-paper-sunk/70 p-3.5">
+              <p className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{pick(lang, 'Beyond the district', 'ज़िले से अधिक')}</p>
+              <p className="tnum mt-1.5 text-2xl font-semibold text-ink">{finding.relative_change_pp > 0 ? '+' : '−'}{Math.abs(finding.relative_change_pp).toFixed(1)} <span className="text-base font-medium text-ink-soft">pp</span></p>
+              <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-paper-deep" aria-hidden>
+                <span className="block h-full rounded-full bg-crit/80" style={{ width: `${Math.min(100, Math.round(Math.abs(finding.relative_change_pp) * 4))}%` }} />
+              </span>
+              <p className="tnum mt-1 text-xs text-ink-soft">z {finding.z_score.toFixed(2)} · {finding.schools_reporting}/{finding.schools_total} {pick(lang, 'schools reporting', 'विद्यालय रिपोर्टिंग')}</p>
+            </div>
+          ) : null}
+          {(() => {
+            const done = tasks.filter((t) => t.status === 'verified').length;
+            const proofOk = evidence.filter((e) => e.status === 'verified').length;
+            const ring = (n: number, of: number, tone: string) => {
+              const r = 16, c = 2 * Math.PI * r, f = of ? n / of : 0;
+              return (
+                <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden className="shrink-0 -rotate-90">
+                  <circle cx="22" cy="22" r={r} fill="none" strokeWidth="5" className="stroke-paper-deep" />
+                  {f > 0 ? <circle cx="22" cy="22" r={r} fill="none" strokeWidth="5" strokeLinecap="round" className={tone} strokeDasharray={`${c * f} ${c}`} /> : null}
+                </svg>
+              );
+            };
+            return (
+              <>
+                <div className="flex items-center gap-3 rounded-xl bg-paper-sunk/70 p-3.5">
+                  {ring(done, tasks.length, 'stroke-brand')}
+                  <div className="min-w-0">
+                    <p className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{pick(lang, 'Work done', 'काम पूरा')}</p>
+                    <p className="tnum text-lg font-semibold text-ink">{done}<span className="text-sm font-normal text-ink-faint">/{tasks.length} {pick(lang, 'verified', 'सत्यापित')}</span></p>
+                    {overdueTasks ? <p className="text-xs font-medium text-crit">{overdueTasks} {pick(lang, 'late', 'विलंबित')}</p> : <p className="text-xs text-ink-faint">{tasks.length ? pick(lang, 'none late', 'कोई विलंब नहीं') : pick(lang, 'no tasks yet', 'अभी कोई काम नहीं')}</p>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 rounded-xl bg-paper-sunk/70 p-3.5">
+                  {ring(proofOk, evidence.length, 'stroke-good')}
+                  <div className="min-w-0">
+                    <p className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{pick(lang, 'Proof checked', 'सबूत जाँचे गए')}</p>
+                    <p className="tnum text-lg font-semibold text-ink">{proofOk}<span className="text-sm font-normal text-ink-faint">/{evidence.length}</span></p>
+                    {pendingProof ? <p className="text-xs font-medium text-warn">{pendingProof} {pick(lang, 'waiting', 'प्रतीक्षा में')}</p> : <p className="text-xs text-ink-faint">{pick(lang, 'Opened', 'खोला गया')} {fmtDate(c.created_at, false, lang)}</p>}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </div>
       </header>
 
       <SectionNav items={[

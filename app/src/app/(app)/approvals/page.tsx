@@ -10,6 +10,8 @@ import { Card, CardHead, PageHead, Callout, Empty, Mono, fmtInr, fmtDate } from 
 import { SeverityPill, AiDrafted, Illustrative, Pill } from '@/components/labels';
 import { ActionForm, ReasonBox, Disclose } from '@/components/ActionForm';
 import { decidePlanAction } from '@/lib/actions';
+import { all } from '@/lib/db';
+import { Icon } from '@/components/Icon';
 
 /** Plans waiting on this officer, with enough on the card to decide without opening each case. */
 
@@ -37,6 +39,11 @@ export default async function ApprovalsPage() {
     users: queue.flatMap((q) => [q.case.owner_user_id, q.approval?.submitted_by ?? '']),
   });
   const places = placeNames();
+  // The drop each plan answers, shown as a picture beside it. Only for cases already in the queue.
+  const fids = queue.map((q) => q.case.finding_id).filter((x): x is string => !!x);
+  const drops = new Map(fids.length ? all<{ id: string; prev: number; curr: number; rel: number }>(
+    `select id, prev_value_pct prev, curr_value_pct curr, relative_change_pp rel from findings where id in (${fids.map(() => '?').join(',')})`, ...fids,
+  ).map((r) => [r.id, r]) : []);
 
   return (
     <div>
@@ -79,7 +86,27 @@ export default async function ApprovalsPage() {
                   {!plan ? (
                     <Empty>{pick(lang, 'No plan attached.', 'कोई योजना संलग्न नहीं।')}</Empty>
                   ) : (
-                    <div className="card-pad space-y-3">
+                    <div className="card-pad grid gap-4 md:grid-cols-[200px_minmax(0,1fr)]">
+                      {(() => {
+                        const d = c.finding_id ? drops.get(c.finding_id) : undefined;
+                        if (!d) return <div className="hidden md:block" />;
+                        return (
+                          <div className="rounded-xl bg-paper-sunk/70 p-3.5" aria-label={pick(lang, 'The drop this plan answers', 'यह योजना किस गिरावट के लिए है')}>
+                            <p className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{pick(lang, 'The drop', 'गिरावट')}</p>
+                            <p className="mt-1.5 flex items-baseline gap-1.5">
+                              <span className="tnum text-base font-semibold text-ink-soft">{d.prev.toFixed(1)}%</span>
+                              <Icon name="arrow-right" size={14} className="text-crit" />
+                              <span className="tnum text-xl font-semibold text-crit">{d.curr.toFixed(1)}%</span>
+                            </p>
+                            <div className="mt-2 space-y-1" aria-hidden>
+                              <span className="block h-1.5 rounded-full bg-ink-faint/40" style={{ width: `${Math.min(100, d.prev)}%` }} />
+                              <span className="block h-1.5 rounded-full bg-crit/80" style={{ width: `${Math.min(100, d.curr)}%` }} />
+                            </div>
+                            <p className="tnum mt-2 text-xs text-ink-soft">{d.rel > 0 ? '+' : '−'}{Math.abs(d.rel).toFixed(1)} pp {pick(lang, 'beyond the district', 'ज़िले से अधिक')}</p>
+                          </div>
+                        );
+                      })()}
+                    <div className="min-w-0 space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-base font-medium text-ink">{iv?.name ?? plan.intervention_id}</span>
                         {plan.drafted_by === 'ai_draft' ? <AiDrafted lang={lang} model={plan.ai_model} /> : null}
@@ -140,6 +167,7 @@ export default async function ApprovalsPage() {
                           {pick(lang, 'Open the full case', 'पूरा प्रकरण खोलें')}
                         </Link>
                       </div>
+                    </div>
                     </div>
                   )}
                 </Card>

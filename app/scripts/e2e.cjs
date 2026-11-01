@@ -43,7 +43,7 @@ const ok = (label, cond, extra = '') => {
   const bodyText = await page.locator('body').innerText();
   ok('the demo banner is on the page', bodyText.includes('DEMO MODE'));
   ok('the dashboard leads with what is waiting on the officer',
-    /needs your attention|Requires your attention|Priority actions/i.test(bodyText));
+    /needs you now|needs your attention|Requires your attention|Priority actions/i.test(bodyText));
 
   // ---- the hero case ----
   await page.goto(`${BASE}/cases/CASE-0184`, { waitUntil: 'networkidle' });
