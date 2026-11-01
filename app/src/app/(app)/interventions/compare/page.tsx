@@ -4,10 +4,12 @@ import { pageSession } from '@/lib/page-session';
 import { interventions, competencies } from '@/lib/repo';
 import { getCase } from '@/lib/cases';
 import { matchForCase, interventionHistory, authorityFor, feasibility } from '@/lib/studio';
+import { planCounts } from '@/lib/plans';
 import { pick } from '@/lib/i18n';
 import { PageHead, fmtInr } from '@/components/ui';
 import { EvidenceStrength } from '@/components/labels';
 import { Icon } from '@/components/Icon';
+import { CostSource, unitLabel } from '@/components/cost';
 import type { Intervention } from '@domain/types';
 
 /**
@@ -28,7 +30,9 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
   const ids = [...new Set(raw.map((x) => x.trim().toUpperCase()))].filter((x) => all.some((i) => i.id === x)).slice(0, 3);
   const caseId = sp.case && getCase(session, sp.case.toUpperCase()) ? sp.case.toUpperCase() : undefined;
   const match = caseId ? matchForCase(session, caseId) : null;
-  const caseSchools = caseId ? getCase(session, caseId)?.school_ids.length ?? 1 : 1;
+  const theCase = caseId ? getCase(session, caseId) : null;
+  const caseSchools = theCase?.school_ids.length ?? 1;
+  const counts = theCase ? planCounts(theCase.school_ids, theCase.grade) : {};
 
   // With a case but nothing chosen yet, start from the top three matches.
   const chosen: Intervention[] = (ids.length ? ids : match ? match.matches.filter((m) => m.eligible).slice(0, 3).map((m) => m.intervention.id) : [])
@@ -38,7 +42,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
 
   const cols = chosen.map((iv) => {
     const m = match?.matches.find((x) => x.intervention.id === iv.id) ?? null;
-    const f = feasibility(iv, { schools: caseSchools, budgetInr: null, teachersAvailable: null, weeksAvailable: null, attendancePct: null, trainingComplete: false, connectivity: false });
+    const f = feasibility(iv, { schools: caseSchools, budgetInr: null, teachersAvailable: null, weeksAvailable: null, attendancePct: null, trainingComplete: false, connectivity: false, ...counts });
     return { iv, m, h: hist.get(iv.id), auth: m?.authority ?? authorityFor(session, iv.lever), cost: f.totalCost };
   });
 
@@ -112,7 +116,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
               <Row label="Evidence quality">{cols.map(({ iv }) => <div key="e" className="space-y-1"><EvidenceStrength status={iv.evidence.status} lang={lang} /><p className="text-xs">{iv.evidence.summary}</p></div>)}</Row>
               <Row label="Effect estimate" hint="Only where the card cites one">{cols.map(({ iv }) => iv.evidence.effect_size_text ? <span key="x" className="text-ink">{iv.evidence.effect_size_text} <span className="text-warn">(verify before production)</span></span> : <span key="x" className="text-ink-faint">No effect-size claim made</span>)}</Row>
               <Group label="Assumptions & delivery — not evidence" tone="warn" />
-              <Row label="Cost" hint="Illustrative card figure">{cols.map(({ iv, cost }) => <span key="c" className="tnum">{fmtInr(iv.cost_basis.amount_inr)} {iv.cost_basis.unit}{caseId && cost !== null ? <span className="block text-xs text-ink-faint">≈ {fmtInr(cost)} for this case’s {caseSchools} school(s)</span> : null}</span>)}</Row>
+              <Row label="Cost" hint="UP PAB 2025-26 unit cost where a line exists; otherwise illustrative">{cols.map(({ iv, cost }) => <span key="c" className="tnum">{fmtInr(iv.cost_basis.amount_inr)} {unitLabel(iv.cost_basis.unit, lang)} <CostSource cost={iv.cost_basis} lang={lang} />{caseId && cost !== null ? <span className="block text-xs text-ink-faint">≈ {fmtInr(cost)} for this case’s {caseSchools} school(s)</span> : null}</span>)}</Row>
               <Row label="Duration">{cols.map(({ iv }) => <span key="d">{iv.duration_weeks ? `${iv.duration_weeks} weeks` : 'Next PAB cycle'}</span>)}</Row>
               <Row label="Resources & staff">{cols.map(({ iv }) => <ul key="s" className="list-disc space-y-0.5 pl-4 text-sm">{iv.resources.slice(0, 5).map((r) => <li key={r}>{r}</li>)}</ul>)}</Row>
               <Row label="Delivery conditions" hint="Must be true for it to work">{cols.map(({ iv }) => <ul key="dc" className="list-disc space-y-0.5 pl-4 text-sm">{iv.delivery_conditions.map((r) => <li key={r}>{r}</li>)}</ul>)}</Row>

@@ -81,9 +81,11 @@ const STATUS_STYLE = {
 } as const;
 
 export function FeasibilityPanel({
-  id, caseId, values, checks, totalCost, verdict,
+  id, caseId, values, checks, totalCost, verdict, costSource = 'illustrative',
 }: {
   id: string; caseId?: string;
+  /** Where the card's unit cost comes from: a UP PAB 2025-26 line, a neighbouring line's rate, or illustrative. */
+  costSource?: 'pab' | 'pab_proxy' | 'illustrative';
   values: { schools: number; budget: string; teachers: string; weeks: string; attendance: string; training: boolean; connectivity: boolean };
   checks: FeasibilityCheck[]; totalCost: number | null; verdict: 'feasible' | 'at_risk' | 'not_feasible';
 }) {
@@ -110,7 +112,7 @@ export function FeasibilityPanel({
         <div>
           <div className={`mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3.5 py-2.5 ${v[0]}`}>
             <p className="text-base font-semibold">{v[1]}</p>
-            {totalCost !== null ? <p className="text-sm">Illustrative cost: <strong className="tnum">₹{totalCost.toLocaleString('en-IN')}</strong></p> : null}
+            {totalCost !== null ? <p className="text-sm">{costSource === 'illustrative' ? 'Illustrative cost' : 'Estimated cost (UP PAB 2025-26 rate)'}: <strong className="tnum">₹{totalCost.toLocaleString('en-IN')}</strong></p> : null}
           </div>
           <ul className="divide-y divide-line rounded-lg border border-line">
             {checks.map((c) => {
@@ -126,7 +128,9 @@ export function FeasibilityPanel({
               );
             })}
           </ul>
-          <p className="mt-2 text-xs text-ink-faint">Costs are illustrative card figures, not PAB unit costs.</p>
+          <p className="mt-2 text-xs text-ink-faint">{costSource === 'pab' ? 'Unit cost from the UP PAB 2025-26 minutes; the counts come from the schools’ UDISE+ figures where a case is open.'
+            : costSource === 'pab_proxy' ? 'Unit cost borrowed from the nearest UP PAB 2025-26 line (see the card); the counts come from the schools’ UDISE+ figures where a case is open.'
+              : 'Costs are illustrative card figures, not PAB unit costs.'}</p>
         </div>
       </div>
     </section>

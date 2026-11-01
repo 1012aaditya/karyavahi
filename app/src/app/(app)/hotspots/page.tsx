@@ -9,6 +9,7 @@ import { Icon } from '@/components/Icon';
 import { HotspotWorkspace } from '@/components/HotspotWorkspace';
 import { SEVERITY_COLORS, SEVERITY_LABEL } from '@/lib/maplayers';
 import { one } from '@/lib/db';
+import { DistrictContext, districtsForScope } from '@/components/DistrictContext';
 
 /**
  * Learning hotspots — a map-first workspace. The page is a thin server shell; the map, context
@@ -30,12 +31,13 @@ export default async function HotspotsPage() {
         title={pick(lang, 'Learning hotspots', 'अधिगम हॉटस्पॉट')}
         sub={pick(lang, 'Where proficiency is falling faster than the district, and what is already being done about it.', 'प्रवीणता ज़िले से तेज़ी से कहाँ गिर रही है, और उस पर क्या काम चल रहा है।')}
         meta={<>{scopeName(session.scope_type, session.scope_id)} · {latest} · <span className="text-warn">{realMap
-          ? pick(lang, 'real boundaries, simulated data', 'वास्तविक सीमाएँ, काल्पनिक डेटा')
+          ? pick(lang, 'real boundaries and schools, simulated learning data', 'वास्तविक सीमाएँ व विद्यालय, काल्पनिक अधिगम डेटा')
           : pick(lang, 'illustrative boundaries, fictional data', 'उदाहरण हेतु सीमाएँ, काल्पनिक डेटा')}</span></>}
       />
       <Suspense fallback={<div className="skeleton h-[600px] w-full" />}>
         <HotspotWorkspace rounds={rounds} competencies={comps} latestLabel={latest} />
       </Suspense>
+      <DistrictContext lang={lang} districtIds={districtsForScope(session.scope_type, session.scope_id, (sql, id) => one<{ d: string }>(sql, id)?.d ?? null)} />
       <details className="card group px-5 py-3">
         <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-ink">
           <Icon name="info" size={14} className="text-ink-faint" />How severity is decided

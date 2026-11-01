@@ -1,8 +1,10 @@
 # Karyavahi — run it
 
-**DEMO MODE — FICTIONAL SEED DATA — NOT ACTUAL GOVERNMENT STATISTICS.** Every school, person,
-score, cost and outcome is generated. Nothing is connected to UDISE+, NAS, ASER, a state VSK,
-WhatsApp or IVR.
+**DEMO MODE — NOT ACTUAL GOVERNMENT STATISTICS.** Schools, enrolment, teachers and locations are
+real (UDISE+ via India Data Portal, about 2020-21; names withheld). Learning results are simulated
+and calibrated to PRS 2024; costs are from the UP PAB 2025-26 minutes. People, cases and outcomes are
+fictional. Nothing is connected to a live UDISE+, NAS, a state VSK, WhatsApp or IVR. Every source,
+with its terms: open **/sources** in the app (linked from the demo strip at the top of every page).
 
 This package is self-contained. The database is already built, so there is nothing to generate.
 
@@ -96,6 +98,24 @@ use **Layers → Colour areas by** for teacher shortage, visit gaps or attendanc
 are real (OpenStreetMap); everything inside them is simulated. To see it on Google Maps, put a
 browser key in `app/.env.local` as `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=…` and restart the app.
 
+## Real public data
+
+The three districts hold real government schools from UDISE+ (shown as "School 0412 · Rampur
+Sadar", never by their real name), Class 3 results are calibrated so each district matches PRS 2024,
+and nine intervention cards carry UP PAB 2025-26 unit costs with their page. The app reads two small
+committed files, `app/data/real/schools.json` and `app/data/real/figures.json`, so nothing needs
+downloading. To rebuild them from the public sources (about 15 MB, needs Python 3 with `pypdf`):
+
+```
+cd app
+npm run data:fetch            # downloads into app/.data/sources/ (not committed), throttled, resumable
+npm run data:build            # writes app/data/real/*.json, checking every figure against its PDF page
+npm run db:init -- --force    # with the server stopped
+```
+
+Delete `app/data/real/` and the app runs on the fictional seed alone. Details, the reconciliation
+table and the trade-offs: `app/README.md`, section "Real public data".
+
 ## Folder layout
 
 ```
@@ -119,6 +139,8 @@ check running in the interface are the same code that generated and validated th
 | `npm run typecheck` | TypeScript, no emit |
 | `npm run gen:r4` | write an R4 (November) results file into `app/samples/` |
 | `npm run test:import` / `npm run test:threads` | the round-import and case-thread tests (stop the server first) |
+| `npm run test:realdata` | real schools, calibration, PAB costs and the fallback; add `-- http://localhost:3000` (server running) to scan pages for real names |
+| `npm run data:fetch` / `npm run data:build` | download the public sources / rebuild `app/data/real/` from them |
 
 `npm run verify` and `verify:full` need a bash shell — on Windows use Git Bash or WSL. Running
 the app itself needs no bash.

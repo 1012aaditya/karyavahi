@@ -9,10 +9,11 @@ import { schoolNames, competency } from '@/lib/repo';
 import { pick } from '@/lib/i18n';
 import { composePlanAction } from '@/lib/actions';
 import { Card, CardHead, PageHead, Callout, Facts, Field, Mono, fmtInr, fmtPct } from '@/components/ui';
-import { Pill, StatusPill, RoleName, EvidenceTypeName, CrossSourcePill, Illustrative } from '@/components/labels';
+import { Pill, StatusPill, RoleName, EvidenceTypeName, CrossSourcePill } from '@/components/labels';
 import { ReasonBox } from '@/components/ActionForm';
 import { ComposeForm } from '@/components/plan-composer';
 import { ROUNDS } from '@domain/catalog';
+import { CostSource, costNote, unitLabel } from '@/components/cost';
 
 /**
  * The Plan Composer: choose an intervention from the ranked matches, choose the schools, see
@@ -143,7 +144,7 @@ export default async function ComposePlanPage({
                           </span>
                           <span className="mt-1 block text-sm text-ink-soft">
                             {iv.duration_weeks > 0 ? `${iv.duration_weeks} ${pick(lang, 'weeks', 'सप्ताह')}` : pick(lang, 'PAB proposal', 'PAB प्रस्ताव')}
-                            {' · '}{fmtInr(iv.cost_basis.amount_inr)} {iv.cost_basis.unit}
+                            {' · '}{fmtInr(iv.cost_basis.amount_inr)} {unitLabel(iv.cost_basis.unit, lang)}
                             {' · '}{pick(lang, 'approved by', 'स्वीकृति')} {m.authority.who}
                           </span>
                           <span className="mt-1.5 block space-y-0.5 text-sm text-ink-soft">
@@ -225,8 +226,8 @@ export default async function ComposePlanPage({
                     <Link href={`/interventions/${chosenMatch.intervention.id}?case=${c.id}`} className="link font-medium">{chosenMatch.intervention.name}</Link>
                   </Field>
                   <Field label={pick(lang, 'Schools', 'विद्यालय')}>{preview.schoolIds.length}</Field>
-                  <Field label={pick(lang, 'Estimated cost', 'अनुमानित लागत')} hint={chosenMatch.intervention.cost_basis.note}>
-                    <span className="tnum">{fmtInr(preview.estimatedCost)}</span> <Illustrative lang={lang} />
+                  <Field label={pick(lang, 'Estimated cost', 'अनुमानित लागत')} hint={costNote(chosenMatch.intervention.cost_basis, lang)}>
+                    <span className="tnum">{fmtInr(preview.estimatedCost)}</span> <CostSource cost={chosenMatch.intervention.cost_basis} lang={lang} />
                   </Field>
                   <Field label={pick(lang, 'Approved by', 'स्वीकृति')}>
                     {approver?.who}

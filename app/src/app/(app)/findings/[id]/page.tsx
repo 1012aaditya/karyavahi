@@ -9,6 +9,8 @@ import { Card, CardHead, PageHead, Callout, Facts, Field, Mono, Delta, fmtPct, f
 import { Pill, SeverityPill } from '@/components/labels';
 import { TrendChart, DivergingBars } from '@/components/charts';
 import { SERIES } from '@/lib/viz';
+import { FindingCalibrationNote } from '@/components/CalibrationNote';
+import { schoolName } from '@/lib/school-label';
 
 /** A finding the detector did not turn into a case, with the gate that stopped it. */
 
@@ -89,6 +91,8 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
         </Callout>
       )}
 
+      <FindingCalibrationNote findingId={f.id} lang={lang} />
+
       <Card>
         <CardHead title={pick(lang, 'The comparison', 'तुलना')} />
         <div className="card-pad space-y-4">
@@ -140,7 +144,7 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
               caption="Change in percentage points per school between the two rounds."
               data={f.driver_schools.map((d) => ({
                 key: d.school_id,
-                label: schools.get(d.school_id) ?? d.school_id,
+                label: schoolName(schools.get(d.school_id), lang) || d.school_id,
                 value: d.change_pp,
                 note: `${fmtPct(d.prev_pct)} → ${fmtPct(d.curr_pct)}`,
               }))}

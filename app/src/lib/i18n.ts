@@ -24,6 +24,10 @@ export const T: Dict = {
     en: 'DEMO MODE — FICTIONAL SEED DATA — NOT ACTUAL GOVERNMENT STATISTICS',
     hi: 'डेमो मोड — काल्पनिक डेटा — वास्तविक सरकारी आँकड़े नहीं',
   },
+  demoBannerReal: {
+    en: 'DEMO MODE — REAL SCHOOLS (UDISE+ ~2020-21) · LEARNING RESULTS SIMULATED, CALIBRATED TO PRS 2024 · COSTS FROM UP PAB 2025-26',
+    hi: 'डेमो मोड — वास्तविक विद्यालय (यू-डाइस+ ~2020-21) · अधिगम परिणाम काल्पनिक, परख 2024 से अंशांकित · लागत उ.प्र. PAB 2025-26 से',
+  },
   demoClock: { en: 'Demo date', hi: 'डेमो तिथि' },
 
   // nav

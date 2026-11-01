@@ -15,6 +15,8 @@ import {
   AiDrafted, OfficerWritten, Illustrative, Association, CrossSourcePill, OverduePill,
   EscalatedPill, EvidenceTypeName, FactorName, RoleName, EvidenceStrength,
 } from './labels';
+import { CostSource, costNote, type CostBasisLike } from './cost';
+import { OutcomeCalibrationNote } from './CalibrationNote';
 import { TrendChart, DivergingBars, EffectInterval, SlopeChart } from './charts';
 import { SERIES } from '@/lib/viz';
 import { EvidenceSummary } from './EvidenceSummary';
@@ -351,7 +353,7 @@ export function PlanPanel({
     duration_weeks: number; success_metric: string; required_evidence: string[];
     delivery_conditions: string[]; limitations: string[];
     evidence: { status: string; summary: string; source_title: string | null; source_url: string | null; effect_size_text: string | null };
-    cost_basis: { amount_inr: number; unit: string; note: string };
+    cost_basis: CostBasisLike;
   } | null;
   names: Names; lang: Language; children?: React.ReactNode;
 }) {
@@ -387,10 +389,10 @@ export function PlanPanel({
             </Field>
             <Field
               label={pick(lang, 'Estimated cost', 'अनुमानित लागत')}
-              hint={intervention?.cost_basis.note}
+              hint={currentPlan.cost_is_illustrative || !intervention ? pick(lang, 'Estimated when the plan was drafted, from an illustrative card figure.', 'योजना बनते समय एक उदाहरणार्थ आँकड़े से अनुमानित।') : costNote(intervention.cost_basis, lang)}
             >
               <span className="tnum">{fmtInr(currentPlan.estimated_cost_inr)}</span>{' '}
-              <Illustrative lang={lang} />
+              {currentPlan.cost_is_illustrative || !intervention ? <Illustrative lang={lang} /> : <CostSource cost={intervention.cost_basis} lang={lang} />}
             </Field>
           </Facts>
 
@@ -773,6 +775,7 @@ export function OutcomePanel({
         <div className="divide-y divide-line">
           {outcomes.map((o) => (
             <div key={o.id} className="card-pad space-y-4">
+              <OutcomeCalibrationNote outcomeId={o.id} lang={lang} />
               <div className="flex flex-wrap items-center gap-2">
                 <OutcomePill category={o.category} lang={lang} />
                 <span className="text-sm text-ink-soft">

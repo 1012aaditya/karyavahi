@@ -52,7 +52,7 @@ export default async function Landing() {
               <Icon name="play" size={15} /> Explore the demo
             </Link>
           </div>
-          <p className="mt-4 text-sm text-ink-faint">Demo build · fictional data · no password needed for demo accounts</p>
+          <p className="mt-4 text-sm text-ink-faint">Demo build · real schools, simulated learning data (<Link href="/sources" className="link">sources</Link>) · no password needed for demo accounts</p>
         </div>
 
         <div className="relative">
@@ -143,7 +143,7 @@ export default async function Landing() {
           <div>
             <h2 className="font-display text-2xl font-semibold tracking-tight">See it through an officer&apos;s eyes</h2>
             <p className="mt-1 text-base text-navy-200">
-              {stats.schools.toLocaleString('en-IN')} fictional schools across three districts. Pick a persona and work a case end to end.
+              {stats.schools.toLocaleString('en-IN')} real government schools (UDISE+, names withheld) across three Uttar Pradesh districts, with simulated learning results and fictional people and cases. Pick a persona and work a case end to end.
             </p>
           </div>
           <Link href="/demo" className="btn bg-white text-navy hover:bg-navy-100">

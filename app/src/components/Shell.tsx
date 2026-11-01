@@ -12,6 +12,7 @@ import { UserMenu, UserMenuLink, UserMenuForm, LanguageToggle, type ClientNavGro
 import { CommandPalette, CommandTrigger, Dock, type DockItem } from './Command';
 import { Logo } from './Brand';
 import { Icon } from './Icon';
+import { DemoBannerText } from './DemoBanner';
 import { fmtDate } from './ui';
 import { AssistantDrawer } from './Chat';
 import { may } from '@/lib/guard';
@@ -84,7 +85,7 @@ export default async function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <div className="flex items-center justify-center gap-2 bg-amber-light px-4 py-1 text-center text-2xs font-semibold uppercase tracking-[0.1em] text-warn no-print" role="note">
-        <span>{t(lang, 'demoBanner')}</span>
+        <DemoBannerText lang={lang} />
         <span className="hidden normal-case tracking-normal sm:inline">· {t(lang, 'demoClock')} {fmtDate(today(), false, lang)}</span>
       </div>
       <header className="sticky top-0 z-30 border-b border-line/70 bg-ivory/90 backdrop-blur no-print">

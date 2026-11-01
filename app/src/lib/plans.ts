@@ -181,14 +181,31 @@ export interface PlanPreview {
   tasks: { template: TaskTemplate; count: number }[];
 }
 
+/**
+ * What a per-child, per-teacher or per-school cost is multiplied by: the plan schools' enrolment
+ * in the case's class, their teachers in position and how many teach Classes 1–8. With the
+ * real-data layer on these are the UDISE+ figures.
+ */
+export function planCounts(schoolIds: readonly string[], grade: number): { children: number; teachers: number; compositeSchools: number } {
+  if (!schoolIds.length) return { children: 0, teachers: 0, compositeSchools: 0 };
+  const col = grade === 1 ? 'enrolment_g1' : grade === 2 ? 'enrolment_g2' : 'enrolment_g3';
+  const r = one<{ children: number; teachers: number; composite: number }>(
+    `select coalesce(sum(${col}), 0) children, coalesce(sum(teachers_in_position), 0) teachers,
+            coalesce(sum(case when category = 'primary' then 0 else 1 end), 0) composite
+       from schools where id in (${schoolIds.map(() => '?').join(',')})`, ...schoolIds,
+  );
+  return { children: Number(r?.children ?? 0), teachers: Number(r?.teachers ?? 0), compositeSchools: Number(r?.composite ?? 0) };
+}
+
 /** Everything the plan will say once saved. Null when the intervention is unknown. */
 export function previewPlan(c: PlanCase, matches: InterventionMatch[], interventionId: string, schoolIds: readonly string[]): PlanPreview | null {
   const iv = intervention(interventionId);
   if (!iv) return null;
   const { ordered } = orderSchools(c, schoolIds);
+  const counts = planCounts(ordered, c.grade);
   const { totalCost } = feasibility(iv, {
     schools: ordered.length, budgetInr: null, teachersAvailable: null, weeksAvailable: null,
-    attendancePct: null, trainingComplete: false, connectivity: false,
+    attendancePct: null, trainingComplete: false, connectivity: false, ...counts,
   });
   return {
     interventionId,

@@ -97,7 +97,9 @@ function zipEntries(buf) {
   await page.goto(`${BASE}/interventions/compare?case=CASE-0184`, { waitUntil: 'networkidle' });
   ok('studio: comparison table with relevance row', await page.getByText('Relevance to CASE-0184').count() > 0);
   await page.goto(`${BASE}/interventions/INT-01?case=CASE-0184&budget=5000&teachers=2&weeks=4&attendance=70`, { waitUntil: 'networkidle' });
-  ok('studio: what-if shows a budget shortfall', await page.getByText(/Needs ₹12,500/).count() > 0);
+  // With the real-data layer INT-01 costs ₹500 a child (PAB rate) times the case schools' UDISE+ Class 3 enrolment.
+  const realCosts = require('node:fs').existsSync(require('node:path').join(__dirname, '..', 'data', 'real', 'figures.json'));
+  ok('studio: what-if shows a budget shortfall', await page.getByText(realCosts ? /Needs ₹[\d,]+; budget is ₹5,000/ : /Needs ₹12,500/).count() > 0);
 
   // Report: generate a snapshot through the UI, then export it.
   await page.goto(`${BASE}/reports/new?type=atr`, { waitUntil: 'networkidle' });

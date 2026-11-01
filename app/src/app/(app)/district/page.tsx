@@ -11,6 +11,7 @@ import { Card, CardHead, PageHead, Grid, Stat, Callout, fmtDate, Mono } from '@/
 import { CaseTable, TaskTable } from '@/components/lists';
 import { HeadlineStats, RollupTable, OutcomeMix, DetectionHealth, CompetencyGrid } from '@/components/dash';
 import { OutcomePill } from '@/components/labels';
+import { DistrictContext } from '@/components/DistrictContext';
 
 /** The district officer's view: where blocks are stuck, and what has escalated to them. */
 
@@ -54,6 +55,8 @@ export default async function DistrictHome() {
         hint={pick(lang, 'Worst first. Overdue tasks and pending proof are where attention is actually needed.', 'सबसे चिंताजनक पहले।')}
         label={pick(lang, 'Block', 'खंड')}
       />
+
+      {districtId ? <DistrictContext districtIds={[districtId]} lang={lang} /> : null}
 
       {escalated.length > 0 ? (
         <Card>

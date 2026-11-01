@@ -39,7 +39,10 @@ try {
   const by = (sql: string) => Object.fromEntries(all<{ k: string; n: number }>(sql).map((r) => [r.k, Number(r.n)]));
   const src = by(`select level || ':' || geometry_source k, count(*) n from geo_units group by 1`);
   ok('the state and its 75 districts are real OpenStreetMap boundaries', src['state:osm'] === 1 && src['district:osm'] === 75, JSON.stringify(src));
-  ok('blocks, clusters and schools are marked simulated', src['block:simulated'] === 18 && src['cluster:simulated'] === 140 && src['school:simulated'] === 2109);
+  // With the real-data layer (data/real/) the schools are real UDISE+ schools; blocks and clusters stay simulated groupings.
+  const realSchools = existsSync(join(process.cwd(), 'data', 'real', 'schools.json'));
+  ok('blocks and clusters are marked simulated, schools real (UDISE+) or simulated', src['block:simulated'] === 18 && src['cluster:simulated'] === 140
+    && (realSchools ? src['school:udise'] === 2109 : src['school:simulated'] === 2109), JSON.stringify(src));
   ok('the three cities are approximate circles', src['city:approximate'] === 3);
   ok('the demo districts carry the real names', all<{ name: string }>('select name from districts order by id').map((r) => r.name).join(',') === 'Rampur,Lucknow,Varanasi');
   ok('the state is Uttar Pradesh', one<{ name: string }>('select name from states')?.name === 'Uttar Pradesh');
