@@ -24,8 +24,19 @@ import {
 import { reassignView } from '@/lib/plans';
 import { EvidenceSummary } from '@/components/EvidenceSummary';
 import { involvement, INVOLVEMENT_MESSAGE, type Involvement } from '@/lib/duty';
+import { reminderTimeline, reachOf, CHANNEL_NAME, type Step, type StepState } from '@/lib/reminders';
 
 /** One task: what it asks for, what proof it needs, and what has been submitted so far. */
+
+/** The three automatic steps, and who each one reaches. */
+const STEP_LABEL: Record<Step, { en: string; hi: string }> = {
+  reminder: { en: '2 days before', hi: '2 दिन पहले' },
+  breach: { en: 'Day after the deadline', hi: 'तिथि निकलने के अगले दिन' },
+  escalation: { en: '7 days late', hi: '7 दिन की देरी पर' },
+};
+const STEP_TONE: Record<StepState, string> = {
+  sent: 'text-ink', planned: 'text-ink-soft', pending_run: 'text-warn', not_needed: 'text-good', not_sent: 'text-ink-faint',
+};
 
 const INVOLVEMENT_HI: Record<Involvement, string> = {
   submitted: 'यह आपने जमा किया है, अतः आप इसे नहीं जाँच सकते।',
@@ -61,6 +72,9 @@ export default async function TaskPage({
   const reassignable = reassign && !reassign.refusal;
   const choosable = reassign?.options.filter((o) => !o.blocked) ?? [];
   const prevOwner = t.reassigned_from ? userNames([t.reassigned_from]).get(t.reassigned_from) ?? t.reassigned_from : null;
+  const timeline = reminderTimeline(t, today());
+  const ownerReach = reachOf(t.owner_user_id);
+  const ownerChannel = pick(lang, CHANNEL_NAME[ownerReach.channel].en, CHANNEL_NAME[ownerReach.channel].hi);
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -156,6 +170,42 @@ export default async function TaskPage({
             </div>
           ) : null}
         </div>
+      </Card>
+
+      <Card>
+        <CardHead
+          title={pick(lang, 'Reminders', 'स्मरण-सूचनाएँ')}
+          hint={pick(
+            lang,
+            'Sent automatically, once each. Dates follow the demo clock.',
+            'अपने आप भेजे जाते हैं, हर एक केवल एक बार। तिथियाँ डेमो घड़ी के अनुसार।',
+          )}
+        />
+        <ol className="divide-y divide-line sm:grid sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          {timeline.map((st) => (
+            <li key={st.step} className="px-4 py-3 sm:px-5">
+              <p className="label">{pick(lang, STEP_LABEL[st.step].en, STEP_LABEL[st.step].hi)}</p>
+              <p className="mt-0.5 text-sm text-ink-soft">
+                {st.step === 'reminder'
+                  ? pick(lang, `To the owner, on ${ownerChannel}`, `ज़िम्मेदार व्यक्ति को, ${ownerChannel} पर`)
+                  : st.step === 'breach'
+                    ? pick(lang, `To the owner (${ownerChannel}) and the BEO`, `ज़िम्मेदार व्यक्ति (${ownerChannel}) और BEO को`)
+                    : pick(lang, 'To the DEO', 'DEO को')}
+              </p>
+              <p className={`mt-1 text-sm font-medium ${STEP_TONE[st.state]}`}>
+                {st.state === 'sent'
+                  ? <>{pick(lang, 'Sent', 'भेजा गया')} <span className="tnum">{fmtDate(st.at, true, lang)}</span></>
+                  : st.state === 'planned'
+                    ? <>{pick(lang, 'Goes out', 'जाएगा')} <span className="tnum">{fmtDate(st.at, false, lang)}</span></>
+                    : st.state === 'pending_run'
+                      ? pick(lang, 'Due now: goes out on the next sweep', 'समय हो गया: अगली जाँच में जाएगा')
+                      : st.state === 'not_needed'
+                        ? pick(lang, 'Not needed: proof came in', 'ज़रूरत नहीं: सबूत आ गया')
+                        : pick(lang, 'Not sent', 'नहीं भेजा गया')}
+              </p>
+            </li>
+          ))}
+        </ol>
       </Card>
 
       {reassignable ? (

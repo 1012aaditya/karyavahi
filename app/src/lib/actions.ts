@@ -7,6 +7,7 @@ import { SESSION_COOKIE, createSession, requireSession, sessionCookieOptions } f
 import { isHttps, localPath } from './http';
 import { Refused } from './guard';
 import * as w from './write';
+import { runScheduledSweep } from './scheduler';
 import type { CaseStatus } from '@domain/types';
 
 /**
@@ -263,6 +264,7 @@ export async function reminderSweepAction(_prev: State, form: FormData): Promise
     () => {
       const r = w.reminderSweep(s, str(form, 'as_of') || undefined);
       detail = `Sweep finished: ${r.remindersSent} reminder${r.remindersSent === 1 ? '' : 's'} sent, `
+        + `${r.breachNudges} overdue nudge${r.breachNudges === 1 ? '' : 's'} sent, `
         + `${r.escalationsCreated} escalation${r.escalationsCreated === 1 ? '' : 's'} raised. `
         + 'Running it again today will send nothing further.';
     },
@@ -280,6 +282,14 @@ export async function setClockAction(_prev: State, form: FormData): Promise<Stat
     () => { w.setDemoClock(s, `${date}T06:30:00.000Z`); },
     `The demo clock is now ${date}. Overdue counts and reminder windows move with it.`,
   );
+  // Deadlines follow the demo clock, so reminders due on the new date go out now, not at the next hourly run.
+  if (res.ok) {
+    const r = runScheduledSweep('clock_moved');
+    if (r && res.ok) {
+      res.ok += ` The reminder sweep ran for the new date: ${r.remindersSent} reminder${r.remindersSent === 1 ? '' : 's'}, `
+        + `${r.breachNudges} overdue nudge${r.breachNudges === 1 ? '' : 's'}, ${r.escalationsCreated} escalation${r.escalationsCreated === 1 ? '' : 's'}.`;
+    }
+  }
   revalidatePath('/', 'layout');
   return res;
 }
@@ -293,6 +303,7 @@ export async function demoResetAction(_prev: State, _form: FormData): Promise<St
   // The reset replaced the database, sessions table included, which signed everyone out.
   // Keep the admin who pressed the button signed in.
   if (res.ok) {
+    runScheduledSweep('demo_reset');
     const h = await headers();
     (await cookies()).set(SESSION_COOKIE, createSession(s.user_id, h.get('user-agent')), sessionCookieOptions(isHttps(h)));
   }

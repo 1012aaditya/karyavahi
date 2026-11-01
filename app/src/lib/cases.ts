@@ -84,6 +84,8 @@ export interface Task {
   status: TaskStatus; assigned_at: string; due_date: string; original_due_date: string;
   acknowledged_at: string | null; started_at: string | null; submitted_at: string | null;
   verified_at: string | null; reminder_sent_at: string | null; escalated_at: string | null;
+  /** The day-after-due overdue nudge (added by the reminders migration in ext/schema.ts). */
+  breach_nudged_at?: string | null;
   is_overdue: boolean; reassigned_from: string | null; reassign_reason: string | null;
   deadline_change_reason: string | null;
 }

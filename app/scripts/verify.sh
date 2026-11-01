@@ -60,6 +60,9 @@ npx tsx --conditions=react-server scripts/threads-test.mts 2>&1 | grep -vE 'Expe
 step 'Claude guards: the number auditor and the evidence library search'
 npx tsx --conditions=react-server scripts/ai-guard-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
 
+step 'reminders, the overdue nudge and escalation, run by the scheduler'
+npx tsx --conditions=react-server scripts/reminders-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
+
 if [ "$FULL" = "--full" ]; then
   step 'production build'
   npm run build 2>&1 | tail -4

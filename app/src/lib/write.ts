@@ -15,6 +15,7 @@ import {
   ownerOptions, type PlanCase, type ReassignTask,
 } from './plans';
 import { matchForCase } from './studio';
+import { TEMPLATE, messageFor, outboxChannel, langOf, type MessageContext, type Template } from './reminders';
 import { checkPhoto, photoAlreadyUsed, storePhoto } from './evidence-files';
 
 /**
@@ -1211,12 +1212,61 @@ export function setHumanConclusion(s: Session, caseId: string, text: string): vo
 }
 
 // ------------------------------------------------------------------ reminder_sweep
+export type SweepTrigger = 'manual' | 'startup' | 'hourly' | 'clock_moved' | 'demo_reset' | 'system';
+
+export interface SweepResult {
+  remindersSent: number; breachNudges: number; escalationsCreated: number;
+  officersTold: number; outboxQueued: number; asOf: string;
+}
+
+interface Recipient { id: string; full_name: string; preferred_language: string | null; preferred_channel: string | null; status: string | null }
+
 /**
- * One T-2 reminder and one +7 escalation per task, never twice. Idempotent by design.
- * Without a session it is the scheduled job; by hand, only the demo admin may run it, because it
- * escalates overdue work across the whole state.
+ * Reaches one person about one task: always the in-app notification, and, for someone who does
+ * not use the web app, a message on their own channel (WhatsApp, IVR or SMS) in their language.
+ * That message goes to the simulated outbox, marked as not delivered. Returns the channel used.
  */
-export function reminderSweep(s: Session | null, dateOverride?: string): { remindersSent: number; escalationsCreated: number } {
+function reach(
+  userId: string,
+  task: { id: string; title_en: string; title_hi: string | null; due_date: string },
+  inApp: { kind: string; title: string; body: string },
+  template: Template,
+  ctx: Omit<MessageContext, 'title' | 'due'>,
+): { user: string; channel: string; language: string } {
+  notify({ userId, kind: inApp.kind, title: inApp.title, body: inApp.body, entityType: 'task', entityId: task.id, link: `/tasks/${task.id}` });
+  const u = one<Recipient>('select id, full_name, preferred_language, preferred_channel, status from users where id = ?', userId);
+  const channel = outboxChannel(u?.preferred_channel);
+  const language = langOf(u?.preferred_language);
+  if (!u || !channel || (u.status && u.status !== 'active')) return { user: userId, channel: 'app', language };
+  const title = language === 'hi' && task.title_hi ? task.title_hi : task.title_en;
+  run(
+    `insert into outbox_messages (id, user_id, channel, ts, template, language, body, entity_type, entity_id, delivery_status)
+     values (?,?,?,?,?,?,?,?,?,'simulated_not_sent')`,
+    nextIdFor('outbox', 'outbox_messages', 'OBX-', 6), userId, channel, nowIso(), template, language,
+    messageFor(template, channel, language, { ...ctx, title, due: task.due_date }), 'task', task.id,
+  );
+  return { user: userId, channel, language };
+}
+
+/**
+ * Reminders and escalation, three steps per task, each sent once (see reminders.ts):
+ *
+ *   T−2     a task due within the next two days gets one reminder to its owner
+ *   breach  the day after the due date passes without proof, the owner gets one overdue nudge
+ *           and the block officer of the case's block is told
+ *   +7      seven days after the due date, the district officer gets the escalation
+ *
+ * Idempotent by design: each step stamps its own column on the task (reminder_sent_at,
+ * breach_nudged_at, escalated_at) and skips a task already stamped, so running it any number of
+ * times on the same demo date sends nothing more. Every date is the demo clock's, never the wall
+ * clock's. If the clock jumps forward past several steps, the sweep catches up in order — the
+ * nudge before the escalation — but does not send a T−2 reminder for a task already past due.
+ *
+ * Without a session it is the scheduled job (scheduler.ts runs it on server start, hourly, and
+ * when the demo clock moves). By hand, only the demo admin may run it, because it escalates
+ * overdue work across the whole state.
+ */
+export function reminderSweep(s: Session | null, dateOverride?: string, opts: { trigger?: SweepTrigger } = {}): SweepResult {
   if (s && !(hasRole(s, 'demo_admin') && may(s, 'demo.reset'))) {
     appendAudit({
       actorUserId: s.user_id, actorRole: actingRole(s), action: 'demo.sweep_refused',
@@ -1229,48 +1279,99 @@ export function reminderSweep(s: Session | null, dateOverride?: string): { remin
       && (!/^\d{4}-\d{2}-\d{2}$/.test(dateOverride) || Number.isNaN(Date.parse(dateOverride)))) {
     throw new Refused(`"${dateOverride}" is not a date (YYYY-MM-DD).`, 'bad_input');
   }
+  const trigger: SweepTrigger = s ? 'manual' : (opts.trigger ?? 'system');
+  const label = `system:reminder_sweep:${trigger}`;
   return tx(() => {
     const day = dateOverride ?? today();
     const dueSoon = addDays(day, 2);
+    let outboxQueued = 0;
+    const count = (r: { channel: string }) => { if (r.channel !== 'app') outboxQueued++; return r; };
 
-    const toRemind = all<{ id: string; owner_user_id: string; title_en: string }>(
-      `select id, owner_user_id, title_en from tasks
-        where reminder_sent_at is null and submitted_at is null and due_date = ?`, dueSoon,
+    type T = { id: string; case_id: string; owner_user_id: string; title_en: string; title_hi: string | null; due_date: string };
+    const cols = 'id, case_id, owner_user_id, title_en, title_hi, due_date';
+
+    // 1. T−2: due today, tomorrow or the day after, and not reminded yet.
+    const toRemind = all<T>(
+      `select ${cols} from tasks
+        where reminder_sent_at is null and submitted_at is null and due_date >= ? and due_date <= ?
+        order by due_date, id`, day, dueSoon,
     );
     for (const t of toRemind) {
       run('update tasks set reminder_sent_at = ? where id = ?', nowIso(), t.id);
-      notify({
-        userId: t.owner_user_id, kind: 'deadline_upcoming', title: 'Due in 2 days', body: t.title_en,
-        entityType: 'task', entityId: t.id, link: `/tasks/${t.id}`,
+      const left = Math.round((Date.parse(t.due_date.slice(0, 10)) - Date.parse(day)) / 86_400_000);
+      const sent = count(reach(t.owner_user_id, t, {
+        kind: 'deadline_upcoming', title: left === 2 ? 'Due in 2 days' : left === 1 ? 'Due tomorrow' : 'Due today', body: t.title_en,
+      }, TEMPLATE.reminder, {}));
+      appendAudit({
+        actorUserId: null, actorRole: 'system', actorLabel: label, action: 'task.reminder_sent', entityType: 'task', entityId: t.id,
+        after: { as_of: day, due_date: t.due_date, sent_to: [sent] }, source: 'system',
       });
-      appendAudit({ actorUserId: null, actorRole: 'system', actorLabel: 'system:reminder_sweep', action: 'task.reminder_sent', entityType: 'task', entityId: t.id, source: 'system' });
     }
 
-    const toEscalate = all<{ id: string; case_id: string; title_en: string }>(
-      `select id, case_id, title_en from tasks
-        where escalated_at is null and submitted_at is null and date(due_date, '+7 day') <= ?`, day,
+    // 2. Breach: the due date has passed without proof. One nudge to the owner, and the block
+    //    officer is told. A task already escalated is past this step (the seed's escalations).
+    const toNudge = all<T & { block_id: string; owner_name: string }>(
+      `select t.id, t.case_id, t.owner_user_id, t.title_en, t.title_hi, t.due_date, c.block_id,
+              coalesce(u.full_name, t.owner_user_id) owner_name
+         from tasks t join cases c on c.id = t.case_id left join users u on u.id = t.owner_user_id
+        where t.breach_nudged_at is null and t.escalated_at is null and t.submitted_at is null and t.due_date < ?
+        order by t.due_date, t.id`, day,
+    );
+    let officersTold = 0;
+    for (const t of toNudge) {
+      run('update tasks set breach_nudged_at = ? where id = ?', nowIso(), t.id);
+      const sentTo = [count(reach(t.owner_user_id, t, { kind: 'task_overdue', title: 'Task overdue', body: t.title_en }, TEMPLATE.breach, {}))];
+      const beos = all<{ user_id: string }>(
+        `select distinct user_id from user_roles where role = 'beo' and scope_type = 'block' and scope_id = ? and user_id <> ?`,
+        t.block_id, t.owner_user_id,
+      );
+      for (const b of beos) {
+        officersTold++;
+        sentTo.push(count(reach(b.user_id, t, {
+          kind: 'task_overdue', title: 'Overdue in your block', body: `${t.title_en} — ${t.owner_name}, due ${t.due_date.slice(0, 10)}`,
+        }, TEMPLATE.breach_officer, { owner: t.owner_name })));
+      }
+      appendAudit({
+        actorUserId: null, actorRole: 'system', actorLabel: label, action: 'task.breach_nudged', entityType: 'task', entityId: t.id,
+        after: { as_of: day, due_date: t.due_date, sent_to: sentTo }, source: 'system',
+      });
+    }
+
+    // 3. +7: seven days past due without proof goes to the district officer.
+    const toEscalate = all<T & { district_id: string; owner_name: string; block_name: string | null }>(
+      `select t.id, t.case_id, t.owner_user_id, t.title_en, t.title_hi, t.due_date, c.district_id,
+              coalesce(u.full_name, t.owner_user_id) owner_name, b.name block_name
+         from tasks t join cases c on c.id = t.case_id left join users u on u.id = t.owner_user_id
+         left join blocks b on b.id = c.block_id
+        where t.escalated_at is null and t.submitted_at is null and date(t.due_date, '+7 day') <= ?
+        order by t.due_date, t.id`, day,
     );
     for (const t of toEscalate) {
       run('update tasks set escalated_at = ? where id = ?', nowIso(), t.id);
       const deos = all<{ user_id: string }>(
-        `select ur.user_id from cases c
-           join user_roles ur on ur.role = 'deo' and ur.scope_type = 'district' and ur.scope_id = c.district_id
-          where c.id = ?`, t.case_id,
+        `select distinct user_id from user_roles where role = 'deo' and scope_type = 'district' and scope_id = ?`, t.district_id,
       );
-      for (const d of deos) {
-        notify({
-          userId: d.user_id, kind: 'escalation', title: 'Escalation: task 7 days overdue',
-          body: t.title_en, entityType: 'task', entityId: t.id, link: `/tasks/${t.id}`,
-        });
-      }
-      appendAudit({ actorUserId: null, actorRole: 'system', actorLabel: 'system:reminder_sweep', action: 'task.escalated', entityType: 'task', entityId: t.id, source: 'system' });
+      const sentTo = deos.map((d) => count(reach(d.user_id, t, {
+        kind: 'escalation', title: 'Escalation: task 7 days overdue', body: t.title_en,
+      }, TEMPLATE.escalation, { owner: t.owner_name, block: t.block_name ?? undefined })));
+      appendAudit({
+        actorUserId: null, actorRole: 'system', actorLabel: label, action: 'task.escalated', entityType: 'task', entityId: t.id,
+        after: { as_of: day, due_date: t.due_date, sent_to: sentTo }, source: 'system',
+      });
     }
 
     run(`update tasks set is_overdue = case when due_date < ? and submitted_at is null then 1 else 0 end`, day);
 
-    const summary = { reminders_sent: toRemind.length, escalations_created: toEscalate.length, as_of: day };
-    recordJob('reminder_sweep', 'succeeded', summary);
-    return { remindersSent: toRemind.length, escalationsCreated: toEscalate.length };
+    const result: SweepResult = {
+      remindersSent: toRemind.length, breachNudges: toNudge.length, escalationsCreated: toEscalate.length,
+      officersTold, outboxQueued, asOf: day,
+    };
+    // Key order matters: the job lists show the first few.
+    recordJob('reminder_sweep', 'succeeded', {
+      reminders_sent: result.remindersSent, breach_nudges: result.breachNudges, escalations_created: result.escalationsCreated,
+      as_of: day, block_officers_told: officersTold, outbox_messages: outboxQueued, trigger, ran_at: new Date().toISOString(),
+    });
+    return result;
   });
 }
 
