@@ -18,6 +18,7 @@ import { matchForCase } from './studio';
 import { TEMPLATE, messageFor, outboxChannel, langOf, type MessageContext, type Template } from './reminders';
 import { checkPhoto, photoAlreadyUsed, storePhoto } from './evidence-files';
 import { classifyFix, parseFix, schoolPosition, type GpsResult, type GpsStatus } from './proof-gps';
+import { initialDeliveryStatus, scheduleOutboxSend } from './whatsapp/outbound';
 
 /**
  * Every write in the app. This is the TypeScript twin of the SECURITY DEFINER functions in
@@ -37,6 +38,17 @@ import { classifyFix, parseFix, schoolPosition, type GpsResult, type GpsStatus }
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 
 // ------------------------------------------------------------------ audit chain
+export type AuditSource = 'web' | 'mobile' | 'whatsapp' | 'whatsapp_sim' | 'ivr_sim' | 'system' | 'import';
+
+/** The source stamped on audit rows written while `fn` runs, unless a row names its own. The
+ *  WhatsApp webhook runs the ordinary write functions inside this, so their rows say 'whatsapp'. */
+let sourceInEffect: AuditSource | null = null;
+export function withAuditSource<T>(source: AuditSource, fn: () => T): T {
+  const prev = sourceInEffect;
+  sourceInEffect = source;
+  try { return fn(); } finally { sourceInEffect = prev; }
+}
+
 /**
  * Append to the tamper-evident chain, using the same scheme as the seed ('ts-json-v1'):
  * sha256 over the JSON of the row's fields in a fixed key order, including the previous hash.
@@ -54,7 +66,7 @@ export function appendAudit(o: {
   after?: unknown;
   reason?: string | null;
   correlationId?: string;
-  source?: 'web' | 'mobile' | 'whatsapp_sim' | 'ivr_sim' | 'system' | 'import';
+  source?: AuditSource;
   result?: 'success' | 'failure';
 }): string {
   // The chain's order is its own sequence, not the timestamp: the demo clock can move backwards,
@@ -78,7 +90,7 @@ export function appendAudit(o: {
     after: (o.after as Record<string, unknown>) ?? null,
     reason: o.reason ?? null,
     correlation_id: o.correlationId ?? `COR-${sha(`${o.entityId}:${o.action}:${nowIso()}`).slice(0, 12)}`,
-    source: o.source ?? (o.actorRole === 'system' ? 'system' : 'web'),
+    source: o.source ?? sourceInEffect ?? (o.actorRole === 'system' ? 'system' : 'web'),
     result: o.result ?? 'success',
   };
   const hash = sha(JSON.stringify({ ...row, prev_hash: prev }));
@@ -866,6 +878,8 @@ export function submitEvidence(
     savedOfflineAt?: string | null;
     /** A photo of the proof. Its type, size and hash are worked out here, never taken from the form. */
     photo?: { bytes: Uint8Array; name: string } | null;
+    /** Where it was handed in: the app (default) or a WhatsApp message. */
+    channel?: 'app' | 'whatsapp';
   },
 ): { evidenceId: string; duplicate: boolean; gps: GpsResult } {
   const clientId = o.clientId ? String(o.clientId).trim() : null;
@@ -931,10 +945,10 @@ export function submitEvidence(
          submitted_by, submitted_role, submitted_at, gps_status, channel, status,
          verified_by, verified_at, verification_method, rejection_reason, provenance,
          client_id, gps_lat, gps_lng, gps_accuracy_m, gps_distance_m)
-       values (?,?,?,?,?,?,?,null,?,?,?,?,?,'app','pending',null,null,null,null,'user_uploaded',?,?,?,?,?)`,
+       values (?,?,?,?,?,?,?,null,?,?,?,?,?,?,'pending',null,null,null,null,'user_uploaded',?,?,?,?,?)`,
       n, o.taskId, t.case_id, o.schoolId ?? t.school_id, t.proof_type,
       `${o.taskId}-${n}.${photo ? photo.ext : 'pdf'}`, digest, JSON.stringify(summary),
-      s.user_id, actingRole(s), nowIso(), gps.status,
+      s.user_id, actingRole(s), nowIso(), gps.status, o.channel === 'whatsapp' ? 'whatsapp' : 'app',
       clientId, fix?.lat ?? null, fix?.lng ?? null, fix && Number.isFinite(fix.accuracy) ? Math.round(fix.accuracy) : null, gps.distance_m,
     );
     if (photo) {
@@ -1271,7 +1285,9 @@ interface Recipient { id: string; full_name: string; preferred_language: string 
 /**
  * Reaches one person about one task: always the in-app notification, and, for someone who does
  * not use the web app, a message on their own channel (WhatsApp, IVR or SMS) in their language.
- * That message goes to the simulated outbox, marked as not delivered. Returns the channel used.
+ * That message goes to the outbox, marked as not delivered — unless it is a WhatsApp message to a
+ * persona mapped to a tester's phone, which is really sent (see whatsapp/outbound.ts). Returns the
+ * channel used.
  */
 function reach(
   userId: string,
@@ -1286,12 +1302,17 @@ function reach(
   const language = langOf(u?.preferred_language);
   if (!u || !channel || (u.status && u.status !== 'active')) return { user: userId, channel: 'app', language };
   const title = language === 'hi' && task.title_hi ? task.title_hi : task.title_en;
+  // A WhatsApp row for a mapped test recipient is really sent, after this transaction commits
+  // (whatsapp/outbound.ts); everyone else's stays simulated.
+  const outboxId = nextIdFor('outbox', 'outbox_messages', 'OBX-', 6);
+  const delivery = initialDeliveryStatus(userId, channel);
   run(
     `insert into outbox_messages (id, user_id, channel, ts, template, language, body, entity_type, entity_id, delivery_status)
-     values (?,?,?,?,?,?,?,?,?,'simulated_not_sent')`,
-    nextIdFor('outbox', 'outbox_messages', 'OBX-', 6), userId, channel, nowIso(), template, language,
-    messageFor(template, channel, language, { ...ctx, title, due: task.due_date }), 'task', task.id,
+     values (?,?,?,?,?,?,?,?,?,?)`,
+    outboxId, userId, channel, nowIso(), template, language,
+    messageFor(template, channel, language, { ...ctx, title, due: task.due_date }), 'task', task.id, delivery,
   );
+  if (delivery === 'queued') scheduleOutboxSend(outboxId);
   return { user: userId, channel, language };
 }
 

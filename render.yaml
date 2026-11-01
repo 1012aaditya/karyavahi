@@ -31,3 +31,20 @@ services:
       # the Google Cloud console (HTTP referrers) before relying on it.
       - key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
         sync: false
+      # WhatsApp through Meta's free Cloud API test number (app/README.md, "WhatsApp (Meta Cloud API
+      # test number)"). Without the token and the phone number id, the outbox stays simulated.
+      # WHATSAPP_TEST_RECIPIENTS holds the testers' real numbers (persona email=+E.164, comma-separated);
+      # they live only here, never in the database, logs or pages.
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_TEST_RECIPIENTS
+        sync: false
+      # Optional; defaults to v23.0.
+      - key: WHATSAPP_GRAPH_VERSION
+        sync: false

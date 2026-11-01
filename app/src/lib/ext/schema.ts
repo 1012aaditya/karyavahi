@@ -9,6 +9,7 @@ import { ensureCollabTables } from './collab-schema';
 import { ensureApiTables } from './api-schema';
 import { ensureRealData, realDataVersion } from './realdata';
 import { ensureFeedbackTables } from './feedback-schema';
+import { ensureWhatsAppTables } from './whatsapp-schema';
 
 /**
  * Extension schema: geography, organisational hierarchy, complaints, onboarding and sign-in sessions.
@@ -126,6 +127,8 @@ export function ensureExtensions(c: DatabaseSync): void {
   ensureApiTables(c);
   // What people tell us about the app: thumbs on Claude, the feedback form (see feedback-schema.ts).
   ensureFeedbackTables(c);
+  // The real WhatsApp channel: contacts, sends, handled inbound ids (see whatsapp-schema.ts).
+  ensureWhatsAppTables(c);
   const v = one<{ value: string }>(c, `select value from ext_meta where key = 'version'`)?.value;
   if (v !== EXT_VERSION) {
     c.exec('begin immediate');
