@@ -6,10 +6,12 @@ import { lookupsFor } from '@/lib/lookups';
 import { STATUS_HI, STATUS as CSTATUS } from '@/lib/complaints';
 import { can } from '@/lib/authz';
 import { pick, EVIDENCE_TYPE_LABEL } from '@/lib/i18n';
-import { acknowledgeTaskAction, startTaskAction, submitEvidenceAction } from '@/lib/actions';
+import { acknowledgeTaskAction, startTaskAction } from '@/lib/actions';
 import { fmtDate } from '@/components/ui';
 import { ActionForm, ReasonBox } from '@/components/ActionForm';
 import { PhotoInput } from '@/components/PhotoInput';
+import { ProofForm } from '@/components/ProofForm';
+import { ProofQueue } from '@/components/ProofQueue';
 import { Icon } from '@/components/Icon';
 import type { Language } from '@domain/types';
 
@@ -20,6 +22,10 @@ import type { Language } from '@domain/types';
  * Each task can be marked seen, started and given its proof (with a photo) right here, so a new
  * task goes from the notification to proof handed in without opening another page. The rules are
  * the same as everywhere else: only the owner acts on a task, and someone else checks the proof.
+ *
+ * Proof works without signal: ProofForm reads the phone's location once and sends the proof, or
+ * keeps it on the phone (IndexedDB) when there is no connection, and ProofQueue lists what is
+ * still waiting. The service worker (public/sw.js) keeps a copy of this page and its task pages.
  */
 
 const GROUP: Record<DayGroupKey, { en: string; hi: string; tone: string }> = {
@@ -63,6 +69,9 @@ export default async function MyDayPage() {
               : pick(lang, `${day.open} open task${day.open === 1 ? '' : 's'}, none due today.`, `${day.open} खुले काम, आज कोई देय नहीं।`)}
         </p>
       </header>
+
+      {/* Proof saved on this phone without signal, until it is sent. Browser-only; empty renders nothing. */}
+      <ProofQueue userId={session.user_id} lang={lang} />
 
       {day.groups.map((g) => (
         <section key={g.key} aria-labelledby={`g-${g.key}`}>
@@ -110,9 +119,9 @@ export default async function MyDayPage() {
                         <Icon name="upload" size={16} />{pick(lang, 'Hand in proof', 'सबूत जमा करें')}
                       </summary>
                       <div className="rounded-lg border border-line bg-paper-sunk p-3">
-                        <ActionForm
-                          action={submitEvidenceAction} hidden={{ task_id: t.id, school_id: t.school_id ?? '' }} lang={lang}
-                          buttonClassName="min-h-11 px-5" label={pick(lang, 'Hand in', 'जमा करें')}
+                        <ProofForm
+                          taskId={t.id} schoolId={t.school_id ?? ''} taskTitle={pick(lang, t.title_en, t.title_hi)}
+                          userId={session.user_id} lang={lang} label={pick(lang, 'Hand in', 'जमा करें')}
                         >
                           <PhotoInput
                             label={pick(lang, 'Photo of the proof', 'सबूत का फ़ोटो')}
@@ -123,15 +132,7 @@ export default async function MyDayPage() {
                           <ReasonBox name="note" required rows={3} lang={lang}
                             label={pick(lang, 'What it shows', 'यह क्या दिखाता है')}
                             placeholder={pick(lang, 'What was done, where and when.', 'क्या किया, कहाँ और कब।')} />
-                          <label className="mb-3 block">
-                            <span className="label">{pick(lang, 'Where you are', 'आप कहाँ हैं')}</span>
-                            <select name="gps" className="input mt-1 min-h-11" defaultValue="matched">
-                              <option value="matched">{pick(lang, 'At the school', 'विद्यालय में')}</option>
-                              <option value="outside_radius">{pick(lang, 'Away from the school', 'विद्यालय से दूर')}</option>
-                              <option value="not_captured">{pick(lang, 'Not recorded', 'दर्ज नहीं')}</option>
-                            </select>
-                          </label>
-                        </ActionForm>
+                        </ProofForm>
                       </div>
                     </details>
                   </div>

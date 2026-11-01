@@ -24,6 +24,8 @@ import {
 import { reassignView } from '@/lib/plans';
 import { EvidenceSummary } from '@/components/EvidenceSummary';
 import { involvement, INVOLVEMENT_MESSAGE, type Involvement } from '@/lib/duty';
+import { LocationField } from '@/components/LocationField';
+import { GpsBadge } from '@/components/GpsBadge';
 
 /** One task: what it asks for, what proof it needs, and what has been submitted so far. */
 
@@ -237,14 +239,7 @@ export default async function TaskPage({
                     label={pick(lang, 'What the proof shows', 'सबूत क्या दिखाता है')}
                     placeholder={pick(lang, 'Describe what was done, where and when.', 'क्या किया, कहाँ और कब — लिखें।')}
                   />
-                  <label className="mb-2 block">
-                    <span className="label">{pick(lang, 'Location check', 'स्थान जाँच')}</span>
-                    <select name="gps" className="input mt-1" defaultValue="matched">
-                      <option value="matched">{pick(lang, 'Recorded at the school', 'विद्यालय में दर्ज')}</option>
-                      <option value="not_captured">{pick(lang, 'No location recorded', 'स्थान दर्ज नहीं')}</option>
-                      <option value="outside_radius">{pick(lang, 'Recorded away from the school', 'विद्यालय से दूर दर्ज')}</option>
-                    </select>
-                  </label>
+                  <LocationField lang={lang} />
                   <p className="text-xs leading-snug text-ink-faint">
                     {pick(
                       lang,
@@ -284,9 +279,7 @@ export default async function TaskPage({
                       {e.verification_method && e.verification_method !== 'desk_review' ? (
                         <Pill tone="active">{e.verification_method === 'spot_check_visit' ? pick(lang, 'checked on a visit', 'भ्रमण में जाँचा') : e.verification_method === 'cross_source_assessment' ? pick(lang, 'checked by an independent assessment', 'स्वतंत्र आकलन से जाँचा') : e.verification_method.replace(/_/g, ' ')}</Pill>
                       ) : null}
-                      {e.gps_status === 'outside_radius' ? (
-                        <Pill tone="warn">{pick(lang, 'GPS away from the school', 'GPS विद्यालय से दूर')}</Pill>
-                      ) : null}
+                      <GpsBadge status={e.gps_status} distance={e.gps_distance_m} accuracy={e.gps_accuracy_m} lang={lang} />
                     </div>
                     <p className="mt-1 text-sm text-ink-soft">
                       {users.get(e.submitted_by) ?? e.submitted_by} · {fmtDate(e.submitted_at, true, lang)}

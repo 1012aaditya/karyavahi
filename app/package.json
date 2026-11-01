@@ -27,6 +27,8 @@
     "geo:fetch": "node scripts/fetch-up-boundaries.mjs",
     "test:import": "tsx --conditions=react-server scripts/import-test.mts",
     "test:threads": "tsx --conditions=react-server scripts/threads-test.mts",
+    "test:offline": "tsx --conditions=react-server scripts/offline-test.mts",
+    "e2e:offline": "node scripts/offline-e2e.cjs",
     "gen:r4": "tsx scripts/gen-r4.mts",
     "crawl": "node scripts/crawl.mjs",
     "e2e": "node scripts/e2e.cjs",

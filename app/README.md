@@ -338,6 +338,64 @@ already used as proof elsewhere, and stores it in `.data/evidence-files/` under 
 `/api/evidence/[id]/photo` serves it only to someone who can see that proof, and hashes it again
 first, refusing a file that has changed on disk. `npm run test:myday` checks all of this.
 
+### On a phone, without signal
+
+**Installable.** `src/app/manifest.ts` (served at `/manifest.webmanifest`, linked on every page)
+names the app *Karyavahi / कार्यवाही*, opens it on `/today`, full screen, in the brand teal, with
+icons drawn from the logo mark (`public/icons/`, made by `node scripts/gen-icons.cjs`). Android
+Chrome offers "Add to home screen" / "Install app" on a production build over HTTPS (or localhost).
+
+**Works without signal.** A hand-written service worker (`public/sw.js`, no libraries) is
+registered by `src/components/OfflineSupport.tsx` — in production builds only, and only for the
+roles that land on My day; for anyone else it removes any worker and saved pages left behind.
+
+- Pages always come from the network first. Only `/today` and the task pages it links to are
+  saved (each time they load, and the linked task pages in the background, re-fetched at most
+  every 5 minutes), together with the scripts and styles they need. Without signal the saved copy
+  opens, still working, with a notice: **"Offline — last updated 1 Nov, 5:29 pm"** /
+  **"ऑफ़लाइन — अंतिम अपडेट …"**. Any other page shows a short bilingual "you are offline" page.
+- `/api/*`, POSTs (server actions, sign-in) and client-navigation payloads are never cached or
+  touched. Scripts, styles, fonts and icons are served cache-first (their names change per build).
+- Saved pages belong to one person. They are deleted on sign-out, on sign-in, on the way to the
+  sign-in pages, and when the page reports that someone else is signed in.
+
+**Proof without signal.** On My day, *Hand in* (`src/components/ProofForm.tsx`) reads the phone's
+location once, then sends the note and the shrunk photo to `POST /api/evidence/submit`. With no
+connection, or if the send fails on the way, the proof is kept on the phone in IndexedDB
+(`src/lib/offline/queue.ts`) under an id the phone makes up, and listed at the top of My day as
+**Waiting to send** / **भेजने की प्रतीक्षा में**. It is sent by itself when the connection returns
+(the `online` event, every page load, and Background Sync where Chrome has it). The server keeps
+one row per (submitter, client id) — a unique index added by `migrateProofSync` in
+`src/lib/ext/schema.ts` — so a retry, or the page and the worker sending at once, is still one
+piece of proof. A proof the server refuses for a reason a retry will not change (task cancelled,
+photo already used) stays on the phone with the reason until the person removes it or tries
+again. Proof is only ever sent for the person who saved it. The 5 MB limit and the in-browser
+shrinking apply as before.
+
+**Real GPS.** When proof is handed in (and only then — nothing tracks the phone) the browser is
+asked for one fix (`navigator.geolocation`, 12 s timeout). The phone sends latitude, longitude and
+its accuracy; the **server** looks up the school's position, works out the distance (haversine)
+and sets `gps_status` (`src/lib/proof-gps.ts`). A status sent by the client is never read.
+
+| Status | Rule |
+| --- | --- |
+| `matched` — "GPS: at the school" | within **250 m** of the school |
+| `outside_radius` — "GPS: 1.2 km away" | further than 250 m; also when even the near edge of a rough fix's error circle is beyond 250 m |
+| `unavailable` — "GPS: not available" | location refused, switched off or timed out; the school has no position; or the fix is rougher than ±500 m and not clearly away |
+
+250 m covers a village school's campus and the lane outside, plus the 20–50 m a cheap phone
+usually reports outdoors. The fix, its accuracy and the distance are stored on the evidence row
+(`gps_lat`, `gps_lng`, `gps_accuracy_m`, `gps_distance_m`), and every proof card — task page, case
+page, the proof queue — shows the result. The task page's proof form reads the location the same
+way (`src/components/LocationField.tsx`). School positions in the demo are simulated, so the
+arithmetic is real but the points are not.
+
+`npm run test:offline` checks the idempotency key, the GPS rules and scoping (33 checks, on a
+scratch copy). `KV_BASE=http://localhost:3000 node scripts/offline-e2e.cjs` drives it in Chrome at
+phone size against a production build: the manifest, My day and a task page opening offline,
+proof with GPS, proof saved offline and sent when the signal returns as exactly one row, sign-out
+clearing the saved pages, and no worker for officers (mutates the DB; reset afterwards).
+
 ## The hotspot map: real Uttar Pradesh, simulated data
 
 The map shows the real state of Uttar Pradesh. `data/up-geo.json` holds the state outline, its
@@ -457,8 +515,17 @@ What changed:
   case's Outcome section says so and offers **Check whether the plan worked**
   (`src/lib/outcome-due.ts`); nothing re-runs the check by itself, so a person sees each verdict
   as it is made.
-- **My day has no offline queue yet.** A proof handed in without signal fails with a message and
-  has to be sent again. The location on proof is still the worker's own statement, not GPS.
+- **Offline covers My day and its tasks only.** Other pages, marking a task seen or started,
+  raising a complaint and the assistant still need signal (other pages show the offline page; a
+  tap on "Seen it" or "Started" without signal fails and has to be repeated). A saved page is only as fresh as the last visit with signal, and the photo
+  on a proof card is not saved for offline viewing. iPhones get the saved pages but no
+  Background Sync: queued proof goes the next time the app is opened with signal. A queued proof
+  stays on the phone until it is sent or removed, also across sign-out (only its author's next
+  sign-in sends it); the service worker is not registered in `npm run dev`.
+- **GPS is a check, not proof of presence.** A phone's location can be spoofed and indoor fixes
+  are rough; the server only judges the numbers it is sent. Proof saved offline is judged by the
+  fix taken when it was saved, but the time it was saved is the phone's own clock (recorded, not
+  trusted). Seeded proof keeps its seeded status, with no distance.
 - **Claude drafts are not saved into the record.** A draft can be copied into a conclusion,
   comment or report by hand; it is never written to the case on its own. Drafts are cached in
   `app_state`, not versioned.
