@@ -9,6 +9,7 @@ import { PageHead, fmtInr } from '@/components/ui';
 import { EvidenceStrength } from '@/components/labels';
 import { Icon } from '@/components/Icon';
 import type { Intervention } from '@domain/types';
+import { searchLibrary } from '@/lib/evidence-search';
 
 /**
  * Intervention Studio. Without a case it is the catalogue: a picture of what it covers, who can
@@ -47,6 +48,10 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
   const cat = (k: string) => (CATEGORY[k] ? pick(lang, CATEGORY[k].en, CATEGORY[k].hi) : k);
   const lever = (k: string) => (LEVER[k] ? pick(lang, LEVER[k].en, LEVER[k].hi) : k);
 
+  // Ranked full-text search over the cards (evidence, delivery conditions, limitations) and the
+  // reader's own checked cases, so "teacher shortage" finds cards that never use those exact words.
+  const lib = q ? searchLibrary(session, q, { interventions: 40, cases: 6 }) : null;
+  const libHit = new Set(lib?.interventions.map((h) => h.id) ?? []);
   const rows: { iv: Intervention; m: InterventionMatch | null }[] = ranked
     ? ranked.matches.map((m) => ({ iv: m.intervention, m }))
     : interventions().map((iv) => ({ iv, m: null }));
@@ -55,7 +60,7 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
     (!sp.category || iv.category === sp.category) &&
     (!sp.lever || iv.lever === sp.lever) &&
     (!sp.evidence || iv.evidence.status === sp.evidence) &&
-    (!q || `${iv.id} ${iv.name} ${iv.description} ${CATEGORY[iv.category]?.en ?? ''}`.toLowerCase().includes(q)));
+    (!q || libHit.has(iv.id) || `${iv.id} ${iv.name} ${iv.description} ${CATEGORY[iv.category]?.en ?? ''}`.toLowerCase().includes(q)));
 
   const sel = 'h-9 rounded-lg border border-line-strong bg-white px-2.5 text-sm text-ink';
   const sourced = rows.filter((r) => r.iv.evidence.status === 'sourced_summary_verify').length;
@@ -219,6 +224,30 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
         <button type="submit" className="btn-quiet h-9"><Icon name="filter" size={14} />{pick(lang, 'Apply', 'लागू करें')}</button>
         {filtered ? <Link href={caseId ? `/interventions?case=${caseId}` : '/interventions'} className="btn-ghost h-9">{pick(lang, 'Clear', 'हटाएँ')}</Link> : null}
       </form>
+
+      {lib && lib.cases.length > 0 ? (
+        <section className="rounded-2xl border border-line bg-white p-4" aria-labelledby="tried-title">
+          <h2 id="tried-title" className="text-sm font-semibold text-ink">{pick(lang, 'Tried before in your area, and checked', 'आपके क्षेत्र में पहले आज़माया गया, और जाँचा गया')}</h2>
+          <p className="mt-0.5 text-xs text-ink-faint">{pick(lang, 'Cases with an outcome check that match your search: what was tried, and what the next assessment showed.', 'खोज से मेल खाते, परिणाम-जाँच वाले प्रकरण: क्या आज़माया गया, और अगले आकलन ने क्या दिखाया।')}</p>
+          <ul className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {lib.cases.map((c) => {
+              const good = c.outcome?.category === 'improved_confirmed' || c.outcome?.category === 'improved_indicative';
+              return (
+                <li key={c.id}>
+                  <Link href={`/cases/${c.id}`} className={`block h-full rounded-xl border border-line border-l-4 px-3 py-2 hover:border-line-strong ${good ? 'border-l-sev-improving' : 'border-l-warn'}`}>
+                    <span className="block text-sm font-medium text-ink">{c.title}</span>
+                    <span className="mt-0.5 block text-xs text-ink-soft">{c.detail}</span>
+                    <span className={`mt-1 inline-block text-xs font-medium ${good ? 'text-good' : 'text-warn'}`}>
+                      {(c.outcome?.category ?? '').replace(/_/g, ' ')}{c.outcome?.did_pp == null ? '' : ` · ${c.outcome.did_pp > 0 ? '+' : ''}${c.outcome.did_pp} pp`}
+                    </span>
+                    <span className="ml-1 font-mono text-2xs text-ink-faint">{c.id}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       <form method="get" action="/interventions/compare" className="space-y-3">
         {caseId ? <input type="hidden" name="case" value={caseId} /> : null}

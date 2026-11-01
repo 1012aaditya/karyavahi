@@ -104,6 +104,23 @@ reopening the page costs nothing, and the card says when the record has changed 
 reads the last draft; POST writes one (refused from another site, rate-limited, logged to
 `ai_interactions`).
 
+**The auditor pass** (`src/lib/ai/audit-numbers.ts`). Code computes every number; Claude only
+narrates. After each draft, briefing and chat answer, every figure Claude wrote (percentages, pp,
+signed changes, decimals, whole numbers above ten; Hindi digits too) is looked up in the data it was
+given: the draft's JSON bundle, the briefing's summary, or the tool results and conversation. A
+draft with a figure the data does not hold is sent back to Claude once; anything still unsupported
+is marked in the text with a warning ("check these figures"), and the card otherwise says how many
+figures were checked. Small counts written alone ("3 schools", "Class 3"), ids, dates and years are
+not policed. No second model is involved.
+
+**The evidence library search** (`src/lib/evidence-search.ts`). Full-text search with BM25 ranking
+(SQLite FTS5, an in-memory index rebuilt when the cards or outcome checks change) over the
+intervention cards' evidence, delivery conditions, limitations and cost, and over the cases in the
+reader's own area that have an outcome check. It feeds the interventions page search ("Tried before in
+your area, and checked"), Claude's `search_evidence_library` tool, and "Suggest a plan". With a few
+dozen cards, ranked text search is exact and explainable; vector search (pgvector) belongs with the
+move to Postgres.
+
 ### AI configuration
 
 Copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY` (server-side only). Model defaults to

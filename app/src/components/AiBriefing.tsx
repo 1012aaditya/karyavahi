@@ -14,7 +14,7 @@ interface Briefing {
   headline: string; geographic_impact?: string; what_changed: string[]; priorities: { text: string; source_ids: string[] }[];
   risks: string[]; next_actions: string[]; caveat: string;
 }
-interface Envelope { status: 'ok' | 'unconfigured' | 'error'; briefing?: Briefing; generatedAt?: string; model?: string; cached?: boolean; message?: string; sources?: string[] }
+interface Envelope { status: 'ok' | 'unconfigured' | 'error'; briefing?: Briefing; generatedAt?: string; model?: string; cached?: boolean; message?: string; sources?: string[]; audit?: { checked: number; unsupported: string[] } }
 export interface PlainBriefProps { finding: string; changed: string; geography: string; concern: string; next: string; sources: string[] }
 
 const href = (id: string) =>
@@ -89,6 +89,14 @@ export function AiBriefing({ fallback }: { fallback?: PlainBriefProps }) {
             {[0, 1, 2, 3].map((i) => <div key={i} className="space-y-2"><div className="skeleton h-3 w-24" /><div className="skeleton h-4 w-full" /><div className="skeleton h-4 w-4/5" /></div>)}
           </div>
         ) : b ? (
+          <>
+          {env?.audit && env.audit.unsupported.length > 0 ? (
+            <p role="alert" className="mb-3 rounded-lg border border-warn/30 bg-warn-light px-3 py-1.5 text-xs text-warn">
+              <Icon name="alert" size={13} className="mr-1 inline" />Not found in the records — check these figures before relying on the briefing: <strong>{env.audit.unsupported.join(', ')}</strong>
+            </p>
+          ) : env?.audit && env.audit.checked > 0 ? (
+            <p className="mb-3 inline-flex items-center gap-1 text-2xs text-good"><Icon name="check-circle" size={12} />{env.audit.checked} figures checked against the records</p>
+          ) : null}
           <dl className={`grid gap-x-8 gap-y-4 md:grid-cols-2 xl:grid-cols-4 ${loading ? 'opacity-60' : ''}`}>
             <Field label="Most important finding" wide><span className="text-md font-semibold">{b.headline}</span></Field>
             <Field label="Geographic impact">{b.geographic_impact ?? '—'}</Field>
@@ -96,6 +104,7 @@ export function AiBriefing({ fallback }: { fallback?: PlainBriefProps }) {
             <Field label="Main operational concern" wide>{b.risks[0] ?? '—'}</Field>
             <Field label="Recommended next priority" wide><span className="font-medium text-brand">{b.next_actions[0] ?? b.priorities[0]?.text ?? '—'}</span></Field>
           </dl>
+          </>
         ) : useFallback ? (
           <>
             <dl className="grid gap-x-8 gap-y-4 md:grid-cols-2 xl:grid-cols-4">

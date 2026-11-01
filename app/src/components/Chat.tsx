@@ -21,6 +21,8 @@ interface Msg {
   tools?: ToolStep[];
   sources?: string[];
   unverified?: string[];
+  /** Figures in the answer that none of the retrieved records contain (the auditor pass). */
+  unchecked?: string[];
   followUps?: string[];
   error?: { message: string; retryable: boolean };
   model?: string;
@@ -211,7 +213,7 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
           else if (e.type === 'text') patchLast((m) => ({ ...m, content: m.content + e.delta }));
           else if (e.type === 'tool_start') patchLast((m) => ({ ...m, tools: [...(m.tools ?? []), { id: e.id, label: e.label, status: 'running' }] }));
           else if (e.type === 'tool_end') patchLast((m) => ({ ...m, tools: (m.tools ?? []).map((t) => (t.id === e.id ? { ...t, status: e.ok ? 'done' : 'failed', records: e.records } : t)) }));
-          else if (e.type === 'done') patchLast((m) => ({ ...m, streaming: false, sources: e.sources, unverified: e.citedNotRetrieved, followUps: e.followUps }));
+          else if (e.type === 'done') patchLast((m) => ({ ...m, streaming: false, sources: e.sources, unverified: e.citedNotRetrieved, unchecked: e.unsupportedFigures ?? [], followUps: e.followUps }));
           else if (e.type === 'error') patchLast((m) => ({ ...m, streaming: false, error: { message: e.message, retryable: e.retryable } }));
         }
       }
@@ -336,6 +338,9 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
                           ) : (
                             <p className="text-xs text-ink-faint">No record ids were cited in this answer.</p>
                           )}
+                          {m.unchecked && m.unchecked.length > 0 ? (
+                            <p className="flex items-center gap-1.5 text-xs text-warn"><Icon name="alert" size={13} />Figures not found in the records Claude read — check before relying on: {m.unchecked.join(', ')}</p>
+                          ) : null}
                           {m.unverified && m.unverified.length > 0 ? (
                             <p className="flex items-center gap-1.5 text-xs text-warn"><Icon name="alert" size={13} />Mentioned but not retrieved in this answer — check before relying on: {m.unverified.join(', ')}</p>
                           ) : null}

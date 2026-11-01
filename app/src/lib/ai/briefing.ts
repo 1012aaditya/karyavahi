@@ -10,6 +10,7 @@ import { getAppState, setAppState } from '../db';
 import { nowIso } from '../clock';
 import { may } from '../guard';
 import { ID_RE } from './chat';
+import { auditNumbers, type NumberAudit } from './audit-numbers';
 
 /**
  * The dashboard briefing. Distinct from the chat: one call, structured output, over the
@@ -36,6 +37,8 @@ export interface BriefingEnvelope {
   cached?: boolean;
   stale?: boolean;
   sources?: string[];
+  /** The auditor pass over every figure in the briefing. */
+  audit?: NumberAudit;
   message?: string;
 }
 
@@ -128,7 +131,11 @@ export async function generateBriefing(s: Session): Promise<BriefingEnvelope> {
     // Drop any id the summary did not contain.
     parsed.priorities = (parsed.priorities ?? []).slice(0, 4).map((p) => ({ text: p.text, source_ids: (p.source_ids ?? []).filter((id) => allowed.has(id)) }));
     const sources = [...new Set(parsed.priorities.flatMap((p) => p.source_ids))];
-    const env: BriefingEnvelope & { version: string } = { status: 'ok', briefing: parsed, generatedAt: nowIso(), model: st.model, sources, version };
+    const audit = auditNumbers([
+      parsed.headline, parsed.geographic_impact, ...(parsed.what_changed ?? []), ...parsed.priorities.map((p) => p.text),
+      ...(parsed.risks ?? []), ...(parsed.next_actions ?? []), parsed.caveat,
+    ].join('\n'), [compact]);
+    const env: BriefingEnvelope & { version: string } = { status: 'ok', briefing: parsed, generatedAt: nowIso(), model: st.model, sources, audit, version };
     setAppState(key(s), JSON.stringify(env));
     logAi(s, {
       kind: 'executive_brief', model: st.model, question: 'dashboard briefing', tools: ['overview_summary'], referencedIds: sources, status: 'ok',

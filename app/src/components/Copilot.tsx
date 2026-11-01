@@ -14,18 +14,29 @@ import { askClaude } from './ask-claude';
 
 type Task = 'explain_finding' | 'suggest_plan' | 'summarise_discussion' | 'explain_outcome' | 'report_narrative';
 interface Draft { headline: string; paragraphs: string[]; points: { text: string; source_ids: string[] }[]; next_step: string; intervention_id: string; caveat: string }
-interface Envelope { status: 'ok' | 'unconfigured' | 'error'; draft?: Draft; model?: string; generatedAt?: string; stale?: boolean; message?: string }
+interface Envelope { status: 'ok' | 'unconfigured' | 'error'; draft?: Draft; model?: string; generatedAt?: string; stale?: boolean; message?: string; audit?: { checked: number; unsupported: string[] } }
+
+/** Mark the figures the auditor could not find in the records, wherever they appear. */
+function Marked({ text, bad }: { text: string; bad: string[] }) {
+  if (bad.length === 0) return <>{text}</>;
+  const re = new RegExp(`(${bad.map((b) => b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');
+  return <>{text.split(re).map((part, i) => (bad.includes(part)
+    ? <mark key={i} className="rounded bg-warn-light px-0.5 text-warn ring-1 ring-warn/40">{part}</mark>
+    : <span key={i}>{part}</span>))}</>;
+}
 
 const T = {
   en: {
     working: 'Claude is reading the record…', by: 'Drafted by Claude', check: 'check before you rely on it', redo: 'Write again',
     stale: 'The record has changed since this draft.', follow: 'Ask a follow-up', copy: 'Copy', copied: 'Copied', next: 'Next step',
     off: 'Claude is not connected on this server.', composer: 'Open the plan composer with', retry: 'Try again', hide: 'Hide',
+    unsupported: 'Not found in the records — check these figures before using the draft:', audited: 'figures checked against the records',
   },
   hi: {
     working: 'Claude रिकॉर्ड पढ़ रहा है…', by: 'Claude द्वारा तैयार', check: 'भरोसा करने से पहले जाँचें', redo: 'फिर से लिखें',
     stale: 'इस मसौदे के बाद रिकॉर्ड बदला है।', follow: 'आगे पूछें', copy: 'कॉपी', copied: 'कॉपी हुआ', next: 'अगला कदम',
     off: 'इस सर्वर पर Claude जुड़ा नहीं है।', composer: 'योजना संरचना खोलें:', retry: 'फिर कोशिश करें', hide: 'छिपाएँ',
+    unsupported: 'ये आँकड़े रिकॉर्ड में नहीं मिले — मसौदा उपयोग करने से पहले जाँचें:', audited: 'आँकड़े रिकॉर्ड से मिलाए गए',
   },
 };
 
@@ -65,6 +76,7 @@ export function ClaudeDraft({ task, id, label, lang = 'en', configured = true, f
   }, [qs]);
 
   const d = env?.status === 'ok' ? env.draft : undefined;
+  const bad = env?.audit?.unsupported ?? [];
   const asText = d ? [d.headline, ...d.paragraphs, ...d.points.map((p) => `• ${p.text}`), `${t.next}: ${d.next_step}`].join('\n\n') : '';
 
   return (
@@ -91,19 +103,24 @@ export function ClaudeDraft({ task, id, label, lang = 'en', configured = true, f
           ) : d ? (
             <div className="mt-3 space-y-3">
               {env?.stale ? <p className="rounded-lg bg-warn-light px-3 py-1.5 text-xs text-warn">{t.stale}</p> : null}
-              <p className="text-md font-semibold leading-snug text-ink">{d.headline}</p>
-              {d.paragraphs.map((p, i) => <p key={i} className="text-base leading-relaxed text-ink-soft">{p}</p>)}
+              {bad.length > 0 ? (
+                <p role="alert" className="rounded-lg border border-warn/30 bg-warn-light px-3 py-1.5 text-xs text-warn">
+                  <Icon name="alert" size={13} className="mr-1 inline" />{t.unsupported} <strong>{bad.join(', ')}</strong>
+                </p>
+              ) : null}
+              <p className="text-md font-semibold leading-snug text-ink"><Marked text={d.headline} bad={bad} /></p>
+              {d.paragraphs.map((p, i) => <p key={i} className="text-base leading-relaxed text-ink-soft"><Marked text={p} bad={bad} /></p>)}
               {d.points.length > 0 ? (
                 <ul className="space-y-1.5">
                   {d.points.map((p, i) => (
                     <li key={i} className="flex gap-2 text-base leading-snug text-ink">
                       <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
-                      <span>{p.text} {p.source_ids.map((s) => <SourceChip key={s} id={s} />)}</span>
+                      <span><Marked text={p.text} bad={bad} /> {p.source_ids.map((s) => <SourceChip key={s} id={s} />)}</span>
                     </li>
                   ))}
                 </ul>
               ) : null}
-              <p className="rounded-xl bg-white px-3 py-2 text-base text-ink ring-1 ring-line"><span className="font-semibold">{t.next}: </span>{d.next_step}</p>
+              <p className="rounded-xl bg-white px-3 py-2 text-base text-ink ring-1 ring-line"><span className="font-semibold">{t.next}: </span><Marked text={d.next_step} bad={bad} /></p>
               {task === 'suggest_plan' && d.intervention_id ? (
                 <Link href={`/cases/${id}/plan?iv=${d.intervention_id}`} className="btn-primary btn-sm">{t.composer} {d.intervention_id}<Icon name="arrow-right" size={14} /></Link>
               ) : null}
@@ -112,7 +129,10 @@ export function ClaudeDraft({ task, id, label, lang = 'en', configured = true, f
                 {followUp ? <button type="button" onClick={() => askClaude(followUp)} className="btn-ghost btn-sm text-brand"><Icon name="send" size={14} />{t.follow}</button> : null}
                 <button type="button" onClick={() => { void navigator.clipboard?.writeText(asText); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="btn-ghost btn-sm"><Icon name="copy" size={14} />{copied ? t.copied : t.copy}</button>
                 <button type="button" onClick={() => run(true)} className="btn-ghost btn-sm"><Icon name="refresh" size={14} />{t.redo}</button>
-                {env?.model ? <span className="ml-auto font-mono text-2xs text-ink-faint">{env.model}</span> : null}
+                {env?.audit && env.audit.checked > 0 && bad.length === 0 ? (
+                  <span className="ml-auto inline-flex items-center gap-1 text-2xs text-good"><Icon name="check-circle" size={12} />{env.audit.checked} {t.audited}</span>
+                ) : null}
+                {env?.model ? <span className={`${env?.audit && env.audit.checked > 0 && bad.length === 0 ? '' : 'ml-auto '}font-mono text-2xs text-ink-faint`}>{env.model}</span> : null}
               </footer>
             </div>
           ) : (

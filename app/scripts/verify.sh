@@ -57,6 +57,9 @@ npx tsx --conditions=react-server scripts/import-test.mts 2>&1 | grep -vE 'Exper
 step 'case threads, mentions and followers'
 npx tsx --conditions=react-server scripts/threads-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
 
+step 'Claude guards: the number auditor and the evidence library search'
+npx tsx --conditions=react-server scripts/ai-guard-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
+
 if [ "$FULL" = "--full" ]; then
   step 'production build'
   npm run build 2>&1 | tail -4

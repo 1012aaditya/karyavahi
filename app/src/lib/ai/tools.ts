@@ -1,5 +1,6 @@
 import 'server-only';
 import type Anthropic from '@anthropic-ai/sdk';
+import { searchLibrary } from '../evidence-search';
 import type { Session } from '../session';
 import { all } from '../db';
 import { and, findingsPred, importBatchPred } from '../scope';
@@ -304,6 +305,19 @@ const EXEC: Record<string, Exec> = {
     };
   },
 
+  search_evidence_library: (s, i) => {
+    const q = str(i.query, 'query', 200, true)!;
+    const r = searchLibrary(s, q, { interventions: int(i.limit, 'limit', 1, 10, 5), cases: int(i.limit, 'limit', 1, 10, 5) });
+    return {
+      data: {
+        note: 'Full-text search (BM25) over the intervention cards and the cases in this user\'s area that have an outcome check. Matched words are in [brackets].',
+        interventions: r.interventions.map((h) => ({ id: h.id, name: h.title, lever: h.detail, passage: h.snippet })),
+        checked_cases: r.cases.map((h) => ({ id: h.id, title: h.title, tried: h.detail, outcome: h.outcome, passage: h.snippet })),
+      },
+      sources: [...r.interventions, ...r.cases].map((h) => h.id),
+    };
+  },
+
   search_records: (s, i) => {
     const q = str(i.query, 'query', 80, true)!;
     const r = search(s, q);
@@ -336,6 +350,7 @@ export const TOOL_DEFS: Anthropic.Beta.BetaTool[] = [
   { name: 'get_report_data', description: 'Deterministic report content built from the case ledger.', input_schema: obj({ report_type: { type: 'string', enum: REPORT_TYPES.map((r) => r.key) } }, ['report_type']) },
   { name: 'get_review_meeting_agenda', description: 'A deterministic agenda for a review meeting: decisions needed, escalations, no-gain outcomes, data issues, upcoming rounds.', input_schema: obj({}) },
   { name: 'get_complaints', description: 'Complaints and grievances visible to this user (assigned to them, raised by them, routed through them, or in their oversight scope), with SLA state and escalation level. Queues: mine, pending_ack, investigating, overdue, escalated, verification, resolved, submitted_by_me, all.', input_schema: obj({ queue: { type: 'string', enum: ['mine', 'pending_ack', 'investigating', 'overdue', 'escalated', 'verification', 'resolved', 'submitted_by_me', 'all'] }, limit: { type: 'integer', minimum: 1, maximum: 40 } }) },
+  { name: 'search_evidence_library', description: 'Search the evidence library by meaning-bearing words: intervention cards (evidence, effect sizes, delivery conditions, limitations, cost) and previously tried cases with their outcome checks ("what happened last time here"). Use for questions like "what works for teacher shortage", "has a reading camp worked here before".', input_schema: obj({ query: { type: 'string', description: 'Words describing the problem or approach, in English' }, limit: { type: 'integer', minimum: 1, maximum: 10 } }, ['query']) },
   { name: 'search_records', description: 'Find cases, schools, interventions, tasks or reports by id or keyword.', input_schema: obj({ query: { type: 'string' } }, ['query']) },
 ].map((t) => ({ ...t, eager_input_streaming: true }));
 

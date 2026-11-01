@@ -7,7 +7,9 @@ import { aiStatus } from './config';
 import { aiClient, fallbackParams, logAi } from './client';
 import { runTool } from './tools';
 import { ID_RE } from './chat';
+import { auditNumbers, type NumberAudit } from './audit-numbers';
 import { getCase } from '../cases';
+import { searchLibrary } from '../evidence-search';
 import { caseThread } from '../threads';
 import { getReport } from '../feed';
 import { getAppState, setAppState } from '../db';
@@ -47,6 +49,8 @@ export interface CopilotEnvelope {
   sources?: string[];
   model?: string;
   generatedAt?: string;
+  /** The auditor pass: figures checked, and any the data does not contain. */
+  audit?: NumberAudit;
   cached?: boolean;
   stale?: boolean;
   message?: string;
@@ -101,7 +105,8 @@ function gather(s: Session, task: CopilotTask, id: string): Gathered {
     if (!rep) return { refused: 'That report is not available to you.' };
     return { label: id, data: { report: rep } };
   }
-  if (!getCase(s, id)) return { refused: 'That case is not available to you.' };
+  const kase = getCase(s, id);
+  if (!kase) return { refused: 'That case is not available to you.' };
   switch (task) {
     case 'explain_finding':
       return { label: id, data: { case: call('get_case_details', { case_id: id }) } };
@@ -110,6 +115,8 @@ function gather(s: Session, task: CopilotTask, id: string): Gathered {
         case: call('get_case_details', { case_id: id }),
         intervention_options: call('get_intervention_options', { case_id: id, limit: 5 }),
         similar_cases: call('get_similar_cases', { case_id: id, limit: 4 }),
+        // What the library and checked cases say about this kind of problem, by meaning not by id.
+        library_search: (() => { const r = searchLibrary(s, kase.title, { interventions: 4, cases: 4 }); return { interventions: r.interventions, checked_cases: r.cases.filter((c) => c.id !== id) }; })(),
       } };
     case 'summarise_discussion':
       return { label: id, data: {
@@ -154,17 +161,36 @@ export async function draft(s: Session, task: CopilotTask, id: string, lang: Lan
     ? 'Write everything in clear, simple Hindi (Devanagari). Keep record ids, numbers and INT- codes as they are.'
     : 'Write in plain English.';
 
+  const draftText = (d: CopilotDraft) => [d.headline, ...(d.paragraphs ?? []), ...(d.points ?? []).map((p) => p.text), d.next_step, d.caveat].join('\n');
+  const textOf = (m: Anthropic.Beta.BetaMessage) => m.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text').map((b) => b.text).join('');
+  const messages: Anthropic.Beta.BetaMessageParam[] = [
+    { role: 'user', content: `${TASK_PROMPT[task]}\n${language}\n\nRecord ${g.label}. Data:\n${JSON.stringify(g.data)}` },
+  ];
+  const ask = () => client.beta.messages.create({
+    model: st.model,
+    max_tokens: 8000,
+    ...fallbackParams(),
+    thinking: { type: 'adaptive' },
+    output_config: { effort: st.effort, format: { type: 'json_schema', schema: SCHEMA as unknown as Record<string, unknown> } },
+    // The stable part first, so repeated drafts share a cached prefix.
+    system: [{ type: 'text', text: BASE_PROMPT, cache_control: { type: 'ephemeral' } }],
+    messages,
+  });
+
   try {
-    const msg = await client.beta.messages.create({
-      model: st.model,
-      max_tokens: 8000,
-      ...fallbackParams(),
-      thinking: { type: 'adaptive' },
-      output_config: { effort: st.effort, format: { type: 'json_schema', schema: SCHEMA as unknown as Record<string, unknown> } },
-      // The stable part first, so repeated drafts share a cached prefix.
-      system: [{ type: 'text', text: BASE_PROMPT, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: `${TASK_PROMPT[task]}\n${language}\n\nRecord ${g.label}. Data:\n${JSON.stringify(g.data)}` }],
-    });
+    let msg = await ask();
+    // The auditor pass: a draft that uses a figure the data does not hold goes back once.
+    if (msg.stop_reason === 'end_turn') {
+      try {
+        const first = auditNumbers(draftText(JSON.parse(textOf(msg)) as CopilotDraft), [g.data]);
+        if (first.unsupported.length > 0) {
+          messages.push({ role: 'assistant', content: msg.content });
+          messages.push({ role: 'user', content: `These figures are not in the data: ${first.unsupported.join(', ')}. Rewrite the draft using only figures that appear in the data; describe anything else in words.` });
+          const second = await ask();
+          if (second.stop_reason === 'end_turn') msg = second;
+        }
+      } catch { /* an unreadable first draft is handled below */ }
+    }
     if (msg.stop_reason === 'refusal') {
       logAi(s, { kind: `copilot_${task}`, model: st.model, question: `${task} ${id}`, tools: [], referencedIds: [id], status: 'refused', stopReason: msg.stop_reason });
       return { status: 'error', message: 'Claude declined to draft this.' };
@@ -173,17 +199,17 @@ export async function draft(s: Session, task: CopilotTask, id: string, lang: Lan
       logAi(s, { kind: `copilot_${task}`, model: st.model, question: `${task} ${id}`, tools: [], referencedIds: [id], status: 'error', stopReason: msg.stop_reason });
       return { status: 'error', message: 'The draft ran too long and was cut off. Try again.' };
     }
-    const text = msg.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text').map((b) => b.text).join('');
-    const parsed = JSON.parse(text) as CopilotDraft;
+    const parsed = JSON.parse(textOf(msg)) as CopilotDraft;
     // Keep only ids the data contained; a suggested intervention must be one of the options given.
     parsed.points = (parsed.points ?? []).slice(0, 5).map((p) => ({ text: p.text, source_ids: (p.source_ids ?? []).filter((x) => allowed.has(x)) }));
     parsed.paragraphs = (parsed.paragraphs ?? []).slice(0, 3);
     parsed.intervention_id = task === 'suggest_plan' && allowed.has(parsed.intervention_id) && /^INT-\d{2}$/.test(parsed.intervention_id) ? parsed.intervention_id : '';
     const sources = [...new Set(parsed.points.flatMap((p) => p.source_ids))];
-    const env: CopilotEnvelope & { version: string } = { status: 'ok', task, draft: parsed, sources, model: msg.model, generatedAt: nowIso(), version };
+    const audit = auditNumbers(draftText(parsed), [g.data]);
+    const env: CopilotEnvelope & { version: string } = { status: 'ok', task, draft: parsed, sources, audit, model: msg.model, generatedAt: nowIso(), version };
     setAppState(cacheKey(s, task, id, lang), JSON.stringify(env));
     logAi(s, {
-      kind: `copilot_${task}`, model: msg.model, question: `${task} ${id}`, tools: [], referencedIds: [id, ...sources], status: 'ok',
+      kind: `copilot_${task}`, model: msg.model, question: `${task} ${id}`, tools: audit.unsupported.length ? [`audit: ${audit.unsupported.length} unsupported figure(s)`] : [`audit: ${audit.checked} figures checked`], referencedIds: [id, ...sources], status: 'ok',
       usage: { input: msg.usage.input_tokens, output: msg.usage.output_tokens, cacheRead: msg.usage.cache_read_input_tokens ?? 0 },
       requestId: (msg as { _request_id?: string | null })._request_id ?? null, stopReason: msg.stop_reason,
     });
