@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { getLanguage } from '@/lib/session';
 import { pageSession } from '@/lib/page-session';
 import { listTasks, countTasks, evidenceToCheck } from '@/lib/cases';
-import { listBlockers, blockerSummary, workload, blockerMeta } from '@/lib/blockers';
+import { listBlockers, blockerSummary, workload, blockerMeta, blockerText, blockerResolutionText } from '@/lib/blockers';
 import { lookupsFor } from '@/lib/lookups';
 import { may, grant } from '@/lib/guard';
 import { today, daysBetween, addDays } from '@/lib/clock';
@@ -13,6 +13,7 @@ import { Icon } from '@/components/Icon';
 import { ActionForm, Disclose, ReasonBox } from '@/components/ActionForm';
 import { updateBlockerAction } from '@/lib/actions';
 import type { Task } from '@/lib/cases';
+import { ROLE_LABELS } from '@domain/permissions';
 
 /**
  * Field execution: who owes what, what is late, what is waiting on a check, what is stuck and
@@ -23,9 +24,32 @@ import type { Task } from '@/lib/cases';
 type SP = { tab?: string; view?: string };
 const OPEN_STATUSES = ['assigned', 'acknowledged', 'in_progress', 'sent_back'] as const;
 
+const LEVEL_HI: Record<string, string> = { school: 'विद्यालय', cluster: 'संकुल', block: 'खंड', district: 'ज़िला', state: 'राज्य' };
+/** What to try for each blocker type (blockers.ts fix), in Hindi. */
+const FIX_HI: Record<string, string> = {
+  staff_unavailable: 'संकुल के भीतर काम दूसरे को सौंपें या अस्थायी प्रतिनियुक्ति माँगें (INT-11)।',
+  budget_unavailable: 'खंड आकस्मिक मद से राशि जारी करवाने के लिए DEO से बात करें।',
+  materials_unavailable: 'BRC भंडार या पड़ोसी खंड से किट माँगें।',
+  training_incomplete: 'काम शुरू होने से पहले BRC के साथ पूरक प्रशिक्षण रखें।',
+  school_closure: 'बंदी जितने दिन की समय-सीमा बढ़ाएँ; कारण दर्ज करें।',
+  low_attendance: 'आगे बढ़ने से पहले उपस्थिति अभियान (INT-09) साथ जोड़ें।',
+  connectivity: 'ऑफ़लाइन जमा करने दें और संकुल संसाधन केंद्र पर सिंक करें।',
+  approval_pending: 'प्रकरण संदर्भ के साथ स्वीकृति देने वाले अधिकारी को ऊपर भेजें।',
+  unreasonable_deadline: 'लिखित कारण सहित समय-सीमा फिर तय करें (अंकेक्षित)।',
+  external_dependency: 'निर्भरता का ज़िम्मेदार तय करें और अनुवर्ती तिथि रखें।',
+};
+/** The workload flags (blockers.ts workload), in Hindi. */
+const FLAG_HI: Record<string, string> = {
+  'Carrying over twice the average load': 'औसत से दोगुना कार्यभार', 'Repeatedly overdue': 'बार-बार विलंबित',
+  '4+ deadlines this week': 'इस सप्ताह 4+ समय-सीमाएँ', 'Proof sent back more than once': 'सबूत एक से अधिक बार लौटाया गया',
+};
+
 export default async function ExecutionPage({ searchParams }: { searchParams: Promise<SP> }) {
   const session = await pageSession();
   const lang = await getLanguage();
+  const L = (en: string, hi: string) => pick(lang, en, hi);
+  const hi = lang === 'hi';
+  const roleWord = (r: string) => (hi ? ROLE_LABELS[r as keyof typeof ROLE_LABELS]?.hi ?? r : r);
   const sp = await searchParams;
   const isOwner = may(session, 'task.update_own');
   const canManage = grant(session, 'task.assign') === 'yes';
@@ -146,7 +170,7 @@ export default async function ExecutionPage({ searchParams }: { searchParams: Pr
       </section>
 
       <div className="flex flex-wrap items-center gap-2">
-        <nav aria-label="Execution views" className="flex flex-wrap gap-2">
+        <nav aria-label={pick(lang, 'Execution views', 'क्रियान्वयन के दृश्य')} className="flex flex-wrap gap-2">
           {tabs.map((t) => {
             const on = t.key === tab;
             return (
@@ -210,7 +234,7 @@ export default async function ExecutionPage({ searchParams }: { searchParams: Pr
         <section className="card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="table min-w-[860px]">
-                <thead><tr><th>Task</th><th>School</th><th>Owner</th><th>Due</th><th>Status</th><th>Proof required</th></tr></thead>
+                <thead><tr><th>{L('Task', 'काम')}</th><th>{L('School', 'विद्यालय')}</th><th>{L('Owner', 'ज़िम्मेदार')}</th><th>{L('Due', 'नियत तिथि')}</th><th>{L('Status', 'स्थिति')}</th><th>{L('Proof required', 'आवश्यक सबूत')}</th></tr></thead>
                 <tbody>
                   {tasks.map((t) => {
                     const late = !t.submitted_at && t.due_date < now ? daysBetween(t.due_date, now) : 0;
@@ -220,15 +244,15 @@ export default async function ExecutionPage({ searchParams }: { searchParams: Pr
                           <Link href={`/tasks/${t.id}`} className="font-medium text-ink hover:text-brand">{pick(lang, t.title_en, t.title_hi)}</Link>
                           <p className="mt-0.5 text-xs text-ink-faint">
                             <span className="font-mono">{t.id}</span> · <Link href={`/cases/${t.case_id}`} className="hover:text-brand">{t.case_id}</Link>
-                            {t.escalated_at ? <span className="text-crit"> · escalated</span> : null}
-                            {blockedTasks.has(t.id) ? <span className="text-warn"> · blocker reported</span> : null}
+                            {t.escalated_at ? <span className="text-crit"> · {L('escalated', 'ऊपर भेजा गया')}</span> : null}
+                            {blockedTasks.has(t.id) ? <span className="text-warn"> · {L('blocker reported', 'बाधा दर्ज')}</span> : null}
                           </p>
                         </td>
                         <td className="text-sm">{t.school_id ? <Link href={`/schools/${t.school_id}`} className="hover:text-brand">{look.schools.get(t.school_id) ?? t.school_id}</Link> : '—'}</td>
-                        <td className="text-sm">{look.users.get(t.owner_user_id) ?? t.owner_user_id}<span className="block text-xs uppercase text-ink-faint">{t.owner_role}</span></td>
-                        <td className={`tnum whitespace-nowrap text-sm ${late ? 'font-medium text-crit' : ''}`}>{fmtDate(t.due_date)}{late ? <span className="block text-xs">{late} days late</span> : null}</td>
+                        <td className="text-sm">{look.users.get(t.owner_user_id) ?? t.owner_user_id}<span className="block text-xs uppercase text-ink-faint">{roleWord(t.owner_role)}</span></td>
+                        <td className={`tnum whitespace-nowrap text-sm ${late ? 'font-medium text-crit' : ''}`}>{fmtDate(t.due_date, false, lang)}{late ? <span className="block text-xs">{L(`${late} days late`, `${late} दिन विलंब`)}</span> : null}</td>
                         <td><TaskStatusPill status={t.status} lang={lang} /></td>
-                        <td className="text-sm text-ink-soft">{t.proof_count} × <EvidenceTypeName type={t.proof_type} lang={lang} />{t.cross_source ? <span className="block text-xs text-brand">independent check</span> : null}</td>
+                        <td className="text-sm text-ink-soft">{t.proof_count} × <EvidenceTypeName type={t.proof_type} lang={lang} />{t.cross_source ? <span className="block text-xs text-brand">{L('independent check', 'स्वतंत्र जाँच')}</span> : null}</td>
                       </tr>
                     );
                   })}
@@ -239,46 +263,46 @@ export default async function ExecutionPage({ searchParams }: { searchParams: Pr
       ) : null}
 
       {tab === 'check' && proof.length ? (
-        <p className="rounded-xl border border-line bg-paper-sunk px-4 py-2.5 text-sm text-ink-soft">{proof.length} proof submission(s) are waiting for you specifically — none submitted by you. <Link href="/evidence" className="link">Open the proof queue</Link> to accept or send back.</p>
+        <p className="rounded-xl border border-line bg-paper-sunk px-4 py-2.5 text-sm text-ink-soft">{hi ? <>{proof.length} सबूत विशेष रूप से आपकी प्रतीक्षा में हैं — इनमें कोई आपका जमा किया नहीं। स्वीकारने या लौटाने के लिए <Link href="/evidence" className="link">सबूत कतार खोलें</Link>।</> : <>{proof.length} proof submission(s) are waiting for you specifically — none submitted by you. <Link href="/evidence" className="link">Open the proof queue</Link> to accept or send back.</>}</p>
       ) : null}
 
       {tab === 'blockers' && summary ? (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
           <section className="card overflow-hidden">
             <header className="border-b border-line px-4 py-3 sm:px-5">
-              <h2 className="text-md font-semibold text-ink">Reported blockers</h2>
-              <p className="text-xs text-ink-faint">Report a new one from any task page. Rows marked “derived” come from reasons the seed already records for deadline changes and reassignments.</p>
+              <h2 className="text-md font-semibold text-ink">{L('Reported blockers', 'दर्ज बाधाएँ')}</h2>
+              <p className="text-xs text-ink-faint">{L('Report a new one from any task page. Rows marked “derived” come from reasons the seed already records for deadline changes and reassignments.', 'नई बाधा किसी भी काम के पृष्ठ से दर्ज करें। “व्युत्पन्न” वाली पंक्तियाँ समय-सीमा बदलने और काम दूसरे को सौंपने के दर्ज कारणों से बनी हैं।')}</p>
             </header>
-            {blockers.length === 0 ? <p className="px-6 py-12 text-center text-sm text-ink-faint">No blockers reported in your scope.</p> : (
+            {blockers.length === 0 ? <p className="px-6 py-12 text-center text-sm text-ink-faint">{L('No blockers reported in your scope.', 'आपके दायरे में कोई बाधा दर्ज नहीं।')}</p> : (
               <ul className="divide-y divide-line">
                 {blockers.map((b) => (
                   <li key={b.id} className="px-4 py-3.5 sm:px-5">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className={`chip ${b.status === 'resolved' ? 'border-good/30 bg-good-light text-good' : b.status === 'escalated' ? 'border-crit/30 bg-crit-light text-crit' : 'border-warn/30 bg-warn-light text-warn'}`}>{b.status}</span>
-                      <span className="text-sm font-semibold text-ink">{blockerMeta(b.blocker_type).label}</span>
-                      <span className={`chip ${b.severity === 'high' ? 'border-crit/30 bg-crit-light text-crit' : 'border-line-strong bg-paper-sunk text-ink-soft'}`}>{b.severity}</span>
-                      {b.source === 'derived_from_seed' ? <span className="chip border-line-strong bg-white text-ink-faint">derived</span> : null}
+                      <span className={`chip ${b.status === 'resolved' ? 'border-good/30 bg-good-light text-good' : b.status === 'escalated' ? 'border-crit/30 bg-crit-light text-crit' : 'border-warn/30 bg-warn-light text-warn'}`}>{hi ? ({ open: 'खुली', escalated: 'ऊपर भेजी गई', resolved: 'सुलझी' } as Record<string, string>)[b.status] ?? b.status : b.status}</span>
+                      <span className="text-sm font-semibold text-ink">{pick(lang, blockerMeta(b.blocker_type).label, blockerMeta(b.blocker_type).hi)}</span>
+                      <span className={`chip ${b.severity === 'high' ? 'border-crit/30 bg-crit-light text-crit' : 'border-line-strong bg-paper-sunk text-ink-soft'}`}>{hi ? ({ high: 'अधिक', medium: 'मध्यम', low: 'कम' } as Record<string, string>)[b.severity] ?? b.severity : b.severity}</span>
+                      {b.source === 'derived_from_seed' ? <span className="chip border-line-strong bg-white text-ink-faint">{L('derived', 'व्युत्पन्न')}</span> : null}
                       <span className="ml-auto font-mono text-xs text-ink-faint">{b.id}</span>
                     </div>
-                    <p className="mt-1 text-sm text-ink-soft">{b.description}</p>
+                    <p className="mt-1 text-sm text-ink-soft">{blockerText(b.description, lang)}</p>
                     <p className="mt-1 text-xs text-ink-faint">
-                      <Link href={`/cases/${b.case_id}`} className="hover:text-brand">{b.case_id}</Link> · tasks {b.task_ids.map((t) => <Link key={t} href={`/tasks/${t}`} className="hover:text-brand">{t} </Link>)}· reported {fmtDate(b.reported_at)} ({daysBetween(b.reported_at.slice(0, 10), today())}d) · responsible: {b.responsible_level}
-                      {b.resolution ? ` · ${b.resolution}` : ''}
+                      <Link href={`/cases/${b.case_id}`} className="hover:text-brand">{b.case_id}</Link> · {L('tasks', 'काम')} {b.task_ids.map((t) => <Link key={t} href={`/tasks/${t}`} className="hover:text-brand">{t} </Link>)}· {L('reported', 'दर्ज')} {fmtDate(b.reported_at, false, lang)} ({daysBetween(b.reported_at.slice(0, 10), today())}{L('d', ' दिन')}) · {L('responsible', 'ज़िम्मेदार')}: {hi ? LEVEL_HI[b.responsible_level] ?? b.responsible_level : b.responsible_level}
+                      {b.resolution ? ` · ${blockerResolutionText(b.resolution, lang)}` : ''}
                     </p>
                     {b.status !== 'resolved' ? (
-                      <p className="mt-1.5 rounded-md bg-paper-sunk px-2.5 py-1.5 text-xs text-ink-soft"><Icon name="info" size={12} className="mr-1 inline text-brand" />Suggested: {blockerMeta(b.blocker_type).fix}</p>
+                      <p className="mt-1.5 rounded-md bg-paper-sunk px-2.5 py-1.5 text-xs text-ink-soft"><Icon name="info" size={12} className="mr-1 inline text-brand" />{L('Suggested:', 'सुझाव:')} {hi ? FIX_HI[b.blocker_type] ?? blockerMeta(b.blocker_type).fix : blockerMeta(b.blocker_type).fix}</p>
                     ) : null}
                     {b.status !== 'resolved' && (canManage || b.reported_by === session.user_id) ? (
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <Disclose label="Resolve…">
-                          <ActionForm action={updateBlockerAction} hidden={{ blocker_id: b.id, action: 'resolve' }} label="Mark resolved" tone="good">
-                            <ReasonBox name="note" required label="How was it resolved?" rows={2} />
+                        <Disclose label={L('Resolve…', 'सुलझाएँ…')}>
+                          <ActionForm action={updateBlockerAction} hidden={{ blocker_id: b.id, action: 'resolve' }} label={L('Mark resolved', 'सुलझी हुई चिह्नित करें')} tone="good">
+                            <ReasonBox name="note" required label={L('How was it resolved?', 'कैसे सुलझी?')} rows={2} />
                           </ActionForm>
                         </Disclose>
                         {canManage && b.status === 'open' ? (
-                          <Disclose label="Escalate…">
-                            <ActionForm action={updateBlockerAction} hidden={{ blocker_id: b.id, action: 'escalate' }} label="Escalate to next level" tone="quiet">
-                              <ReasonBox name="note" required label="What is needed from the next level?" rows={2} />
+                          <Disclose label={L('Escalate…', 'ऊपर भेजें…')}>
+                            <ActionForm action={updateBlockerAction} hidden={{ blocker_id: b.id, action: 'escalate' }} label={L('Escalate to next level', 'अगले स्तर को भेजें')} tone="quiet">
+                              <ReasonBox name="note" required label={L('What is needed from the next level?', 'अगले स्तर से क्या चाहिए?')} rows={2} />
                             </ActionForm>
                           </Disclose>
                         ) : null}
@@ -291,14 +315,14 @@ export default async function ExecutionPage({ searchParams }: { searchParams: Pr
           </section>
           <aside className="space-y-4">
             <section className="card p-4">
-              <h2 className="text-base font-semibold text-ink">What is blocking work</h2>
-              <p className="mb-3 text-xs text-ink-faint">Open blockers grouped by type.</p>
-              {summary.byType.length === 0 ? <p className="text-sm text-ink-faint">Nothing open.</p> : (
+              <h2 className="text-base font-semibold text-ink">{L('What is blocking work', 'काम किससे रुका है')}</h2>
+              <p className="mb-3 text-xs text-ink-faint">{L('Open blockers grouped by type.', 'खुली बाधाएँ, प्रकार के अनुसार।')}</p>
+              {summary.byType.length === 0 ? <p className="text-sm text-ink-faint">{L('Nothing open.', 'कुछ खुला नहीं।')}</p> : (
                 <ul className="space-y-3">
                   {summary.byType.map((t) => (
                     <li key={t.type}>
-                      <p className="flex items-center justify-between text-sm"><span className="font-medium text-ink">{t.label}</span><span className="tnum font-semibold text-ink">{t.n}</span></p>
-                      <p className="text-xs text-ink-faint">{t.tasks} task(s) · oldest {t.oldestDays}d · {t.level} authority</p>
+                      <p className="flex items-center justify-between text-sm"><span className="font-medium text-ink">{hi ? blockerMeta(t.type).hi ?? t.label : t.label}</span><span className="tnum font-semibold text-ink">{t.n}</span></p>
+                      <p className="text-xs text-ink-faint">{L(`${t.tasks} task(s) · oldest ${t.oldestDays}d · ${t.level} authority`, `${t.tasks} काम · सबसे पुरानी ${t.oldestDays} दिन · ${LEVEL_HI[t.level] ?? t.level} स्तर का अधिकार`)}</p>
                       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-paper-deep"><span className="block h-full rounded-full bg-warn" style={{ width: `${(100 * t.n) / Math.max(...summary.byType.map((x) => x.n))}%` }} /></div>
                     </li>
                   ))}
@@ -322,7 +346,7 @@ export default async function ExecutionPage({ searchParams }: { searchParams: Pr
               <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-navy-600/60" />{pick(lang, 'Other open', 'अन्य खुले')}</span>
             </p>
           </header>
-          {load.length === 0 ? <p className="px-6 py-12 text-center text-sm text-ink-faint">No open tasks.</p> : (
+          {load.length === 0 ? <p className="px-6 py-12 text-center text-sm text-ink-faint">{L('No open tasks.', 'कोई खुला काम नहीं।')}</p> : (
             <ul className="divide-y divide-line">
               {load.slice(0, 60).map((r) => {
                 const max = Math.max(...load.map((x) => x.open));
@@ -331,10 +355,10 @@ export default async function ExecutionPage({ searchParams }: { searchParams: Pr
                   <li key={r.user_id} className="grid items-center gap-x-4 gap-y-1.5 px-4 py-3 sm:grid-cols-[220px_minmax(0,1fr)_200px] sm:px-5">
                     <span className="flex min-w-0 items-center gap-2.5">
                       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-navy-100 text-2xs font-semibold text-navy-700">{initials(r.name)}</span>
-                      <span className="min-w-0"><span className="block truncate text-sm font-medium text-ink">{r.name}</span><span className="block text-2xs uppercase text-ink-faint">{r.role}</span></span>
+                      <span className="min-w-0"><span className="block truncate text-sm font-medium text-ink">{r.name}</span><span className="block text-2xs uppercase text-ink-faint">{roleWord(r.role)}</span></span>
                     </span>
                     <span className="flex items-center gap-2">
-                      <span className="flex h-3.5 overflow-hidden rounded-full bg-paper-deep" style={{ width: `${Math.max(6, (100 * r.open) / max)}%` }} role="img" aria-label={`${r.open} open, ${r.overdue} overdue, ${r.dueThisWeek} due this week`}>
+                      <span className="flex h-3.5 overflow-hidden rounded-full bg-paper-deep" style={{ width: `${Math.max(6, (100 * r.open) / max)}%` }} role="img" aria-label={L(`${r.open} open, ${r.overdue} overdue, ${r.dueThisWeek} due this week`, `${r.open} खुले, ${r.overdue} विलंबित, ${r.dueThisWeek} इस सप्ताह नियत`)}>
                         <span className="h-full bg-crit" style={{ width: `${(100 * r.overdue) / r.open}%` }} />
                         <span className="h-full bg-amber" style={{ width: `${(100 * r.dueThisWeek) / r.open}%` }} />
                         <span className="h-full bg-navy-600/60" style={{ width: `${(100 * rest) / r.open}%` }} />
@@ -344,7 +368,7 @@ export default async function ExecutionPage({ searchParams }: { searchParams: Pr
                     <span className="text-xs">
                       {r.overdue ? <span className="tnum mr-2 text-crit">{r.overdue} {pick(lang, 'late', 'विलंबित')}</span> : null}
                       {r.escalated ? <span className="tnum mr-2 text-ink-soft">{r.escalated} {pick(lang, 'escalated', 'आगे भेजे')}</span> : null}
-                      {r.flags.length ? <span className="text-warn">{r.flags.join(' · ')}</span> : !r.overdue && !r.escalated ? <span className="text-ink-faint">—</span> : null}
+                      {r.flags.length ? <span className="text-warn">{(hi ? r.flags.map((f) => FLAG_HI[f] ?? f) : r.flags).join(' · ')}</span> : !r.overdue && !r.escalated ? <span className="text-ink-faint">—</span> : null}
                     </span>
                   </li>
                 );

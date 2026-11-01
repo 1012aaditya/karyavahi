@@ -32,6 +32,8 @@ export const BLOCKER_TYPES = [
 ] as const;
 
 export type BlockerType = (typeof BLOCKER_TYPES)[number]['key'];
+export { blockerText, blockerResolutionText } from './blocker-text';
+
 export const blockerMeta = (k: string) => BLOCKER_TYPES.find((b) => b.key === k) ?? BLOCKER_TYPES[BLOCKER_TYPES.length - 1];
 
 export interface Blocker {

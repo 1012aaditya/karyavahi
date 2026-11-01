@@ -27,7 +27,9 @@ export async function GET(req: Request) {
   const level = unit.level as Level | 'city';
   const grade = ['1', '2', '3'].includes(u.get('grade') ?? '') ? Number(u.get('grade')) : undefined;
   const round = comparableRounds().some((r) => r.id === u.get('round')) ? u.get('round')! : undefined;
-  const comp = new Map(competencies().map((c) => [c.id, c.name_en]));
+  // The panel asks for Hindi with ?lang=hi; competency names then come from the Hindi column.
+  const hi = u.get('lang') === 'hi';
+  const comp = new Map(competencies().map((c) => [c.id, hi ? c.name_hi || c.name_en : c.name_en]));
   const pair = roundPair(round);
 
   const breakdown = level !== 'city' ? unitBreakdown(s, level as Level, id, { grade, roundId: round }).slice(0, 6).map((b) => ({

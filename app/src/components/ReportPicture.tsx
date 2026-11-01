@@ -6,6 +6,7 @@ import { pick } from '@/lib/i18n';
 import { fmtDate } from './ui';
 import { Icon } from './Icon';
 import { REPORT_ICON, REPORT_HI } from './ReportsRail';
+import { reportText } from './report-text';
 
 /**
  * The picture at the top of a report page: the headline figures as bars, and what the document
@@ -13,6 +14,7 @@ import { REPORT_ICON, REPORT_HI } from './ReportsRail';
  * picture can never say more than the document under it.
  */
 export function ReportPicture({ r, lang }: { r: BuiltReport; lang: Language }) {
+  const tx = reportText(lang);
   const figures = r.summary.map((s) => ({ ...s, n: Number(String(s.value).replace(/[^\d.-]/g, '')) }));
   const figMax = Math.max(1, ...figures.map((f) => (Number.isFinite(f.n) ? f.n : 0)));
   const rowMax = Math.max(1, ...r.sections.map((s) => s.rows.length));
@@ -30,7 +32,7 @@ export function ReportPicture({ r, lang }: { r: BuiltReport; lang: Language }) {
           <ul className="mt-4 space-y-2.5">
             {figures.map((f, i) => (
               <li key={f.label} className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_44px] items-center gap-2 text-xs">
-                <span className="truncate text-ink-soft" title={f.label}>{f.label}</span>
+                <span className="truncate text-ink-soft" title={tx(f.label)}>{tx(f.label)}</span>
                 <span className="h-3 overflow-hidden rounded-full bg-paper-deep">
                   <span className={`block h-full rounded-full ${tones[i % tones.length]}`} style={{ width: `${Number.isFinite(f.n) && f.n > 0 ? Math.max(4, (100 * f.n) / figMax) : 0}%` }} />
                 </span>
@@ -49,7 +51,7 @@ export function ReportPicture({ r, lang }: { r: BuiltReport; lang: Language }) {
         <ul className="mt-4 space-y-2.5">
           {r.sections.map((s, i) => (
             <li key={`${s.title}-${i}`} className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_44px] items-center gap-2 text-xs">
-              <span className="flex min-w-0 items-center gap-1.5 text-ink-soft"><Icon name="layers" size={12} className="shrink-0 text-ink-faint" /><span className="truncate" title={s.title}>{s.title}</span></span>
+              <span className="flex min-w-0 items-center gap-1.5 text-ink-soft"><Icon name="layers" size={12} className="shrink-0 text-ink-faint" /><span className="truncate" title={tx(s.title)}>{tx(s.title)}</span></span>
               <span className="h-3 overflow-hidden rounded-full bg-paper-deep"><span className="block h-full rounded-full bg-navy-600/50" style={{ width: `${s.rows.length ? Math.max(4, (100 * s.rows.length) / rowMax) : 0}%` }} /></span>
               <span className="tnum text-right font-semibold text-ink">{s.rows.length}</span>
             </li>

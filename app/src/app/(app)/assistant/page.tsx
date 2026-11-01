@@ -25,6 +25,14 @@ const STARTERS = [
   'Compare the options for CASE-0184',
   'Prepare an agenda for tomorrow’s review meeting',
 ];
+const STARTERS_HI = [
+  'इस सप्ताह किसे प्राथमिकता दूँ?',
+  'कक्षा 3 की गणित क्यों गिर रही है, और कहाँ?',
+  'कौन से प्रकरण मेरी स्वीकृति की प्रतीक्षा में हैं, और मुझे क्या तय करना है?',
+  'मेरे क्षेत्र में काम विलंबित क्यों हैं, और क्या रुकावट है?',
+  'CASE-0184 के विकल्पों की तुलना करें',
+  'कल की समीक्षा बैठक का एजेंडा बनाएँ',
+];
 
 export default async function AssistantPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const session = await pageSession();
@@ -51,14 +59,14 @@ export default async function AssistantPage({ searchParams }: { searchParams: Pr
         right={
           <span className={`chip ${st.configured ? 'border-good/30 bg-good-light text-good' : 'border-warn/30 bg-warn-light text-warn'}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${st.configured ? 'bg-good' : 'bg-warn'}`} />
-            {st.configured ? `Connected · ${st.model}` : 'Not connected'}
+            {st.configured ? `${pick(lang, 'Connected', 'जुड़ा है')} · ${st.model}` : pick(lang, 'Not connected', 'जुड़ा नहीं')}
           </span>
         }
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="card p-4 sm:p-5">
-          <ChatPanel withHistory starters={STARTERS} configured={st.configured} context={{ path: '/assistant' }} userKey={session.user_id} scopeLabel={scopeName(session.scope_type, session.scope_id)} />
+          <ChatPanel withHistory starters={lang === 'hi' ? STARTERS_HI : STARTERS} configured={st.configured} context={{ path: '/assistant' }} userKey={session.user_id} scopeLabel={scopeName(session.scope_type, session.scope_id)} lang={lang} />
         </div>
 
         <aside className="space-y-4">

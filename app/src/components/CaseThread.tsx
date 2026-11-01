@@ -49,8 +49,8 @@ export function CaseThread({ session, caseId, lang }: { session: Session; caseId
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <span className="text-[13.5px] font-semibold text-ink">{c.author_name}</span>
                 <span className="text-[12px] text-ink-faint"><RoleName role={c.author_role} lang={lang} /></span>
-                <span className="tnum text-[12px] text-ink-faint">{fmtDate(c.created_at, true)}</span>
-                {c.edited_at ? <span className="text-[11.5px] text-ink-faint">({pick(lang, 'edited', 'संपादित')} {fmtDate(c.edited_at, true)})</span> : null}
+                <span className="tnum text-[12px] text-ink-faint">{fmtDate(c.created_at, true, lang)}</span>
+                {c.edited_at ? <span className="text-[11.5px] text-ink-faint">({pick(lang, 'edited', 'संपादित')} {fmtDate(c.edited_at, true, lang)})</span> : null}
                 {c.is_decision ? <Pill tone="active">{pick(lang, 'Decision', 'निर्णय')}</Pill> : null}
               </div>
               <p className="mt-1 whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink">{c.body}</p>

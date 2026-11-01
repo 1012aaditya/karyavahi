@@ -124,7 +124,7 @@ export default async function AssignTasksPage({ params }: { params: Promise<{ id
                         <span className="sr-only">{pick(lang, 'Owner for', 'उत्तरदायी:')} {d.title_en}{d.schoolName ? `, ${d.schoolName}` : ''}</span>
                         <select name={`owner:${d.rowKey}`} defaultValue={d.ownerUserId ?? ''} className="input text-sm" required>
                           {d.options.length === 0 ? <option value="">{pick(lang, 'Nobody holds this role', 'यह पद रिक्त')}</option> : null}
-                          {d.options.map((o) => <option key={o.id} value={o.id}>{o.name} — {o.note}</option>)}
+                          {d.options.map((o) => <option key={o.id} value={o.id}>{o.name} — {pick(lang, o.note, o.noteHi)}</option>)}
                         </select>
                       </label>
                       <span className="mt-0.5 block text-xs text-ink-faint"><RoleName role={d.template.owner_role} lang={lang} /></span>

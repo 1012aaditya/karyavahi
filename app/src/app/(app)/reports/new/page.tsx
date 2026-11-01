@@ -102,7 +102,7 @@ export default async function ReportBuilder({ searchParams }: { searchParams: Pr
           </form>
 
           <div className="rounded-2xl bg-paper-deep/60 p-3 sm:p-6">
-            <ReportView r={preview} />
+            <ReportView r={preview} lang={lang} />
           </div>
         </>
       ) : (

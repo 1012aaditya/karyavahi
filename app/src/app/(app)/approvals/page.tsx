@@ -133,7 +133,7 @@ export default async function ApprovalsPage() {
                       {approval ? (
                         <p className="text-xs text-ink-faint">
                           {pick(lang, 'Submitted by', 'प्रस्तुत')} {look.users.get(approval.submitted_by) ?? approval.submitted_by}{' '}
-                          {fmtDate(approval.submitted_at)} · {pick(lang, 'requires', 'आवश्यक')} {approval.required_role.toUpperCase()}
+                          {fmtDate(approval.submitted_at, false, lang)} · {pick(lang, 'requires', 'आवश्यक')} {approval.required_role.toUpperCase()}
                         </p>
                       ) : null}
 

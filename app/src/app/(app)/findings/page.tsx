@@ -108,7 +108,7 @@ export default async function FindingsPage({
                     <td className="tnum text-sm">
                       {r.import_date ?? <span className="text-ink-faint">{pick(lang, 'not yet', 'अभी नहीं')}</span>}
                     </td>
-                    <td className="text-sm text-ink-soft">{r.instrument_note}</td>
+                    <td className="text-sm text-ink-soft">{lang === 'hi' ? INSTRUMENT_HI[r.instrument_note] ?? r.instrument_note : r.instrument_note}</td>
                   </tr>
                 ))}
               </tbody>
@@ -119,6 +119,12 @@ export default async function FindingsPage({
     </div>
   );
 }
+
+/** The rounds' stored instrument notes, in Hindi. */
+const INSTRUMENT_HI: Record<string, string> = {
+  'Fictional state spot-assessment, grades 1–3': 'काल्पनिक राज्य त्वरित आकलन, कक्षा 1–3',
+  'Scheduled — no data yet': 'निर्धारित — अभी डेटा नहीं',
+};
 
 const DOT: Record<string, { cls: string; en: string; hi: string }> = {
   case_opened: { cls: 'fill-crit stroke-white', en: 'Case opened', hi: 'प्रकरण खुला' },
@@ -165,7 +171,7 @@ function DetectionPicture({ findings, materiality, z, lang }: { findings: Findin
         {findings.map((f) => (
           <a key={f.id} href={`/findings/${f.id}`}>
             <circle cx={sx(f.relative_change_pp)} cy={sy(f.z_score)} r={f.status === 'case_opened' ? 5 : 4} strokeWidth={1.5} className={DOT[f.status]?.cls ?? 'fill-ink-faint'}>
-              <title>{`${f.id} · ${f.relative_change_pp.toFixed(1)} pp · z ${f.z_score.toFixed(2)} · ${DOT[f.status]?.en ?? f.status}`}</title>
+              <title>{`${f.id} · ${f.relative_change_pp.toFixed(1)} pp · z ${f.z_score.toFixed(2)} · ${(lang === 'hi' ? DOT[f.status]?.hi : DOT[f.status]?.en) ?? f.status}`}</title>
             </circle>
           </a>
         ))}

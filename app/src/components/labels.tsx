@@ -30,7 +30,8 @@ export function Pill({ tone = 'neutral', children, title }: { tone?: Tone; child
 export function StatusPill({ status, lang }: { status: CaseStatus; lang: Language }) {
   const s = STATUS_LABELS[status];
   if (!s) return <Pill>{status}</Pill>;
-  return <Pill tone={s.tone} title={status}>{pick(lang, s.en, s.hi)}</Pill>;
+  // The status code as a tooltip helps English readers match the audit trail; Hindi readers get the label.
+  return <Pill tone={s.tone} title={lang === 'hi' ? s.hi : status}>{pick(lang, s.en, s.hi)}</Pill>;
 }
 
 export function SeverityPill({ severity, lang }: { severity: Severity; lang: Language }) {
@@ -94,7 +95,7 @@ export const FactorName = ({ factor, lang }: { factor: keyof typeof FACTOR_LABEL
  */
 
 export const AiDrafted = ({ lang, model }: { lang: Language; model?: string | null }) => (
-  <Pill tone="pending" title={model ? `Model: ${model}` : undefined}>
+  <Pill tone="pending" title={model ? `${pick(lang, 'Model', 'मॉडल')}: ${model}` : undefined}>
     <span aria-hidden>◆</span> {pick(lang, 'AI-drafted', 'AI द्वारा तैयार')}
   </Pill>
 );
@@ -104,45 +105,45 @@ export const OfficerWritten = ({ lang }: { lang: Language }) => (
 );
 
 export const Illustrative = ({ lang }: { lang: Language }) => (
-  <Pill tone="warn" title="Not a PAB unit cost">
+  <Pill tone="warn" title={pick(lang, 'Not a PAB unit cost', 'PAB इकाई लागत नहीं')}>
     {pick(lang, 'Illustrative figure', 'केवल उदाहरण')}
   </Pill>
 );
 
 export const NotSent = ({ lang }: { lang: Language }) => (
-  <Pill tone="warn" title="No message was actually delivered">
+  <Pill tone="warn" title={pick(lang, 'No message was actually delivered', 'कोई संदेश वास्तव में नहीं भेजा गया')}>
     {pick(lang, 'Simulated — not sent', 'नकली — भेजा नहीं गया')}
   </Pill>
 );
 
 export const Association = ({ lang }: { lang: Language }) => (
-  <Pill tone="warn" title="Observed alongside the drop, not shown to have caused it">
+  <Pill tone="warn" title={pick(lang, 'Observed alongside the drop, not shown to have caused it', 'गिरावट के साथ देखा गया, इसका कारण होना सिद्ध नहीं')}>
     {pick(lang, 'Association, not cause', 'संबंध, कारण नहीं')}
   </Pill>
 );
 
 export function ProvenanceChip({ provenance, lang }: { provenance: Provenance | string; lang: Language }) {
-  const map: Record<string, { tone: Tone; en: string; hi: string; title: string }> = {
-    synthetic_demo: { tone: 'warn', en: 'Fictional demo data', hi: 'काल्पनिक डेमो डेटा', title: 'Generated for the demo. Not a real record.' },
-    udise_anonymised: { tone: 'good', en: 'Real school (UDISE+) · name withheld', hi: 'वास्तविक विद्यालय (यू-डाइस+) · नाम गोपनीय', title: 'A real government school from UDISE+ 2020-21 (India Data Portal, ODC-BY). Its name and code are withheld because its learning results here are simulated.' },
-    public_historical: { tone: 'neutral', en: 'Public historical', hi: 'सार्वजनिक ऐतिहासिक', title: 'From a published public source.' },
-    partner_provided: { tone: 'neutral', en: 'Partner-provided', hi: 'साझेदार द्वारा', title: 'Supplied by a partner organisation.' },
-    user_uploaded: { tone: 'active', en: 'Uploaded in app', hi: 'ऐप में अपलोड', title: 'Uploaded by a user through the import wizard.' },
+  const map: Record<string, { tone: Tone; en: string; hi: string; title: string; titleHi: string }> = {
+    synthetic_demo: { tone: 'warn', en: 'Fictional demo data', hi: 'काल्पनिक डेमो डेटा', title: 'Generated for the demo. Not a real record.', titleHi: 'डेमो के लिए बनाया गया। वास्तविक अभिलेख नहीं।' },
+    udise_anonymised: { tone: 'good', en: 'Real school (UDISE+) · name withheld', hi: 'वास्तविक विद्यालय (यू-डाइस+) · नाम गोपनीय', title: 'A real government school from UDISE+ 2020-21 (India Data Portal, ODC-BY). Its name and code are withheld because its learning results here are simulated.', titleHi: 'UDISE+ 2020-21 का एक वास्तविक सरकारी विद्यालय (इंडिया डेटा पोर्टल, ODC-BY)। इसका नाम और कोड छिपाया गया है क्योंकि यहाँ इसके अधिगम परिणाम काल्पनिक हैं।' },
+    public_historical: { tone: 'neutral', en: 'Public historical', hi: 'सार्वजनिक ऐतिहासिक', title: 'From a published public source.', titleHi: 'प्रकाशित सार्वजनिक स्रोत से।' },
+    partner_provided: { tone: 'neutral', en: 'Partner-provided', hi: 'साझेदार द्वारा', title: 'Supplied by a partner organisation.', titleHi: 'साझेदार संस्था द्वारा दिया गया।' },
+    user_uploaded: { tone: 'active', en: 'Uploaded in app', hi: 'ऐप में अपलोड', title: 'Uploaded by a user through the import wizard.', titleHi: 'आयात विज़ार्ड से किसी उपयोगकर्ता ने अपलोड किया।' },
   };
-  const m = map[provenance] ?? { tone: 'neutral' as Tone, en: String(provenance), hi: String(provenance), title: '' };
-  return <Pill tone={m.tone} title={m.title}>{pick(lang, m.en, m.hi)}</Pill>;
+  const m = map[provenance] ?? { tone: 'neutral' as Tone, en: String(provenance), hi: String(provenance), title: '', titleHi: '' };
+  return <Pill tone={m.tone} title={pick(lang, m.title, m.titleHi)}>{pick(lang, m.en, m.hi)}</Pill>;
 }
 
 export function EvidenceStrength({ status, lang }: { status: string; lang: Language }) {
   if (status === 'sourced_summary_verify') {
     return (
-      <Pill tone="warn" title="Quotes a published source; the citation still needs checking before production use">
+      <Pill tone="warn" title={pick(lang, 'Quotes a published source; the citation still needs checking before production use', 'प्रकाशित स्रोत उद्धृत करता है; उपयोग से पहले हवाले की जाँच बाकी है')}>
         {pick(lang, 'Cites a source — verify before production', 'स्रोत उद्धृत — उपयोग से पहले जाँचें')}
       </Pill>
     );
   }
   return (
-    <Pill tone="neutral" title="Makes no effect-size claim">
+    <Pill tone="neutral" title={pick(lang, 'Makes no effect-size claim', 'प्रभाव के आकार का कोई दावा नहीं')}>
       {pick(lang, 'No effect-size claim', 'प्रभाव का दावा नहीं')}
     </Pill>
   );
@@ -160,7 +161,7 @@ export const EscalatedPill = ({ lang }: { lang: Language }) => (
 );
 
 export const CrossSourcePill = ({ lang }: { lang: Language }) => (
-  <Pill tone="active" title="Independent check by a different role — required before a case can close">
+  <Pill tone="active" title={pick(lang, 'Independent check by a different role — required before a case can close', 'दूसरी भूमिका द्वारा स्वतंत्र जाँच — प्रकरण बंद होने से पहले आवश्यक')}>
     {pick(lang, 'Independent check', 'स्वतंत्र जाँच')}
   </Pill>
 );

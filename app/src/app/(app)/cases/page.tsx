@@ -163,13 +163,13 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
           <input type="search" name="q" defaultValue={sp.q ?? ''} placeholder={pick(lang, 'Search case titles or ids…', 'शीर्षक या आईडी खोजें…')} aria-label="Search cases" className="input h-9 rounded-xl pl-9 text-sm" />
         </div>
         {showBlock ? (
-          <select name="block" defaultValue={sp.block ?? ''} className={sel} aria-label="Block">
+          <select name="block" defaultValue={sp.block ?? ''} className={sel} aria-label={pick(lang, 'Block', 'खंड')}>
             <option value="">{pick(lang, 'All blocks', 'सभी खंड')}</option>
             {blockOpts.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         ) : null}
         {clusterOpts.length ? (
-          <select name="cluster" defaultValue={sp.cluster ?? ''} className={sel} aria-label="Cluster">
+          <select name="cluster" defaultValue={sp.cluster ?? ''} className={sel} aria-label={pick(lang, 'Cluster', 'संकुल')}>
             <option value="">{pick(lang, 'All clusters', 'सभी संकुल')}</option>
             {clusterOpts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -177,11 +177,11 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
         <select name="grade" defaultValue={sp.grade ?? ''} className={sel} aria-label="Grade">
           <option value="">{pick(lang, 'All classes', 'सभी कक्षाएँ')}</option><option value="1">Class 1</option><option value="2">Class 2</option><option value="3">Class 3</option>
         </select>
-        <select name="comp" defaultValue={sp.comp ?? ''} className={sel} aria-label="Competency">
+        <select name="comp" defaultValue={sp.comp ?? ''} className={sel} aria-label={pick(lang, 'Competency', 'दक्षता')}>
           <option value="">{pick(lang, 'All competencies', 'सभी दक्षताएँ')}</option>
           {comps.map((c) => <option key={c.id} value={c.id}>{pick(lang, c.name_en, c.name_hi)}</option>)}
         </select>
-        <select name="order" defaultValue={sp.order ?? 'severity'} className={sel} aria-label="Sort">
+        <select name="order" defaultValue={sp.order ?? 'severity'} className={sel} aria-label={pick(lang, 'Sort', 'क्रम')}>
           <option value="severity">{pick(lang, 'Sort: severity', 'क्रम: गंभीरता')}</option>
           <option value="recent">{pick(lang, 'Sort: last updated', 'क्रम: हाल में')}</option>
           <option value="due">{pick(lang, 'Sort: due date', 'क्रम: नियत तिथि')}</option>
@@ -228,7 +228,7 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
                   <span className="mt-0.5 text-xs text-ink-faint">{pick(lang, 'Class', 'कक्षा')} {c.grade} · {look.competencies.get(c.competency_id) ?? c.competency_id}</span>
 
                   {/* How far the case has come: seven steps, the current one ringed. */}
-                  <span className="mt-3 flex items-center gap-1" role="img" aria-label={`${pick(lang, 'Stage', 'चरण')} ${at + 1} / 7: ${STAGES[at].en}`}>
+                  <span className="mt-3 flex items-center gap-1" role="img" aria-label={`${pick(lang, 'Stage', 'चरण')} ${at + 1} / 7: ${pick(lang, STAGES[at].en, STAGES[at].hi)}`}>
                     {STAGES.map((st, i) => (
                       <span key={st.key} className={`h-1.5 flex-1 rounded-full ${i < at ? 'bg-brand/60' : i === at ? (c.status === 'closed' ? 'bg-good' : 'bg-brand') : 'bg-paper-deep'}`} />
                     ))}
@@ -286,7 +286,7 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
                       <td className="whitespace-nowrap text-sm"><span className="inline-flex items-center gap-1.5"><span className={`dot ${c.severity === 'critical' ? 'bg-crit' : c.severity === 'high' ? 'bg-amber' : 'bg-ink-faint'}`} />{pick(lang, SEV_WORD[c.severity].en, SEV_WORD[c.severity].hi)}</span></td>
                       <td className="text-sm">{look.users.get(c.owner_user_id) ?? c.owner_user_id}</td>
                       <td className={`tnum whitespace-nowrap text-sm ${dueLate ? 'font-medium text-crit' : ''}`}>
-                        {fmtDate(c.due_date)}
+                        {fmtDate(c.due_date, false, lang)}
                         {overdue ? <span className="block text-xs font-normal text-crit">{overdue} {pick(lang, 'late task', 'विलंबित काम')}{overdue > 1 ? 's' : ''}</span> : null}
                       </td>
                       <td className="space-y-1"><StatusPill status={c.status} lang={lang} />{c.closure_type ? <OutcomePill category={c.closure_type} lang={lang} /> : null}</td>
@@ -303,7 +303,7 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
         </section>
       )}
       {total > perPage ? (
-        <nav aria-label="Pagination" className="flex items-center justify-between text-sm">
+        <nav aria-label={pick(lang, 'Pagination', 'पृष्ठ')} className="flex items-center justify-between text-sm">
           {page > 1 ? <Link href={link({ page: String(page - 1) })} className="btn-quiet btn-sm"><Icon name="chevron-left" size={14} />{pick(lang, 'Previous', 'पिछला')}</Link> : <span />}
           <span className="tnum text-ink-faint">{pick(lang, 'Page', 'पृष्ठ')} {page} / {Math.ceil(total / perPage)}</span>
           {page * perPage < total ? <Link href={link({ page: String(page + 1) })} className="btn-quiet btn-sm">{pick(lang, 'Next', 'अगला')}<Icon name="chevron-right" size={14} /></Link> : <span />}

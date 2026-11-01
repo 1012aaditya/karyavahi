@@ -37,7 +37,7 @@ export default async function AccountPage() {
           <p className="mt-2 text-md font-medium text-ink">{ROLE_LABELS[session.role]?.en}</p>
           <p className="text-sm text-ink-soft">{scopeName(session.scope_type, session.scope_id)}</p>
           {session.roles.filter((r) => r.delegated).map((r) => (
-            <p key={r.delegated!.id} className="mt-2 rounded-lg bg-pend-light px-3 py-2 text-sm text-pend">Acting {ROLE_LABELS[r.role]?.en} for {scopeName(r.scope_type, r.scope_id)} until {fmtDate(r.delegated!.ends_on)}</p>
+            <p key={r.delegated!.id} className="mt-2 rounded-lg bg-pend-light px-3 py-2 text-sm text-pend">Acting {ROLE_LABELS[r.role]?.en} for {scopeName(r.scope_type, r.scope_id)} until {fmtDate(r.delegated!.ends_on, false, lang)}</p>
           ))}
           <h3 className="label mt-4">Reports to</h3>
           <ol className="mt-1 space-y-1 text-sm">
@@ -79,7 +79,7 @@ export default async function AccountPage() {
       {history.length ? (
         <section className="card p-5">
           <h2 className="text-base font-semibold text-ink">Account history</h2>
-          <ul className="mt-2 space-y-1 text-sm text-ink-soft">{history.map((h) => <li key={h.id}><Icon name="history" size={12} className="mr-1 inline" />{fmtDate(h.ts, true)}: {h.from_status ?? 'new'} → {h.to_status}. {h.reason}</li>)}</ul>
+          <ul className="mt-2 space-y-1 text-sm text-ink-soft">{history.map((h) => <li key={h.id}><Icon name="history" size={12} className="mr-1 inline" />{fmtDate(h.ts, true, lang)}: {h.from_status ?? 'new'} → {h.to_status}. {h.reason}</li>)}</ul>
         </section>
       ) : null}
     </div>

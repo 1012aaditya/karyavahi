@@ -25,8 +25,10 @@ export default async function ComplaintPage({ params, searchParams }: { params: 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <p className="text-sm text-ink-faint"><Link href="/complaints" className="link">{pick(lang, 'Complaints', 'शिकायतें')}</Link> › <Mono>{c.id}</Mono></p>
-      {submitted ? <Callout tone="good" title="Complaint submitted">It has been sent to {assignee ?? 'your designated authority'}, who must acknowledge it by {fmtDate(c.ack_due)}. You will be notified of every update.</Callout> : null}
-      <ComplaintDetail session={session} id={c.id} />
+      {submitted ? (lang === 'hi'
+        ? <Callout tone="good" title="शिकायत दर्ज हुई">यह {assignee ?? 'आपके निर्धारित अधिकारी'} को भेजी गई है, जिन्हें {fmtDate(c.ack_due, false, lang)} तक पावती देनी है। हर अद्यतन की सूचना आपको मिलेगी।</Callout>
+        : <Callout tone="good" title="Complaint submitted">It has been sent to {assignee ?? 'your designated authority'}, who must acknowledge it by {fmtDate(c.ack_due)}. You will be notified of every update.</Callout>) : null}
+      <ComplaintDetail session={session} id={c.id} lang={lang} />
     </div>
   );
 }

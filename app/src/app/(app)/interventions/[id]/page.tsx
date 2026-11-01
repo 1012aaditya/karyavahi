@@ -186,7 +186,7 @@ export default async function InterventionPage({ params, searchParams }: { param
             </Field>
             <Field label={pick(lang, 'Judged on', 'मापदंड')}>{i.success_metric}</Field>
             <Field label={pick(lang, 'Card version', 'कार्ड संस्करण')}>v{i.version}</Field>
-            <Field label={pick(lang, 'Review due', 'समीक्षा तिथि')}><span className="tnum">{fmtDate(i.review_date)}</span></Field>
+            <Field label={pick(lang, 'Review due', 'समीक्षा तिथि')}><span className="tnum">{fmtDate(i.review_date, false, lang)}</span></Field>
           </Facts>
         </div>
       </Card>

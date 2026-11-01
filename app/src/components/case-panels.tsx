@@ -20,6 +20,33 @@ import { CostSource, costNote, type CostBasisLike } from './cost';
 import { OutcomeCalibrationNote } from './CalibrationNote';
 import { TrendChart, DivergingBars, EffectInterval, SlopeChart } from './charts';
 import { SERIES } from '@/lib/viz';
+import { STATUS_LABELS } from '@domain/lifecycle';
+
+/** Stored words the case page shows, in Hindi; the stored English stays the record. */
+export const DQ_CHECK_HI: Record<string, string> = {
+  students_assessed_current: 'इस दौर में आकलित विद्यार्थी', students_assessed_previous: 'पिछले दौर में आकलित विद्यार्थी',
+  school_reporting_share: 'रिपोर्ट करने वाले विद्यालयों का अनुपात', participation_rate: 'भागीदारी दर',
+};
+const EVENT_KIND_HI: Record<string, string> = {
+  created: 'बना', status_changed: 'स्थिति बदली', plan_drafted: 'योजना का मसौदा', task_reassigned: 'काम दूसरे को सौंपा',
+  escalated: 'ऊपर भेजा गया', deadline_changed: 'समय-सीमा बदली', outcome_evaluated: 'परिणाम जाँचा गया',
+};
+/** The automatic steps that write to a case, named in Hindi. */
+export const SYSTEM_ACTOR_HI: Record<string, string> = {
+  'system:detector': 'स्वचालित पहचान', 'system:assistant': 'AI सहायक', 'system:reminder-sweep': 'स्वचालित अनुस्मारक',
+  'system:ledger': 'स्वचालित खाता', 'system:outcome-check': 'स्वचालित परिणाम जाँच',
+};
+/** An approval's decision, in Hindi. */
+export const DECISION_HI: Record<string, string> = { approved: 'स्वीकृत', approved_with_edits: 'बदलाव सहित स्वीकृत', approved_for_pab: 'PAB हेतु स्वीकृत', revision_requested: 'बदलाव माँगे गए', rejected: 'अस्वीकृत', pending: 'लंबित' };
+const statusWord = (s: string, lang: Language) => (lang === 'hi' ? STATUS_LABELS[s as keyof typeof STATUS_LABELS]?.hi : undefined) ?? s.replace(/_/g, ' ');
+export const methodHi = (m: string): string => {
+  if (m === 'Cluster change minus district change; two-proportion z-test; materiality and data-quality gates') return 'संकुल का बदलाव घटा ज़िले का बदलाव; दो-अनुपात z-परीक्षण; सार्थकता और डेटा-गुणवत्ता की शर्तें';
+  const w = /^95% Welch t-interval on school-level changes \(df ≈ ([\d.]+)\); schools treated as independent$/.exec(m);
+  if (w) return `विद्यालय-स्तर के बदलावों पर 95% वेल्च t-अंतराल (df ≈ ${w[1]}); विद्यालयों को स्वतंत्र माना गया`;
+  if (m === 'not computed') return 'गणना नहीं हुई';
+  return m;
+};
+const OUTCOME_NOTE_HI = 'काल्पनिक डेटा पर उदाहरण अनुमान। अंतर-में-अंतर विधि मानती है कि हस्तक्षेप के बिना उपचारित और तुलना विद्यालय साथ-साथ चलते। उपचारित विद्यालय गिरावट के बाद चुने गए थे, इसलिए कुछ सुधार औसत की ओर लौटना हो सकता है। इसे संकेत मानें, कारण नहीं।';
 import { EvidenceSummary } from './EvidenceSummary';
 
 /** The anatomy of a case, one panel per question an officer actually asks. */
@@ -122,7 +149,8 @@ export function FindingPanel({
           <TrendChart
             xLabels={trend.map((t) => t.code)}
             series={series}
-            caption={`Class ${grade} ${names.competency}: percentage of assessed students at the grade benchmark, this cluster compared with the district, across ${trend.length} assessment rounds.`}
+            caption={pick(lang, `Class ${grade} ${names.competency}: percentage of assessed students at the grade benchmark, this cluster compared with the district, across ${trend.length} assessment rounds.`, `कक्षा ${grade} ${names.competency}: ग्रेड स्तर तक पहुँचे आकलित विद्यार्थियों का प्रतिशत, ${trend.length} आकलन दौरों में संकुल और ज़िले की तुलना।`)}
+            lang={lang}
             markers={currIdx > 0 ? [{ at: currIdx, label: pick(lang, 'this finding', 'यह निष्कर्ष') }] : []}
           />
         </div>
@@ -140,7 +168,7 @@ export function FindingPanel({
               )}
             </p>
             <DivergingBars
-              caption="Change in percentage points for each driver school between the two rounds."
+              caption={pick(lang, 'Change in percentage points for each driver school between the two rounds.', 'दोनों दौरों के बीच हर चिन्हित विद्यालय में प्रतिशत अंकों का बदलाव।')}
               data={finding.driver_schools.map((d) => ({
                 key: d.school_id,
                 label: nm(names.schools, d.school_id),
@@ -176,7 +204,7 @@ export function FindingPanel({
             <tbody>
               {dq.map((c) => (
                 <tr key={c.check}>
-                  <td>{c.check.replace(/_/g, ' ')}</td>
+                  <td>{(lang === 'hi' ? DQ_CHECK_HI[c.check] : undefined) ?? c.check.replace(/_/g, ' ')}</td>
                   <td className="tnum">{c.value}</td>
                   <td className="tnum text-ink-soft">≥ {c.threshold}</td>
                   <td>
@@ -195,7 +223,7 @@ export function FindingPanel({
             </tbody>
           </table>
           <p className="mt-2 text-xs text-ink-faint">
-            <Mono>{finding.id}</Mono> · {finding.detection_method} ·{' '}
+            <Mono>{finding.id}</Mono> · {lang === 'hi' ? methodHi(finding.detection_method) : finding.detection_method} ·{' '}
             {pick(lang, 'settings', 'सेटिंग')} <Mono>{finding.settings_version_id}</Mono> ·{' '}
             {pick(lang, 'detected', 'पहचान')} {fmtDate(finding.detected_at, true, lang)}
           </p>
@@ -532,7 +560,7 @@ export function PlanPanel({
                         : a.decision.startsWith('approved') ? 'good'
                         : a.decision === 'rejected' ? 'critical' : 'warn'
                       }>
-                        {a.decision.replace(/_/g, ' ')}
+                        {(lang === 'hi' ? DECISION_HI[a.decision] : undefined) ?? a.decision.replace(/_/g, ' ')}
                       </Pill>
                       <span className="text-sm text-ink-soft">
                         {pick(lang, 'requires', 'आवश्यक')}{' '}
@@ -797,7 +825,8 @@ export function OutcomePanel({
                       ciLow={o.ci_low_pp}
                       ciHigh={o.ci_high_pp}
                       threshold={o.success_threshold_pp}
-                      caption={`Difference-in-differences estimate of ${o.did_pp} percentage points with its 95% interval, against zero and the pre-registered success threshold of ${o.success_threshold_pp} points.`}
+                      caption={pick(lang, `Difference-in-differences estimate of ${o.did_pp} percentage points with its 95% interval, against zero and the pre-registered success threshold of ${o.success_threshold_pp} points.`, `अंतर-में-अंतर अनुमान ${o.did_pp} प्रतिशत अंक, 95% अंतराल सहित, शून्य और पूर्व-निर्धारित सफलता सीमा ${o.success_threshold_pp} अंक की तुलना में।`)}
+                      lang={lang}
                     />
                   </div>
 
@@ -813,7 +842,7 @@ export function OutcomePanel({
                       },
                     ]}
                     xLabels={[nm(names.roundLabels, o.baseline_round_id), nm(names.roundLabels, o.followup_round_id)]}
-                    caption="Mean percentage at the grade benchmark for the treated and comparison school groups at baseline and follow-up."
+                    caption={pick(lang, 'Mean percentage at the grade benchmark for the treated and comparison school groups at baseline and follow-up.', 'आधार और अनुवर्ती दौर में उपचारित और तुलना विद्यालय समूहों का ग्रेड स्तर पर औसत प्रतिशत।')}
                   />
                 </>
               ) : (
@@ -885,8 +914,8 @@ export function OutcomePanel({
               )}
 
               <Callout tone="warn" title={pick(lang, 'How to read this number', 'इस संख्या को कैसे पढ़ें')}>
-                {OUTCOME_NOTE}
-                <p className="mt-1.5 text-xs">{o.ci_method}</p>
+                {pick(lang, OUTCOME_NOTE, OUTCOME_NOTE_HI)}
+                <p className="mt-1.5 text-xs">{lang === 'hi' ? methodHi(o.ci_method) : o.ci_method}</p>
               </Callout>
 
               <details className="no-print">
@@ -962,14 +991,14 @@ export function TimelinePanel({
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-ink">{e.summary}</p>
                 <p className="text-xs text-ink-faint">
-                  {e.actor_user_id ? nm(names.users, e.actor_user_id) : e.actor_label}
+                  {e.actor_user_id ? nm(names.users, e.actor_user_id) : (lang === 'hi' ? SYSTEM_ACTOR_HI[e.actor_label] : undefined) ?? e.actor_label}
                   {e.from_status && e.to_status ? (
-                    <> · {e.from_status.replace(/_/g, ' ')} → {e.to_status.replace(/_/g, ' ')}</>
+                    <> · {statusWord(e.from_status, lang)} → {statusWord(e.to_status, lang)}</>
                   ) : null}
                   {e.related_entity ? <> · <Mono>{e.related_entity}</Mono></> : null}
                 </p>
               </div>
-              <span className="shrink-0"><Pill>{e.kind.replace(/_/g, ' ')}</Pill></span>
+              <span className="shrink-0"><Pill>{(lang === 'hi' ? EVENT_KIND_HI[e.kind] : undefined) ?? e.kind.replace(/_/g, ' ')}</Pill></span>
             </li>
           ))}
         </ol>

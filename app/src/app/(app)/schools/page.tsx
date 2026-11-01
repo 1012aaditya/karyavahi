@@ -20,10 +20,13 @@ const LEVEL_WORD: Record<Level, [string, string]> = {
   critical: ['Critical', 'गंभीर'], significant: ['Significant', 'उल्लेखनीय'], moderate: ['Moderate', 'मध्यम'], stable: ['Fine', 'ठीक'], insufficient: ['No data', 'डेटा नहीं'],
 };
 type Need = 'teachers' | 'visits' | 'attendance';
-const NEEDS: { key: Need; en: string; hi: string; level: (n: SchoolNow) => Level; rule: string }[] = [
-  { key: 'teachers', en: 'Teachers in post', hi: 'पदस्थ शिक्षक', level: (n) => n.teacherLevel, rule: THRESHOLDS.teachers },
-  { key: 'visits', en: 'Support visits', hi: 'सहायक भ्रमण', level: (n) => n.visitLevel, rule: THRESHOLDS.visits },
-  { key: 'attendance', en: 'Attendance trend', hi: 'उपस्थिति रुझान', level: (n) => n.attendanceLevel, rule: THRESHOLDS.attendance },
+const NEEDS: { key: Need; en: string; hi: string; level: (n: SchoolNow) => Level; rule: string; ruleHi: string }[] = [
+  { key: 'teachers', en: 'Teachers in post', hi: 'पदस्थ शिक्षक', level: (n) => n.teacherLevel, rule: THRESHOLDS.teachers,
+    ruleHi: 'स्वीकृत पदों से कमी: 2 या अधिक, या आधे पद = गंभीर; 1 = उल्लेखनीय; पिछले 6 महीनों में शिक्षक गया और जगह नहीं भरी = मध्यम' },
+  { key: 'visits', en: 'Support visits', hi: 'सहायक भ्रमण', level: (n) => n.visitLevel, rule: THRESHOLDS.visits,
+    ruleHi: 'पिछले भ्रमण के बाद बीते दिन: 90 से अधिक या कभी नहीं = गंभीर; 61–90 = उल्लेखनीय; 31–60 = मध्यम; 30 या कम = ठीक' },
+  { key: 'attendance', en: 'Attendance trend', hi: 'उपस्थिति रुझान', level: (n) => n.attendanceLevel, rule: THRESHOLDS.attendance,
+    ruleHi: 'पिछले 3 महीनों की औसत उपस्थिति, उससे पहले के 3 महीनों से: 10 या अधिक अंक नीचे = गंभीर; 5–10 = उल्लेखनीय; 2–5 = मध्यम' },
 ];
 
 export default async function SchoolsPage({
@@ -91,10 +94,10 @@ export default async function SchoolsPage({
             const on = need?.key === m.key;
             return (
               <li key={m.key}>
-                <Link href={link({ need: on ? undefined : m.key })} aria-current={on ? 'true' : undefined} title={m.rule}
+                <Link href={link({ need: on ? undefined : m.key })} aria-current={on ? 'true' : undefined} title={pick(lang, m.rule, m.ruleHi)}
                   className={`grid items-center gap-x-4 gap-y-1 rounded-xl px-2 py-1.5 transition-colors sm:grid-cols-[170px_minmax(0,1fr)_150px] ${on ? 'bg-brand-light' : 'hover:bg-paper-sunk'}`}>
                   <span className={`text-sm ${on ? 'font-semibold text-brand' : 'font-medium text-ink'}`}>{pick(lang, m.en, m.hi)}</span>
-                  <span className="flex h-4 overflow-hidden rounded-full bg-paper-deep" role="img" aria-label={LEVELS.map((l) => `${m.c[l]} ${LEVEL_WORD[l][0]}`).join(', ')}>
+                  <span className="flex h-4 overflow-hidden rounded-full bg-paper-deep" role="img" aria-label={LEVELS.map((l) => `${m.c[l]} ${pick(lang, LEVEL_WORD[l][0], LEVEL_WORD[l][1])}`).join(', ')}>
                     {LEVELS.map((l) => m.c[l] ? <span key={l} className={`h-full ${LEVEL_BAR[l]}`} style={{ width: `${(100 * m.c[l]) / Math.max(1, listed.length)}%` }} /> : null)}
                   </span>
                   <span className="text-xs text-ink-soft"><span className={`tnum font-semibold ${m.hot ? 'text-crit' : 'text-ink'}`}>{m.hot}</span> {pick(lang, 'need attention', 'पर ध्यान चाहिए')}{on ? <Icon name="x" size={12} className="ml-1 inline text-brand" /> : null}</span>
@@ -143,7 +146,7 @@ export default async function SchoolsPage({
                       <td>
                         <Link href={`/schools/${s.id}`} className="link font-medium">{schoolName(s.name, lang)}</Link>
                         <p className="text-xs text-ink-faint">
-                          {s.village} · <Mono>{s.id}</Mono> · {s.category.replace(/_/g, ' ')}
+                          {s.village} · <Mono>{s.id}</Mono> · {lang === 'hi' ? ({ primary: 'प्राथमिक', upper_primary: 'उच्च प्राथमिक', composite: 'संयुक्त' } as Record<string, string>)[s.category] ?? s.category.replace(/_/g, ' ') : s.category.replace(/_/g, ' ')}
                         </p>
                       </td>
                       <td className="text-sm">
@@ -166,7 +169,7 @@ export default async function SchoolsPage({
                           <span className="flex gap-1">
                             {NEEDS.map((n) => {
                               const l = n.level(now.get(s.id)!);
-                              return <span key={n.key} title={`${n.en}: ${LEVEL_WORD[l][0]}`} className={`grid h-5 w-5 place-items-center rounded-md text-[10px] font-semibold ${LEVEL_BAR[l]} ${l === 'stable' || l === 'insufficient' ? 'text-ink-soft' : 'text-white'}`}>{pick(lang, n.en[0], n.hi[0])}</span>;
+                              return <span key={n.key} title={`${pick(lang, n.en, n.hi)}: ${pick(lang, LEVEL_WORD[l][0], LEVEL_WORD[l][1])}`} className={`grid h-5 w-5 place-items-center rounded-md text-[10px] font-semibold ${LEVEL_BAR[l]} ${l === 'stable' || l === 'insufficient' ? 'text-ink-soft' : 'text-white'}`}>{pick(lang, n.en[0], n.hi[0])}</span>;
                             })}
                           </span>
                         ) : <span className="text-ink-faint">—</span>}

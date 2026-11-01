@@ -324,8 +324,9 @@ export function DivergingBars({
  * it crossing zero, and the caller prints the parallel-trends caveat beside it.
  */
 export function EffectInterval({
-  did, ciLow, ciHigh, threshold, caption,
-}: { did: number; ciLow: number | null; ciHigh: number | null; threshold: number; caption: string }) {
+  did, ciLow, ciHigh, threshold, caption, lang = 'en',
+}: { did: number; ciLow: number | null; ciHigh: number | null; threshold: number; caption: string; lang?: 'en' | 'hi' }) {
+  const L = (en: string, hi: string) => (lang === 'hi' ? hi : en);
   const W = 760;
   const H = 104;
   const PAD = 30;
@@ -356,10 +357,10 @@ export function EffectInterval({
         ))}
         {/* zero and the success threshold */}
         <line x1={x(0)} x2={x(0)} y1={mid - 26} y2={mid + 26} stroke="var(--viz-ink-soft)" strokeWidth={1.5} />
-        <text x={x(0)} y={mid - 31} fontSize={10} textAnchor="middle" fill="var(--viz-ink-soft)">no effect</text>
+        <text x={x(0)} y={mid - 31} fontSize={10} textAnchor="middle" fill="var(--viz-ink-soft)">{L('no effect', 'कोई प्रभाव नहीं')}</text>
         <line x1={x(threshold)} x2={x(threshold)} y1={mid - 26} y2={mid + 26} stroke="var(--status-good)" strokeWidth={1.5} strokeDasharray="4 3" />
         <text x={x(threshold)} y={H - 10} fontSize={10} textAnchor="middle" fill="var(--status-good)" className="tnum">
-          target +{threshold}
+          {L('target', 'लक्ष्य')} +{threshold}
         </text>
 
         {/* interval */}
@@ -377,10 +378,10 @@ export function EffectInterval({
       </svg>
       <p className="mt-1 text-xs leading-snug text-ink-soft">
         {ciLow === null || ciHigh === null
-          ? 'No interval could be computed — too few schools with both rounds.'
+          ? L('No interval could be computed — too few schools with both rounds.', 'अंतराल नहीं निकल सका — दोनों दौरों वाले विद्यालय बहुत कम।')
           : crossesZero
-            ? `95% interval ${ciLow.toFixed(1)} to ${ciHigh.toFixed(1)} pp. It crosses zero, so "no real change" stays consistent with this data.`
-            : `95% interval ${ciLow.toFixed(1)} to ${ciHigh.toFixed(1)} pp — entirely ${ciLow > 0 ? 'above' : 'below'} zero.`}
+            ? L(`95% interval ${ciLow.toFixed(1)} to ${ciHigh.toFixed(1)} pp. It crosses zero, so "no real change" stays consistent with this data.`, `95% अंतराल ${ciLow.toFixed(1)} से ${ciHigh.toFixed(1)} pp। यह शून्य को पार करता है, इसलिए “कोई वास्तविक बदलाव नहीं” भी इस डेटा से मेल खाता है।`)
+            : L(`95% interval ${ciLow.toFixed(1)} to ${ciHigh.toFixed(1)} pp — entirely ${ciLow > 0 ? 'above' : 'below'} zero.`, `95% अंतराल ${ciLow.toFixed(1)} से ${ciHigh.toFixed(1)} pp — पूरी तरह शून्य से ${ciLow > 0 ? 'ऊपर' : 'नीचे'}।`)}
       </p>
       <figcaption className="sr-only">{caption}</figcaption>
     </figure>

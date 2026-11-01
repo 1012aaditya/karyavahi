@@ -20,7 +20,7 @@ export interface HomeHotspot {
 const SEV_RANK = `case f.severity when 'critical' then 0 when 'high' then 1 else 2 end`;
 
 /** The worst hotspots of the latest round in the reader's area: real findings, not noise. */
-export function topHotspots(s: Session, limit = 4): HomeHotspot[] {
+export function topHotspots(s: Session, limit = 4, lang: 'en' | 'hi' = 'en'): HomeHotspot[] {
   const p = and(findingsPred(s, 'f'), {
     sql: `f.status in ('case_opened','monitoring') and f.round_id = (select max(round_id) from findings)`, params: [],
   });
@@ -30,7 +30,7 @@ export function topHotspots(s: Session, limit = 4): HomeHotspot[] {
       where ${p.sql} order by ${SEV_RANK}, f.relative_change_pp limit ?`, ...p.params, limit,
   ).map((r) => ({
     id: r.id, caseId: r.case_id, cluster: r.cluster, block: r.block, grade: r.grade,
-    competency: competency(r.competency_id)?.name_en ?? r.competency_id,
+    competency: (lang === 'hi' ? competency(r.competency_id)?.name_hi : undefined) || (competency(r.competency_id)?.name_en ?? r.competency_id),
     severity: r.severity, changePp: r.change_pp, relPp: r.relative_change_pp, status: r.status,
   }));
 }

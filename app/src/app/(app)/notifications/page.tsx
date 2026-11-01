@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { getLanguage } from '@/lib/session';
 import { pageSession } from '@/lib/page-session';
-import { listNotifications, countUnread, listOutbox } from '@/lib/feed';
+import { listNotifications, countUnread, listOutbox, notificationTaskTitles } from '@/lib/feed';
+import { notificationText } from '@/lib/notification-text';
 import { pick } from '@/lib/i18n';
 import { Card, CardHead, PageHead, Empty, Callout, fmtDate } from '@/components/ui';
 import { Pill, NotSent } from '@/components/labels';
@@ -30,6 +31,7 @@ export default async function NotificationsPage() {
   const session = await pageSession();
   const lang = await getLanguage();
   const items = listNotifications(session, { limit: 120 });
+  const taskTitles = notificationTaskTitles(items);
   const unread = countUnread(session);
   const mine = listOutbox(session, { limit: 30 });
 
@@ -64,17 +66,17 @@ export default async function NotificationsPage() {
           <Empty>{pick(lang, 'No notifications.', 'कोई सूचना नहीं।')}</Empty>
         ) : (
           <ul className="divide-y divide-line">
-            {items.map((n) => (
+            {items.map((n) => { const tx = notificationText(n, lang, n.entity_id ? taskTitles.get(n.entity_id) : undefined); return (
               <li key={n.id} className={`px-4 py-3 sm:px-5 ${n.read_at ? '' : 'bg-brand-light/40'}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Pill tone={KIND_TONE[n.kind] ?? 'neutral'}>{n.kind.replace(/_/g, ' ')}</Pill>
+                      <Pill tone={KIND_TONE[n.kind] ?? 'neutral'}>{tx.kind}</Pill>
                       {!n.read_at ? <Pill tone="active">{pick(lang, 'new', 'नया')}</Pill> : null}
-                      <span className="tnum text-xs text-ink-faint">{fmtDate(n.ts, true)}</span>
+                      <span className="tnum text-xs text-ink-faint">{fmtDate(n.ts, true, lang)}</span>
                     </div>
-                    <p className="mt-1 text-sm font-medium text-ink">{n.title}</p>
-                    <p className="text-sm text-ink-soft">{n.body}</p>
+                    <p className="mt-1 text-sm font-medium text-ink">{tx.title}</p>
+                    <p className="text-sm text-ink-soft">{tx.body}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2 no-print">
                     <Link href={n.link} className="btn-quiet">{pick(lang, 'Open', 'खोलें')}</Link>
@@ -88,7 +90,7 @@ export default async function NotificationsPage() {
                   </div>
                 </div>
               </li>
-            ))}
+            ); })}
           </ul>
         )}
       </Card>
@@ -104,9 +106,9 @@ export default async function NotificationsPage() {
             {mine.map((m) => (
               <li key={m.id} className="px-4 py-2.5 sm:px-5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Pill tone="active">{m.channel}</Pill>
+                  <Pill tone="active">{lang === 'hi' ? ({ whatsapp: 'WhatsApp', ivr: 'IVR', sms: 'SMS' } as Record<string, string>)[m.channel] ?? m.channel : m.channel}</Pill>
                   <Pill>{m.language === 'hi' ? 'हिंदी' : 'English'}</Pill>
-                  <span className="tnum text-xs text-ink-faint">{fmtDate(m.ts, true)}</span>
+                  <span className="tnum text-xs text-ink-faint">{fmtDate(m.ts, true, lang)}</span>
                 </div>
                 <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink">{m.body}</p>
               </li>

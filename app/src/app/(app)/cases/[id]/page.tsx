@@ -37,6 +37,8 @@ import { LifecycleStepper, SectionNav, RecommendationsCard, SimilarCasesCard, Ca
 import { Icon } from '@/components/Icon';
 import { STAGES, stageIndex, nextAction } from '@/lib/case-stage';
 import { COMPOSABLE } from '@/lib/plans';
+import { SYSTEM_ACTOR_HI, DECISION_HI } from '@/components/case-panels';
+import { ROLE_LABELS } from '@domain/permissions';
 
 /**
  * One case, end to end.
@@ -122,7 +124,7 @@ export default async function CasePage({
   const legalNext = TRANSITIONS[c.status] ?? [];
   const match = matchForCase(session, c.id);
   const similar = similarCases(session, c.id, 4);
-  const lessons = lessonsFrom(similar);
+  const lessons = lessonsFrom(similar, lang);
   const blockers = listBlockers(session, { caseId: c.id, limit: 20 });
   const overdueTasks = tasks.filter((t) => !t.submitted_at && t.due_date < today()).length;
   const pendingProof = evidence.filter((e) => e.status === 'pending').length;
@@ -214,7 +216,7 @@ export default async function CasePage({
             <ProvenanceChip provenance="synthetic_demo" lang={lang} />
           </div>
         </div>
-        <div className="mt-5"><LifecycleStepper status={c.status} reopenCount={c.reopen_count} /></div>
+        <div className="mt-5"><LifecycleStepper status={c.status} reopenCount={c.reopen_count} lang={lang} /></div>
         {/* The case at a glance, as pictures: the drop, how far beyond the district, work and proof. */}
         <div className="mt-5 grid gap-3 border-t border-line pt-5 sm:grid-cols-2 xl:grid-cols-4">
           {finding ? (
@@ -283,7 +285,7 @@ export default async function CasePage({
         { id: 'outcome', label: pick(lang, 'Outcome', 'परिणाम'), badge: due ? pick(lang, 'new', 'नया') : outcomes.length ? String(outcomes.length) : undefined, tone: due ? 'warn' : undefined },
         { id: 'discussion', label: pick(lang, 'Discussion', 'चर्चा') },
         { id: 'history', label: pick(lang, 'History', 'इतिहास') },
-      ]} />
+      ]} lang={lang} />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,68fr)_minmax(320px,32fr)]">
       <div className="min-w-0 space-y-5">
@@ -525,7 +527,7 @@ export default async function CasePage({
           <ul className="divide-y divide-line">
             {visits.slice(0, 12).map((v: VisitRow) => (
               <li key={v.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5 sm:px-5">
-                <span className="tnum w-24 shrink-0 text-sm text-ink-faint">{fmtDate(v.visit_date)}</span>
+                <span className="tnum w-24 shrink-0 text-sm text-ink-faint">{fmtDate(v.visit_date, false, lang)}</span>
                 <Pill>{v.purpose.replace(/_/g, ' ')}</Pill>
                 <Link href={`/schools/${v.school_id}`} className="link text-sm">
                   {names.schools.get(v.school_id) ?? v.school_id}
@@ -573,10 +575,10 @@ export default async function CasePage({
               <tbody>
                 {audit.map((a) => (
                   <tr key={a.id}>
-                    <td className="tnum whitespace-nowrap text-sm">{fmtDate(a.ts, true)}</td>
+                    <td className="tnum whitespace-nowrap text-sm">{fmtDate(a.ts, true, lang)}</td>
                     <td className="text-sm">
-                      {a.actor_user_id ? (names.users.get(a.actor_user_id) ?? a.actor_label) : a.actor_label}
-                      <span className="block text-2xs text-ink-faint">{a.actor_role}</span>
+                      {a.actor_user_id ? (names.users.get(a.actor_user_id) ?? a.actor_label) : (lang === 'hi' ? SYSTEM_ACTOR_HI[a.actor_label] : undefined) ?? a.actor_label}
+                      <span className="block text-2xs text-ink-faint">{lang === 'hi' ? ROLE_LABELS[a.actor_role as keyof typeof ROLE_LABELS]?.hi ?? (a.actor_role === 'system' ? 'प्रणाली' : a.actor_role) : a.actor_role}</span>
                     </td>
                     <td className="text-sm">
                       <Mono>{a.action}</Mono>
@@ -607,10 +609,10 @@ export default async function CasePage({
         </div>
         <dl className="divide-y divide-line text-sm">
           <div className="flex items-baseline justify-between gap-3 px-5 py-2.5"><dt className="text-ink-faint">{pick(lang, 'Owner', 'उत्तरदायी')}</dt><dd className="text-right font-medium text-ink">{names.users.get(c.owner_user_id) ?? c.owner_user_id}</dd></div>
-          <div className="flex items-baseline justify-between gap-3 px-5 py-2.5"><dt className="text-ink-faint">{pick(lang, 'Deadline', 'समय-सीमा')}</dt><dd className={`tnum text-right font-medium ${c.due_date && c.due_date < today() && !c.closed_at ? 'text-crit' : 'text-ink'}`}>{fmtDate(c.due_date)}{c.due_date && c.due_date < today() && !c.closed_at ? <span className="block text-xs font-normal">{pick(lang, 'past due', 'समय-सीमा पार')}</span> : null}</dd></div>
+          <div className="flex items-baseline justify-between gap-3 px-5 py-2.5"><dt className="text-ink-faint">{pick(lang, 'Deadline', 'समय-सीमा')}</dt><dd className={`tnum text-right font-medium ${c.due_date && c.due_date < today() && !c.closed_at ? 'text-crit' : 'text-ink'}`}>{fmtDate(c.due_date, false, lang)}{c.due_date && c.due_date < today() && !c.closed_at ? <span className="block text-xs font-normal">{pick(lang, 'past due', 'समय-सीमा पार')}</span> : null}</dd></div>
           <div className="flex items-baseline justify-between gap-3 px-5 py-2.5"><dt className="text-ink-faint">{pick(lang, 'Approval', 'स्वीकृति')}</dt><dd className="text-right font-medium text-ink">{
-            pendingApproval ? <>{pick(lang, 'Waiting on', 'प्रतीक्षा')} {pendingApproval.required_role.toUpperCase()}<span className="block text-xs font-normal text-ink-faint">{pick(lang, 'since', 'से')} {fmtDate(pendingApproval.submitted_at)}</span></>
-            : lastDecided ? <>{lastDecided.decision.replace(/_/g, ' ')}<span className="block text-xs font-normal text-ink-faint">{names.users.get(lastDecided.decided_by ?? '') ?? lastDecided.decided_by} · {fmtDate(lastDecided.decided_at)}</span></>
+            pendingApproval ? <>{pick(lang, 'Waiting on', 'प्रतीक्षा')} {pendingApproval.required_role.toUpperCase()}<span className="block text-xs font-normal text-ink-faint">{pick(lang, 'since', 'से')} {fmtDate(pendingApproval.submitted_at, false, lang)}</span></>
+            : lastDecided ? <>{(lang === 'hi' ? DECISION_HI[lastDecided.decision] : undefined) ?? lastDecided.decision.replace(/_/g, ' ')}<span className="block text-xs font-normal text-ink-faint">{names.users.get(lastDecided.decided_by ?? '') ?? lastDecided.decided_by} · {fmtDate(lastDecided.decided_at, false, lang)}</span></>
             : <span className="font-normal text-ink-faint">{pick(lang, 'No plan submitted yet', 'अभी योजना नहीं भेजी')}</span>
           }</dd></div>
           <div className="flex items-baseline justify-between gap-3 px-5 py-2.5"><dt className="text-ink-faint">{pick(lang, 'Authority', 'अधिकार')}</dt><dd className="text-right font-medium text-ink">{c.lever === 'block' ? pick(lang, 'Block · BEO/DEO', 'खंड') : c.lever === 'district' ? pick(lang, 'District · DEO/State', 'ज़िला') : 'PAB · DEO/State'}</dd></div>
@@ -654,7 +656,7 @@ export default async function CasePage({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <Pill tone={STATUS_LABELS[to].tone}>{label}</Pill>
-                      <Mono> {to}</Mono>
+                      {lang === 'hi' ? null : <Mono> {to}</Mono>}
                       {needsReason ? (
                         <span className="ml-2 text-xs text-warn">{pick(lang, 'needs a written reason', 'लिखित कारण आवश्यक')}</span>
                       ) : null}
@@ -705,9 +707,9 @@ export default async function CasePage({
             </div>
           </RailCard>
         ) : null}
-        {match ? <RecommendationsCard caseId={c.id} matches={match.matches} /> : null}
-        <SimilarCasesCard cases={similar} lessons={lessons} />
-        <CaseBlockersCard blockers={blockers} />
+        {match ? <RecommendationsCard caseId={c.id} matches={match.matches} lang={lang} /> : null}
+        <SimilarCasesCard cases={similar} lessons={lessons} lang={lang} />
+        <CaseBlockersCard blockers={blockers} lang={lang} />
       </aside>
       </div>
     </article>

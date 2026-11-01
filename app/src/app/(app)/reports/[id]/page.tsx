@@ -17,6 +17,7 @@ import { ClaudeDraft } from '@/components/Copilot';
 import { aiStatus } from '@/lib/ai/config';
 import { may } from '@/lib/guard';
 import { REPORT_TYPES, type BuiltReport } from '@/lib/reports';
+import { reportText } from '@/components/report-text';
 import type { Language } from '@domain/types';
 
 function ExportBar({ id, type, snapshot, lang }: { id: string; type: string; snapshot: boolean; lang: Language }) {
@@ -34,15 +35,24 @@ function ExportBar({ id, type, snapshot, lang }: { id: string; type: string; sna
 
 /** One report, laid out to be read on screen or printed for a meeting. */
 
-function Value({ v }: { v: unknown }) {
+/** The kinds of report the seed saved before the report builder, in Hindi. */
+const LEGACY_TYPE_HI: Record<string, string> = {
+  atr: 'कृत कार्यवाही रिपोर्ट', review_pack: 'ज़िला समीक्षा संकलन', district_escalation: 'ज़िला एस्केलेशन', overdue_tasks: 'विलंबित काम',
+  learning_outcome: 'अधिगम परिणाम', data_quality: 'डेटा गुणवत्ता', executive_brief: 'कार्यकारी सार',
+};
+
+/** Stored keys and values read as words; in Hindi they are translated (report-text.ts). */
+function Value({ v, lang }: { v: unknown; lang: Language }) {
+  const tx = reportText(lang);
+  const key = (k: string) => (lang === 'hi' ? tx(k) : k).replace(/_/g, ' ');
   if (v === null || v === undefined) return <span className="text-ink-faint">—</span>;
-  if (typeof v === 'boolean') return <>{v ? 'yes' : 'no'}</>;
+  if (typeof v === 'boolean') return <>{v ? pick(lang, 'yes', 'हाँ') : pick(lang, 'no', 'नहीं')}</>;
   if (typeof v === 'number') return <span className="tnum">{v.toLocaleString('en-IN')}</span>;
-  if (typeof v === 'string') return <>{v}</>;
+  if (typeof v === 'string') return <>{tx(v)}</>;
   if (Array.isArray(v)) {
     if (v.length === 0) return <span className="text-ink-faint">—</span>;
     if (v.every((x) => typeof x !== 'object')) {
-      return <>{v.map((x) => String(x)).join(', ')}</>;
+      return <>{v.map((x) => tx(String(x))).join(', ')}</>;
     }
     return (
       <div className="overflow-x-auto">
@@ -50,7 +60,7 @@ function Value({ v }: { v: unknown }) {
           <thead>
             <tr>
               {Object.keys(v[0] as Record<string, unknown>).map((k) => (
-                <th key={k} scope="col">{k.replace(/_/g, ' ')}</th>
+                <th key={k} scope="col">{key(k)}</th>
               ))}
             </tr>
           </thead>
@@ -58,7 +68,7 @@ function Value({ v }: { v: unknown }) {
             {(v as Record<string, unknown>[]).map((row, i) => (
               <tr key={i}>
                 {Object.keys(v[0] as Record<string, unknown>).map((k) => (
-                  <td key={k} className="text-sm"><Value v={row[k]} /></td>
+                  <td key={k} className="text-sm"><Value v={row[k]} lang={lang} /></td>
                 ))}
               </tr>
             ))}
@@ -71,8 +81,8 @@ function Value({ v }: { v: unknown }) {
     <dl className="space-y-1">
       {Object.entries(v as Record<string, unknown>).map(([k, val]) => (
         <div key={k} className="flex flex-wrap gap-2">
-          <dt className="text-xs text-ink-faint">{k.replace(/_/g, ' ')}:</dt>
-          <dd className="text-sm text-ink"><Value v={val} /></dd>
+          <dt className="text-xs text-ink-faint">{key(k)}:</dt>
+          <dd className="text-sm text-ink"><Value v={val} lang={lang} /></dd>
         </div>
       ))}
     </dl>
@@ -87,6 +97,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
   if (!r) notFound();
   const users = userNames([r.generated_by]);
   const { generated } = await searchParams;
+  const tx = reportText(lang);
   // Claude drafts the narrative to paste above the tables; the snapshot itself never changes.
   const narrative = may(session, 'ai.assistant') ? (
     <ClaudeDraft task="report_narrative" id={r.id} lang={lang} configured={aiStatus().configured} className="no-print"
@@ -102,7 +113,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
         <div className="no-print">
           <PageHead
             breadcrumb={<><Link href="/reports" className="link">{pick(lang, 'Reports', 'रिपोर्ट')}</Link>{' › '}<Mono>{r.id}</Mono></>}
-            title={r.title}
+            title={tx(r.title)}
             sub={<span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="inline-flex items-center gap-1.5"><Icon name={REPORT_ICON[built.type] ?? 'file'} size={15} className="text-brand" />{kind ? pick(lang, kind.label, REPORT_HI[kind.key]?.label ?? kind.label) : built.type}</span>
               <span className="text-ink-faint">·</span><span>{built.scope}</span>
@@ -115,7 +126,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
         <ReportPicture r={built} lang={lang} />
         {narrative}
         <div className="rounded-2xl bg-paper-deep/60 p-3 sm:p-6 print:bg-white print:p-0">
-          <ReportView r={built} snapshotId={r.id} />
+          <ReportView r={built} snapshotId={r.id} lang={lang} />
         </div>
       </article>
     );
@@ -125,11 +136,11 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
     <article className="mx-auto max-w-4xl space-y-4">
       <PageHead
         breadcrumb={<><Link href="/reports" className="link">{pick(lang, 'Reports', 'रिपोर्ट')}</Link>{' › '}<Mono>{r.id}</Mono></>}
-        title={r.title}
+        title={tx(r.title)}
         sub={`${scopeName(r.scope_type, r.scope_id)} · ${r.period_start} → ${r.period_end}`}
         right={
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Pill>{r.report_type.replace(/_/g, ' ')}</Pill>
+            <Pill>{lang === 'hi' ? LEGACY_TYPE_HI[r.report_type] ?? r.report_type.replace(/_/g, ' ') : r.report_type.replace(/_/g, ' ')}</Pill>
             <ExportBar id={r.id} type={r.report_type} snapshot lang={lang} />
             {r.narrative_model ? <AiDrafted lang={lang} model={r.narrative_model} /> : null}
           </div>
@@ -138,7 +149,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
 
       {r.demo_disclaimer ? (
         <Callout tone="warn" title={pick(lang, 'Read this first', 'पहले यह पढ़ें')}>
-          {DISCLAIMER}
+          {tx(DISCLAIMER)}
           {pick(
             lang,
             ' Every figure below is generated for the demo. Nothing in it may be quoted as a government statistic.',
@@ -154,7 +165,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
         <div className="card-pad">
           <Facts cols={3}>
             <Field label={pick(lang, 'Generated', 'निर्मित')}>
-              <span className="tnum">{fmtDate(r.generated_at, true)}</span>
+              <span className="tnum">{fmtDate(r.generated_at, true, lang)}</span>
             </Field>
             <Field label={pick(lang, 'By', 'द्वारा')}>{users.get(r.generated_by) ?? r.generated_by}</Field>
             <Field label={pick(lang, 'Formats offered', 'उपलब्ध प्रारूप')}>{r.formats.join(', ').toUpperCase()}</Field>
@@ -173,8 +184,8 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
         <div className="card-pad space-y-4">
           {Object.entries(r.content).map(([k, v]) => (
             <section key={k}>
-              <h3 className="h-section mb-1.5">{k.replace(/_/g, ' ')}</h3>
-              <div className="text-sm leading-relaxed text-ink"><Value v={v} /></div>
+              <h3 className="h-section mb-1.5">{(lang === 'hi' ? tx(k) : k).replace(/_/g, ' ')}</h3>
+              <div className="text-sm leading-relaxed text-ink"><Value v={v} lang={lang} /></div>
             </section>
           ))}
           {Object.keys(r.content).length === 0 ? (

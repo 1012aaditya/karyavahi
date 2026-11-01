@@ -1,4 +1,4 @@
-import { listBlockers, BLOCKER_TYPES, blockerMeta } from '@/lib/blockers';
+import { listBlockers, BLOCKER_TYPES, blockerMeta, blockerText } from '@/lib/blockers';
 import { reportBlockerAction } from '@/lib/actions';
 import { grant as grantOf } from '@/lib/guard';
 import Link from 'next/link';
@@ -257,7 +257,7 @@ export default async function TaskPage({
                       <option value="" disabled>{pick(lang, 'Choose a person', 'व्यक्ति चुनें')}</option>
                       {reassign!.options.map((o) => (
                         <option key={o.id} value={o.id} disabled={!!o.blocked}>
-                          {o.name} — {o.blocked ? pick(lang, `not allowed: ${o.blocked}`, `अनुमति नहीं: ${o.blocked}`) : o.note}
+                          {o.name} — {o.blocked ? pick(lang, `not allowed: ${o.blocked}`, `अनुमति नहीं: ${o.blocked === 'delivers work on this plan' ? 'इसी योजना का काम करते हैं' : o.blocked === 'holds the independent check' ? 'स्वतंत्र जाँच इन्हीं के पास है' : o.blocked}`) : pick(lang, o.note, o.noteHi)}
                         </option>
                       ))}
                     </select>
@@ -399,7 +399,7 @@ export default async function TaskPage({
                   <li key={b.id} className="px-4 py-2.5 text-sm sm:px-5">
                     <span className={`chip mr-2 ${b.status === 'resolved' ? 'border-good/30 bg-good-light text-good' : 'border-warn/30 bg-warn-light text-warn'}`}>{b.status === 'resolved' ? pick(lang, 'resolved', 'हल हुई') : b.status === 'escalated' ? pick(lang, 'escalated', 'आगे भेजी') : pick(lang, b.status, 'खुली')}</span>
                     <span className="font-medium text-ink">{pick(lang, blockerMeta(b.blocker_type).label, blockerMeta(b.blocker_type).hi)}</span>
-                    <span className="text-ink-soft"> — {b.description}</span>
+                    <span className="text-ink-soft"> — {blockerText(b.description, lang)}</span>
                   </li>
                 ))}
               </ul>

@@ -11,7 +11,8 @@ import { may } from './guard';
 import { STATUS_LABELS } from '@domain/lifecycle';
 import { AS_OF_TS } from '@domain/catalog';
 import { listComplaints, slaState, STATUS as CSTATUS, complaintsPred } from './complaints';
-import type { CaseStatus } from '@domain/types';
+import type { CaseStatus, Language } from '@domain/types';
+import { priorityTitleHi, priorityActionHi } from './priority-text';
 
 /**
  * The operational overview: "what needs my attention today to improve learning outcomes?"
@@ -269,7 +270,8 @@ export function overviewSummary(s: Session): OverviewSummary {
 export interface ProgressItem { id: string; ts: string; text: string; href: string; kind: 'approved' | 'evidence' | 'escalated' | 'reopened' | 'verified' | 'resolved' | 'other' }
 
 /** Meaningful operational events — approvals, proof, escalations, reopenings, verified outcomes. */
-export function recentProgress(s: Session, limit = 8): ProgressItem[] {
+export function recentProgress(s: Session, limit = 8, lang: Language = 'en'): ProgressItem[] {
+  const hi = lang === 'hi';
   const out: ProgressItem[] = [];
   const p = and(casesPred(s, 'c'), { sql: 'e.ts <= ?', params: [nowIso()] });
   for (const r of all<{ id: string; ts: string; case_id: string; kind: string; to_status: string | null; summary: string }>(
@@ -278,7 +280,13 @@ export function recentProgress(s: Session, limit = 8): ProgressItem[] {
       order by e.ts desc limit ?`, ...p.params, limit * 8)) {
     const kind: ProgressItem['kind'] = r.to_status === 'approved' ? 'approved' : r.to_status === 'closed' ? 'verified' : r.to_status === 'reopened' ? 'reopened'
       : r.to_status === 'awaiting_verification' ? 'evidence' : r.kind === 'escalated' ? 'escalated' : r.kind === 'outcome_evaluated' ? 'verified' : 'other';
-    const text = kind === 'approved' ? `Intervention approved on ${r.case_id}` : kind === 'verified' && r.to_status === 'closed' ? `${r.case_id} closed on a verified gain`
+    const text = hi
+      ? (kind === 'approved' ? `${r.case_id} पर हस्तक्षेप स्वीकृत` : kind === 'verified' && r.to_status === 'closed' ? `${r.case_id} पुष्ट सुधार के साथ बंद`
+        : kind === 'verified' ? `${r.case_id} के परिणाम की जाँच हुई` : kind === 'reopened' ? `${r.case_id} फिर खुला — सुधार नहीं दिखा`
+        : kind === 'evidence' ? `${r.case_id} पर सारे सबूत जमा` : kind === 'escalated' ? `${r.case_id} का विलंबित काम ऊपर भेजा गया`
+        // Any other step: the case and its new status, since the stored summary is English.
+        : r.to_status && STATUS_LABELS[r.to_status as CaseStatus] ? `${r.case_id}: ${STATUS_LABELS[r.to_status as CaseStatus].hi}` : r.summary)
+      : kind === 'approved' ? `Intervention approved on ${r.case_id}` : kind === 'verified' && r.to_status === 'closed' ? `${r.case_id} closed on a verified gain`
       : kind === 'verified' ? `Outcome evaluated for ${r.case_id}` : kind === 'reopened' ? `${r.case_id} reopened — no gain shown`
       : kind === 'evidence' ? `All proof submitted on ${r.case_id}` : kind === 'escalated' ? `Overdue task on ${r.case_id} escalated` : r.summary;
     out.push({ id: r.id, ts: r.ts, text, href: `/cases/${r.case_id}`, kind });
@@ -288,7 +296,8 @@ export function recentProgress(s: Session, limit = 8): ProgressItem[] {
     `select ce.id, ce.ts, ce.complaint_id, ce.kind from complaint_events ce join complaints k on k.id = ce.complaint_id
       where (${kp.sql}) and ce.internal = 0 and ce.kind in ('escalated','resolved','reopened') order by ce.ts desc limit ?`, ...kp.params, limit)) {
     out.push({ id: r.id, ts: r.ts, href: `/complaints?open=${r.complaint_id}`, kind: r.kind === 'escalated' ? 'escalated' : r.kind === 'resolved' ? 'resolved' : 'reopened',
-      text: `Complaint ${r.complaint_id} ${r.kind === 'escalated' ? 'escalated' : r.kind === 'resolved' ? 'resolved' : 'reopened'}` });
+      text: hi ? `शिकायत ${r.complaint_id} ${r.kind === 'escalated' ? 'ऊपर भेजी गई' : r.kind === 'resolved' ? 'निपटाई गई' : 'फिर खुली'}`
+        : `Complaint ${r.complaint_id} ${r.kind === 'escalated' ? 'escalated' : r.kind === 'resolved' ? 'resolved' : 'reopened'}` });
   }
   // Variety over volume: one entry per case, and at most two escalations.
   const seen = new Set<string>();
@@ -301,15 +310,30 @@ export function recentProgress(s: Session, limit = 8): ProgressItem[] {
   }).slice(0, limit);
 }
 
+/** A priority's title and action in Hindi, for the plain brief (priority-text.ts). */
+const priorityHi = (p: PriorityItem): { title: string; action: string } => ({ title: priorityTitleHi(p.title), action: priorityActionHi(p.action) });
+
 /** A deterministic, non-AI brief built from the same summary the AI narrates. */
 export interface PlainBrief { finding: string; changed: string; geography: string; concern: string; next: string; sources: string[] }
-export function plainBrief(s: Session): PlainBrief {
+export function plainBrief(s: Session, lang: Language = 'en'): PlainBrief {
   const pa = priorityActions(s, 10);
   const t = learningTrend(s);
   const h = headline(s);
   const last = t.scope.length - 1;
   const likeForLike = last >= 2 && t.scope[last] !== null && t.scope[last - 2] !== null ? (t.scope[last]! - t.scope[last - 2]!) : null;
   const top = pa.items[0];
+  if (lang === 'hi') {
+    // The same figures in Hindi; record text inside a priority (a task or complaint title) stays as stored.
+    const tp = top ? priorityHi(top) : null;
+    return {
+      finding: tp ? `${tp.title}।` : 'अभी आपके लिए कुछ भी तत्काल नहीं है।',
+      changed: likeForLike === null ? 'तुलना के लिए पर्याप्त समान दौर नहीं।' : `${t.labels[last]}: ${t.scope[last]}% ग्रेड स्तर पर, पिछले वर्ष के इसी दौर से ${Math.abs(likeForLike).toFixed(1)} pp ${likeForLike >= 0 ? 'ऊपर' : 'नीचे'}${t.state[last] !== null ? ` (राज्य ${t.state[last]}%)` : ''}।`,
+      geography: `${t.scopeLabel} में ${h.critical} गंभीर प्रकरण खुले हैं।`,
+      concern: h.overdue_tasks ? `${h.overdue_tasks} काम समय से पीछे, जिनमें ${h.escalated_tasks} ज़िले को भेजे गए।` : 'कोई काम समय से पीछे नहीं।',
+      next: tp ? `${tp.action}: ${tp.title}` : 'नई गिरावट के लिए अधिगम हॉटस्पॉट देखें।',
+      sources: pa.items.flatMap((i) => i.sources).slice(0, 8),
+    };
+  }
   return {
     finding: top ? `${top.title}.` : 'Nothing urgent is waiting on you.',
     changed: likeForLike === null ? 'Not enough comparable rounds to compare.' : `${t.labels[last]}: ${t.scope[last]}% proficient, ${likeForLike >= 0 ? 'up' : 'down'} ${Math.abs(likeForLike).toFixed(1)} pp on the same round last year${t.state[last] !== null ? ` (state ${t.state[last]}%)` : ''}.`,

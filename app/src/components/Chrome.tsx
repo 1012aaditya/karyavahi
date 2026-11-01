@@ -16,11 +16,11 @@ export interface ClientNavItem { href: string; label: string; badge?: number }
 export interface ClientNavSection extends ClientNavItem { icon: string; children: ClientNavItem[] }
 export interface ClientNavGroup { key: string; label: string; sections: ClientNavSection[] }
 
-export function UserMenu({ name, role, scope, email, children }: { name: string; role: string; scope: string; email: string; children?: ReactNode }) {
+export function UserMenu({ name, role, scope, email, children, label = 'Account menu' }: { name: string; role: string; scope: string; email: string; children?: ReactNode; label?: string }) {
   const initials = name.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
   return (
     <Menu>
-      <MenuTrigger aria-label="Account menu" className="flex items-center gap-2 rounded-lg p-1 hover:bg-paper-deep data-[state=open]:bg-paper-deep">
+      <MenuTrigger aria-label={label} className="flex items-center gap-2 rounded-lg p-1 hover:bg-paper-deep data-[state=open]:bg-paper-deep">
         <span className="grid h-8 w-8 place-items-center rounded-full bg-navy text-xs font-semibold text-white">{initials}</span>
       </MenuTrigger>
       <MenuContent className="w-72">

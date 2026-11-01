@@ -104,6 +104,7 @@ export default async function RoadmapPage() {
 
   return (
     <AuthFrame
+      lang={lang}
       right={
         <>
           <form action="/api/language" method="post">

@@ -16,11 +16,11 @@ import type { Intervention, FactorCode, Lever } from '@domain/types';
  */
 
 /** Which intervention categories plausibly respond to which observed condition. */
-const FACTOR_FIT: Record<FactorCode, { ids: string[]; why: string }> = {
-  teacher_transfer: { ids: ['INT-11', 'INT-12', 'INT-14'], why: 'addresses a lost or missing teacher' },
-  visit_gap: { ids: ['INT-04', 'INT-18'], why: 'restores academic support visits' },
-  attendance_drop: { ids: ['INT-09', 'INT-10'], why: 'targets falling attendance' },
-  high_ptr: { ids: ['INT-14', 'INT-15', 'INT-13'], why: 'designed for large or multigrade classes' },
+const FACTOR_FIT: Record<FactorCode, { ids: string[]; why: string; whyHi: string }> = {
+  teacher_transfer: { ids: ['INT-11', 'INT-12', 'INT-14'], why: 'addresses a lost or missing teacher', whyHi: 'गए या अनुपस्थित शिक्षक की कमी पूरी करता है' },
+  visit_gap: { ids: ['INT-04', 'INT-18'], why: 'restores academic support visits', whyHi: 'शैक्षिक सहयोग भ्रमण फिर शुरू करता है' },
+  attendance_drop: { ids: ['INT-09', 'INT-10'], why: 'targets falling attendance', whyHi: 'गिरती उपस्थिति पर केंद्रित' },
+  high_ptr: { ids: ['INT-14', 'INT-15', 'INT-13'], why: 'designed for large or multigrade classes', whyHi: 'बड़ी या बहु-कक्षा कक्षाओं के लिए बना' },
 };
 
 const FACTOR_LABEL: Record<FactorCode, string> = {
@@ -29,14 +29,22 @@ const FACTOR_LABEL: Record<FactorCode, string> = {
   attendance_drop: 'attendance fell',
   high_ptr: 'high pupil–teacher ratio',
 };
+const FACTOR_LABEL_HI: Record<FactorCode, string> = {
+  teacher_transfer: 'शिक्षक का स्थानांतरण, जगह खाली',
+  visit_gap: '60+ दिन से CRC भ्रमण नहीं',
+  attendance_drop: 'उपस्थिति गिरी',
+  high_ptr: 'छात्र–शिक्षक अनुपात अधिक',
+};
 
-export interface MatchReason { points: number; text: string }
-export interface MatchRisk { level: 'warn' | 'crit'; text: string }
+/** `hi` is the same reason in Hindi, shown to a Hindi reader; `text` stays the English record. */
+export interface MatchReason { points: number; text: string; hi?: string }
+export interface MatchRisk { level: 'warn' | 'crit'; text: string; hi?: string }
 
 export interface InterventionMatch {
   intervention: Intervention;
   eligible: boolean;
   excludedBecause?: string;
+  excludedBecauseHi?: string;
   points: number;
   reasons: MatchReason[];
   risks: MatchRisk[];
@@ -97,51 +105,55 @@ export function matchForCase(s: Session, caseId: string): { caseTitle: string; f
   const factors = (dx?.ranked_factors ?? []).map((f) => ({
     factor: f.factor, share: f.of_driver_schools > 0 ? f.schools_flagged / f.of_driver_schools : 0,
     label: `${f.schools_flagged} of ${f.of_driver_schools} driver schools: ${FACTOR_LABEL[f.factor] ?? f.label}`,
+    labelHi: `${f.of_driver_schools} में से ${f.schools_flagged} चिन्हित विद्यालयों में: ${FACTOR_LABEL_HI[f.factor] ?? f.label}`,
   }));
+  const compHi = comp?.name_hi || comp?.name_en || c.competency_id;
 
   const matches = interventions().map((iv): InterventionMatch => {
     const reasons: MatchReason[] = [];
     const risks: MatchRisk[] = [];
     let eligible = true;
     let excludedBecause: string | undefined;
+    let excludedBecauseHi: string | undefined;
 
-    if (!iv.grades.includes(c.grade)) { eligible = false; excludedBecause = `Not designed for Class ${c.grade}`; }
+    if (!iv.grades.includes(c.grade)) { eligible = false; excludedBecause = `Not designed for Class ${c.grade}`; excludedBecauseHi = `कक्षा ${c.grade} के लिए नहीं बना`; }
     else if (!iv.competency_ids.includes(c.competency_id)) {
-      eligible = false; excludedBecause = `Does not target ${comp?.name_en ?? c.competency_id}`;
+      eligible = false; excludedBecause = `Does not target ${comp?.name_en ?? c.competency_id}`; excludedBecauseHi = `${compHi} पर केंद्रित नहीं`;
     } else {
       const targeted = iv.competency_ids.length <= 3;
-      reasons.push({ points: targeted ? 3 : 1, text: targeted ? `Targets ${comp?.name_en ?? c.competency_id} specifically` : `Covers ${comp?.name_en ?? c.competency_id} among ${iv.competency_ids.length} competencies` });
+      reasons.push({ points: targeted ? 3 : 1, text: targeted ? `Targets ${comp?.name_en ?? c.competency_id} specifically` : `Covers ${comp?.name_en ?? c.competency_id} among ${iv.competency_ids.length} competencies`,
+        hi: targeted ? `विशेष रूप से ${compHi} पर केंद्रित` : `${iv.competency_ids.length} दक्षताओं में ${compHi} भी शामिल` });
     }
 
     for (const f of factors) {
       if (FACTOR_FIT[f.factor]?.ids.includes(iv.id) && f.share > 0) {
         const pts = f.share >= 0.6 ? 3 : f.share >= 0.3 ? 2 : 1;
-        reasons.push({ points: pts, text: `${FACTOR_FIT[f.factor].why} — ${f.label}` });
+        reasons.push({ points: pts, text: `${FACTOR_FIT[f.factor].why} — ${f.label}`, hi: `${FACTOR_FIT[f.factor].whyHi} — ${f.labelHi}` });
       }
     }
 
-    if (iv.evidence.status === 'sourced_summary_verify') reasons.push({ points: 1, text: 'Cites published evidence (flagged: verify before production)' });
+    if (iv.evidence.status === 'sourced_summary_verify') reasons.push({ points: 1, text: 'Cites published evidence (flagged: verify before production)', hi: 'प्रकाशित साक्ष्य का हवाला (चिह्नित: उपयोग से पहले सत्यापित करें)' });
 
     const h = history.get(iv.id) ?? EMPTY_HISTORY;
     if (h.evaluated >= 3) {
       const rate = h.improved / h.evaluated;
-      if (rate >= 0.5) reasons.push({ points: 1, text: `In this ledger, ${h.improved} of ${h.evaluated} evaluated uses showed a gain` });
-      else risks.push({ level: 'warn', text: `In this ledger, only ${h.improved} of ${h.evaluated} evaluated uses showed a gain` });
+      if (rate >= 0.5) reasons.push({ points: 1, text: `In this ledger, ${h.improved} of ${h.evaluated} evaluated uses showed a gain`, hi: `इस खाते में जाँचे गए ${h.evaluated} उपयोगों में से ${h.improved} में सुधार दिखा` });
+      else risks.push({ level: 'warn', text: `In this ledger, only ${h.improved} of ${h.evaluated} evaluated uses showed a gain`, hi: `इस खाते में जाँचे गए ${h.evaluated} उपयोगों में से केवल ${h.improved} में सुधार दिखा` });
     }
 
     // Feasibility risks read straight off the diagnosis.
     const teacherLoss = factors.find((f) => f.factor === 'teacher_transfer')?.share ?? 0;
     if (teacherLoss >= 0.5 && ['INT-01', 'INT-02', 'INT-07', 'INT-15', 'INT-17'].includes(iv.id)) {
-      risks.push({ level: 'crit', text: `Relies on a teacher in post, but ${Math.round(teacherLoss * 100)}% of driver schools lost one` });
+      risks.push({ level: 'crit', text: `Relies on a teacher in post, but ${Math.round(teacherLoss * 100)}% of driver schools lost one`, hi: `पद पर शिक्षक चाहिए, पर ${Math.round(teacherLoss * 100)}% चिन्हित विद्यालयोंों ने एक शिक्षक खोया` });
     }
     const visitGap = factors.find((f) => f.factor === 'visit_gap')?.share ?? 0;
     if (visitGap >= 0.5 && ['INT-01', 'INT-02', 'INT-08'].includes(iv.id)) {
-      risks.push({ level: 'warn', text: 'Needs CRC follow-up, and most driver schools have had no visit for 60+ days' });
+      risks.push({ level: 'warn', text: 'Needs CRC follow-up, and most driver schools have had no visit for 60+ days', hi: 'CRC की निगरानी चाहिए, पर अधिकतर चिन्हित विद्यालयोंों में 60+ दिन से भ्रमण नहीं हुआ' });
     }
-    if (iv.lever === 'pab') risks.push({ level: 'warn', text: 'Needs PAB sanction — cannot start this cycle' });
+    if (iv.lever === 'pab') risks.push({ level: 'warn', text: 'Needs PAB sanction — cannot start this cycle', hi: 'PAB स्वीकृति चाहिए — इस चक्र में शुरू नहीं हो सकता' });
 
     return {
-      intervention: iv, eligible, excludedBecause,
+      intervention: iv, eligible, excludedBecause, excludedBecauseHi,
       points: eligible ? reasons.reduce((t, r) => t + r.points, 0) : 0,
       reasons, risks, authority: authorityFor(s, iv.lever), history: h,
       isCurrentPlan: current?.intervention_id === iv.id,

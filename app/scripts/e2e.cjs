@@ -41,7 +41,7 @@ const ok = (label, cond, extra = '') => {
 
   // The BEO prefers Hindi; switch to English for the walkthrough.
   // The language switch lives in the account menu.
-  await page.getByRole('button', { name: 'Account menu' }).click();
+  await page.getByRole('button', { name: /^(Account menu|खाता मेनू)$/ }).click(); // a Hindi user sees the Hindi label
   const toEnglish = page.getByRole('menuitem', { name: 'Switch to English' });
   if (await toEnglish.count()) { await toEnglish.first().click(); await page.waitForLoadState('networkidle'); await page.waitForTimeout(500); }
 
@@ -241,7 +241,7 @@ const ok = (label, cond, extra = '') => {
   await page.goto(`${BASE}/login/headmaster`, { waitUntil: 'networkidle' });
   await page.locator('li').first().getByRole('button', { name: /Sign in/ }).click();
   await page.waitForLoadState('networkidle');
-  await page.getByRole('button', { name: 'Account menu' }).click();
+  await page.getByRole('button', { name: /^(Account menu|खाता मेनू)$/ }).click(); // a Hindi user sees the Hindi label
   const en2 = page.getByRole('menuitem', { name: 'Switch to English' });
   if (await en2.count()) { await en2.first().click(); await page.waitForLoadState('networkidle'); await page.waitForTimeout(500); }
   ok('the headmaster lands on My day', page.url().includes('/today'), page.url());
