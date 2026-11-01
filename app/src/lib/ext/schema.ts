@@ -136,6 +136,7 @@ export function ensureExtensions(c: DatabaseSync): void {
   ensureRealGeography(c);
   migrateIntegrity(c);
   migrateApprovalLever(c);
+  migrateReminders(c);
 }
 
 // ---------------------------------------------------------------- speed
@@ -212,6 +213,38 @@ function migrateApprovalLever(c: DatabaseSync): void {
     exec(c, `update approvals set required_role = case lever when 'block' then 'beo' else 'deo' end
               where lever is not null and required_role is not (case lever when 'block' then 'beo' else 'deo' end)`);
     exec(c, `insert into ext_meta (key, value) values ('approvals', ?) on conflict(key) do update set value = excluded.value`, APPROVALS_VERSION);
+    c.exec('commit');
+  } catch (e) {
+    try { c.exec('rollback'); } catch { /* already rolled back */ }
+    throw e;
+  }
+}
+
+// ---------------------------------------------------------------- reminders
+/**
+ * The overdue ("breach") nudge: one per task, the day after its due date passes without proof.
+ * The seed already nudged the tasks that were overdue on the seed date — an in-app "task_overdue"
+ * notification, or an "overdue_nudge" message in the outbox for people without the app — so the
+ * column is filled from those rows, with the time they were recorded. Without that, the first
+ * sweep after a reset would nudge every one of them a second time. Additive only, once per
+ * database (a demo reset restores the pristine file, so it runs again there).
+ */
+export const REMINDERS_VERSION = 'reminders-v1';
+
+function migrateReminders(c: DatabaseSync): void {
+  if (one<{ value: string }>(c, `select value from ext_meta where key = 'reminders'`)?.value === REMINDERS_VERSION) return;
+  c.exec('begin immediate');
+  try {
+    if (q(c, `select 1 from pragma_table_info('tasks') where name = 'breach_nudged_at'`).length === 0) {
+      exec(c, 'alter table tasks add column breach_nudged_at text');
+    }
+    exec(c, `update tasks set breach_nudged_at = (
+                select min(ts) from (
+                  select n.ts from notifications n where n.entity_type = 'task' and n.entity_id = tasks.id and n.kind = 'task_overdue'
+                  union all
+                  select o.ts from outbox_messages o where o.entity_type = 'task' and o.entity_id = tasks.id and o.template = 'overdue_nudge'))
+              where breach_nudged_at is null`);
+    exec(c, `insert into ext_meta (key, value) values ('reminders', ?) on conflict(key) do update set value = excluded.value`, REMINDERS_VERSION);
     c.exec('commit');
   } catch (e) {
     try { c.exec('rollback'); } catch { /* already rolled back */ }

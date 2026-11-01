@@ -12,6 +12,7 @@ import { Card, CardHead, PageHead, Grid, Stat, Callout, Mono, fmtDate, fmtInt } 
 import { ActionForm, Disclose } from '@/components/ActionForm';
 import { reminderSweepAction, setClockAction, demoResetAction, complaintSweepAction } from '@/lib/actions';
 import { AS_OF_DATE } from '@domain/catalog';
+import { schedulerStatus } from '@/lib/scheduler';
 
 /**
  * Demo controls.
@@ -41,6 +42,16 @@ export default async function AdminHome() {
   const jobs = listJobs(session, { limit: 10 });
   const outbox = listOutbox(session, { limit: 5 });
   const nextRound = rounds().find((r) => r.status === 'scheduled');
+  const sched = schedulerStatus();
+  const TRIGGER: Record<string, { en: string; hi: string }> = {
+    startup: { en: 'when the server started', hi: 'सर्वर शुरू होने पर' },
+    hourly: { en: 'on the hourly timer', hi: 'घंटेवार समय पर' },
+    clock_moved: { en: 'after the demo clock moved', hi: 'डेमो घड़ी बदलने के बाद' },
+    demo_reset: { en: 'after the demo reset', hi: 'डेमो रीसेट के बाद' },
+    system: { en: 'by the system', hi: 'सिस्टम द्वारा' },
+  };
+  const lastTrig = sched.lastAuto ? TRIGGER[sched.lastAuto.trigger] ?? { en: sched.lastAuto.trigger, hi: sched.lastAuto.trigger } : null;
+  const n = (k: string) => Number(sched.lastAuto?.summary[k] ?? 0);
 
   return (
     <div className="space-y-4">
@@ -104,16 +115,54 @@ export default async function AdminHome() {
       <Card>
         <CardHead
           title={pick(lang, 'Reminder and escalation sweep', 'स्मरण और उच्चाधिकारी कार्य')}
-          hint={pick(lang, 'One reminder two days before a deadline, one escalation seven days after. Never twice for the same task.', 'नियत तिथि से दो दिन पहले स्मरण, सात दिन बाद उच्चाधिकारी को। एक काम के लिए एक बार।')}
+          hint={pick(lang, 'A reminder two days before a deadline, a nudge the day after it passes (the block officer is told too), and an escalation to the district seven days after. Never twice for the same task.', 'नियत तिथि से दो दिन पहले स्मरण, तिथि निकलने के अगले दिन याद-दहानी (ब्लॉक अधिकारी को भी), और सात दिन बाद ज़िला अधिकारी को। एक काम के लिए एक बार।')}
         />
         <div className="card-pad space-y-3">
           <Callout tone="method">
             {pick(
               lang,
-              'In production this runs nightly from pg_cron. It is idempotent by construction: a task that already has a reminder timestamp is skipped, so running it twice on the same day sends nothing the second time. Try it.',
-              'उत्पादन में यह रोज़ रात चलता है। यह idempotent है: जिस काम का स्मरण भेजा जा चुका है वह छोड़ दिया जाता है।',
+              'It runs by itself: when the server starts, every hour while it runs, and straight after the demo clock moves. What it sends depends only on the demo date. It is idempotent by construction: a task that already has a reminder, nudge or escalation timestamp is skipped, so running it twice on the same day sends nothing the second time. The button below runs it now; try it.',
+              'यह अपने आप चलता है: सर्वर शुरू होने पर, चलते रहने तक हर घंटे, और डेमो घड़ी बदलते ही। क्या भेजा जाएगा, यह केवल डेमो तिथि पर निर्भर है। जिस काम का स्मरण, याद-दहानी या उच्चाधिकारी सूचना भेजी जा चुकी है, वह छोड़ दिया जाता है — इसलिए एक ही दिन दोबारा चलाने पर कुछ नहीं जाता। नीचे का बटन इसे अभी चलाता है।',
             )}
           </Callout>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="label">{pick(lang, 'Last ran by itself', 'पिछली बार अपने आप चला')}</dt>
+              <dd className="mt-0.5 text-ink">
+                {sched.lastAuto && lastTrig ? (
+                  <>
+                    <span className="tnum">{fmtDate(sched.lastAuto.ranAt, true, lang)}</span>
+                    {' '}{pick(lang, lastTrig.en, lastTrig.hi)}
+                    {sched.lastAuto.status !== 'succeeded' ? <span className="text-crit"> · {pick(lang, 'failed', 'विफल')}</span> : null}
+                    <span className="block text-xs text-ink-soft">
+                      {pick(
+                        lang,
+                        `For demo date ${sched.lastAuto.asOf ?? '—'}: ${n('reminders_sent')} reminders, ${n('breach_nudges')} overdue nudges, ${n('escalations_created')} escalations, ${n('outbox_messages')} outbox messages.`,
+                        `डेमो तिथि ${sched.lastAuto.asOf ?? '—'} के लिए: ${n('reminders_sent')} स्मरण, ${n('breach_nudges')} याद-दहानी, ${n('escalations_created')} उच्चाधिकारी सूचनाएँ, ${n('outbox_messages')} आउटबॉक्स संदेश।`,
+                      )}
+                    </span>
+                  </>
+                ) : pick(lang, 'Not yet.', 'अभी तक नहीं।')}
+              </dd>
+            </div>
+            <div>
+              <dt className="label">{pick(lang, 'Runs next', 'अगली बार')}</dt>
+              <dd className="mt-0.5 text-ink">
+                {sched.running && sched.nextRunAt ? (
+                  <>
+                    <span className="tnum">{fmtDate(sched.nextRunAt, true, lang)}</span>
+                    <span className="block text-xs text-ink-soft">
+                      {pick(lang, 'Hourly, by the real clock; or sooner, if the demo clock moves.', 'हर घंटे, असली घड़ी से; या पहले, यदि डेमो घड़ी बदली जाए।')}
+                    </span>
+                  </>
+                ) : pick(
+                  lang,
+                  'The timer is not running in this server process (it is switched off with KV_SCHEDULER=off). It still runs when the demo clock moves.',
+                  'इस सर्वर प्रक्रिया में समय-चक्र नहीं चल रहा (KV_SCHEDULER=off से बंद)। डेमो घड़ी बदलने पर यह फिर भी चलता है।',
+                )}
+              </dd>
+            </div>
+          </dl>
           <ActionForm action={reminderSweepAction} hidden={{ as_of: today() }}
             label={pick(lang, 'Run the sweep now', 'अभी चलाएँ')} tone="quiet" />
           <div className="border-t border-line pt-3">
