@@ -4,7 +4,8 @@
 real (UDISE+ via India Data Portal, about 2020-21; names and codes withheld). Learning results are
 simulated and calibrated to PRS 2024; intervention costs are from the UP PAB 2025-26 minutes where
 a line exists. People, cases, plans, proof and outcomes are fictional. Nothing is connected to a live
-UDISE+, NAS, a state VSK, WhatsApp or IVR. Every source and its terms: `/sources` and
+UDISE+, NAS, a state VSK or IVR; WhatsApp can be connected to Meta's free *test* number for up to
+five testers ([below](#whatsapp-meta-cloud-api-test-number)). Every source and its terms: `/sources` and
 [Real public data](#real-public-data-real-schools-calibrated-results-pab-costs) below.
 
 This is the Next.js app that sits on top of the seed in the parent directory. The seed supplies
@@ -301,7 +302,7 @@ not footnotes:
 | **Real school (UDISE+) · name withheld** | a real government school whose name and code are deliberately not shown |
 | **Context, not cause** | a published district figure (ASER, NFHS) shown beside the data, explaining nothing in particular |
 | **Association, not cause** | a condition observed alongside the drop, nothing more |
-| **Simulated — not sent** | a WhatsApp/IVR/SMS message that was never delivered |
+| **Simulated — not sent** | a WhatsApp/IVR/SMS message that was never delivered (only WhatsApp rows for the mapped test recipients are really sent, and show WhatsApp's own status) |
 | **Cites a source — verify before production** | quotes published evidence that still needs checking |
 | **No effect-size claim** | the honest position for 15 of the 18 intervention cards |
 
@@ -853,8 +854,129 @@ limit, CSV export only for reviewers, the pages). `scripts/crawl.mjs` loads `/ad
 and `/changes` for every role in both languages and checks that a BEO and a headmaster are
 refused the review page.
 
+## WhatsApp (Meta Cloud API test number)
+
+The outbox can send its WhatsApp messages for real, through Meta's WhatsApp Cloud API and the
+free **test number** Meta gives every developer app. The test number may only message up to five
+phone numbers that you verify in Meta's dashboard, so this is for demos and user testing, not for
+a district. Each tester's phone stands in for one demo persona (a headmaster, a coordinator):
+their reminders arrive on WhatsApp in the persona's language, they can tap **देख लिया ✅ / शुरू
+किया / सबूत भेजें**, and a photo they send back becomes proof on the task. Everyone else's
+messages stay in the outbox as before, marked *Simulated — not sent*.
+
+**Settings — environment variables only** (`src/lib/whatsapp/config.ts`; on Render: *Environment*,
+listed in `render.yaml` as `sync: false`):
+
+| Variable | What it is |
+|---|---|
+| `WHATSAPP_ACCESS_TOKEN` | the Cloud API token (Meta's 24-hour token to try it, a system-user token to keep it) |
+| `WHATSAPP_PHONE_NUMBER_ID` | the test number's *Phone number ID* (not the phone number) |
+| `WHATSAPP_APP_SECRET` | the Meta app's *App secret*; every webhook call is signed with it |
+| `WHATSAPP_VERIFY_TOKEN` | any long random string you make up; you type the same one into Meta once |
+| `WHATSAPP_TEST_RECIPIENTS` | persona email = tester's phone in E.164, comma-separated, e.g. `hm.sch-01893@demo.karyavahi.test=+9198xxxxxxxx,crc.clu-001@demo.karyavahi.test=+9197xxxxxxxx` |
+| `WHATSAPP_GRAPH_VERSION` | optional, default `v23.0` |
+
+Without the token or the phone number id **nothing is sent**: the outbox is simulated exactly as
+before. A persona that is not in `WHATSAPP_TEST_RECIPIENTS` is never sent to.
+
+**Setting up the Meta app (once, about 15 minutes)**
+
+1. At developers.facebook.com, *My Apps → Create app*, choose the WhatsApp use case
+   ("Connect with customers through WhatsApp"), and create a business portfolio if asked.
+2. In the app, *WhatsApp → API Setup*. Meta shows a test number, its **Phone number ID**, and a
+   temporary **access token** (valid 24 hours). Under *To*, add each tester's phone (up to five);
+   each gets a code on WhatsApp to confirm.
+3. For a token that does not expire: business.facebook.com → *Settings → Users → System users*,
+   add one, give it the app (full control), *Generate token* with `whatsapp_business_messaging`
+   and `whatsapp_business_management`.
+4. *App settings → Basic → App secret → Show*: that is `WHATSAPP_APP_SECRET`.
+5. On Render, set the six variables above and save (the service restarts).
+6. Open https://karyavahi.onrender.com once so the service is awake, then in Meta:
+   *WhatsApp → Configuration → Webhook → Edit*. Callback URL
+   **`https://karyavahi.onrender.com/api/whatsapp/webhook`**, Verify token = your
+   `WHATSAPP_VERIFY_TOKEN`, *Verify and save*. Then under *Webhook fields → Manage*, subscribe to
+   **`messages`** (it carries both incoming messages and delivery statuses).
+7. Each tester sends **"hi"** to the test number from their phone. They get the numbered list of
+   their persona's open tasks back, and from then on the 24-hour window is open (below).
+8. On `/admin/outbox` (demo admin) the header reads *WhatsApp: connected (test number) · N test
+   recipients*, with each persona, the masked number, whether their window is open, and a button
+   **Send a test message to this WhatsApp**.
+
+**The 24-hour window and `hello_world`.** WhatsApp lets a business send free-form messages (and
+reply buttons) only within 24 hours of the person's last message to it. Outside that window only
+an approved template may be sent, and the test number has exactly one: `hello_world` (English,
+"Hello World" from Meta). So (`src/lib/whatsapp/outbound.ts`):
+
+- *window open* (the tester wrote within 24 h): the full message goes in the persona's language;
+  a task message carries three reply buttons and the hint "or reply 1 / 2 / 3";
+- *window closed*: the phone gets `hello_world` (at most one a day per persona), and the outbox
+  row says **waiting for the tester to reply**. When the tester writes anything — "hi" is enough —
+  the window opens and the waiting messages (the latest three) are sent, then the reply.
+
+The last message time per persona is kept in `whatsapp_contacts` (wall-clock time, not the demo
+clock). If WhatsApp itself answers "outside the window" (error 131047), the app falls back to
+`hello_world` the same way.
+
+**What a tester can send** (`src/lib/whatsapp/inbound.ts`):
+
+| They send | What happens |
+|---|---|
+| "hi", or anything not below | the numbered list of their open tasks, in their language |
+| a number from that list | that task, with its three buttons |
+| a button tap, or 1 / 2 / 3 after a task message | **Seen** → `acknowledgeTask`, **Started** → `startTask`, **Send proof** → asks for the photo |
+| a photo (caption optional) | proof for the task named in the caption (`TSK-01384`), else the task last talked about |
+| anything else (voice, sticker) | "I can read text, button taps and photos" |
+
+Every action runs as that persona: the webhook builds their session with the app's own loader
+(`loadSession`) and calls the ordinary write functions, so the same authority checks apply — a
+tester can only touch their own persona's tasks, and a refusal is audited and explained in their
+language. Audit rows carry the persona as actor and source `whatsapp`. A photo is downloaded from
+Meta (media id → url → bytes, with the token), refused if it is not an image or is over 5 MB, and
+handed to `submitEvidence` with WhatsApp's message id (as a digest) as the idempotency key, so a
+retried webhook or a re-sent message never makes a second row. GPS status is `unavailable`:
+WhatsApp does not say where a photo was taken.
+
+**The webhook** (`/api/whatsapp/webhook`). GET answers Meta's handshake only when
+`hub.verify_token` matches (compared in constant time). POST checks `X-Hub-Signature-256` — the
+HMAC-SHA256 of the raw body with the app secret, constant time — before reading anything, and
+answers 401 when it is missing or wrong. A good call is answered 200 at once; the work runs just
+after. Each message id is recorded (`whatsapp_inbound`), so Meta's retries are ignored. Delivery
+statuses (sent → delivered → read, or failed with Meta's short reason) update the outbox row and
+show on `/admin/outbox`; a late "delivered" never undoes "read". A message from a number that is
+not mapped is ignored and only counted in the audit chain.
+
+**Render's free plan.** The service sleeps after about 15 minutes without visits; the first
+webhook after that wakes it and may time out, and Meta retries webhooks for some hours, so the
+message still arrives — just late. Open the site before a demo. A restart also resets the
+database to the seed, including the WhatsApp window: after a restart, testers send "hi" once more.
+
+**Phone numbers are private.** The real numbers live only in `WHATSAPP_TEST_RECIPIENTS`. They are
+never written to the database, the audit chain, the logs, an API answer or a page; the admin page
+shows them masked (`+91 98•••••12`). WhatsApp's own message ids embed the number, so they are
+stored only as a SHA-256 digest (`provider_message_id`, `whatsapp_inbound.id`), and Meta's error
+texts have anything number-like removed before they are kept. The token is only ever sent as the
+Authorization header to graph.facebook.com and Meta's media host.
+
+**Tables** (`src/lib/ext/whatsapp-schema.ts`, marker `whatsapp-v1`): `whatsapp_contacts`,
+`whatsapp_sends` (every Cloud API call, its purpose and outcome), `whatsapp_inbound`, and the
+column `outbox_messages.provider_message_id`. Outbox `delivery_status` gains `queued`,
+`awaiting_reply`, `sent`, `delivered`, `read` and `failed` beside `simulated_not_sent`.
+
+**Tests.** `npm run test:whatsapp` replaces `fetch` with a fake Meta, so nothing leaves the
+machine: configuration off → nothing sent; the exact Graph requests (URL, Bearer header, bodies
+for text, buttons and the template); the window and the once-a-day opener; one retry on 429/5xx;
+handshake and signature; duplicate ids; status callbacks; the menu; buttons and "1/2/3" acting
+through the write layer (and refused for someone else's task); photos (limits, download,
+duplicates); and that no number appears in any table, audit row or log line. With a server
+address it also checks the webhook and the admin page over HTTP (see the top of the script for
+the test values the server must be started with).
+
 ## Known limits
 
+- **WhatsApp carries reminders, not new assignments.** The app writes outbox messages from the
+  reminder sweep (T−2, overdue, escalation) and the admin's test button; assigning a task notifies
+  in the app only. A tester sees a new task by sending "hi". A shared WhatsApp location is not used
+  as the proof's position, so WhatsApp proof always shows GPS *unavailable*.
 - **An occasional hydration mismatch right after sign-in.** Now and then a page opened straight
   after signing in (seen on `/today`, `/overview`, a case or a task) is drawn slightly differently
   in the browser than on the server; React logs error #418 and redraws that part in the browser,

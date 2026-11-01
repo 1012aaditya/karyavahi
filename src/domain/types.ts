@@ -658,7 +658,7 @@ export interface AuditEvent {
   after: Record<string, unknown> | null;
   reason: string | null;
   correlation_id: string;
-  source: 'web' | 'mobile' | 'whatsapp_sim' | 'ivr_sim' | 'system' | 'import';
+  source: 'web' | 'mobile' | 'whatsapp' | 'whatsapp_sim' | 'ivr_sim' | 'system' | 'import';
   result: 'success' | 'failure';
   prev_hash: string;
   hash: string;

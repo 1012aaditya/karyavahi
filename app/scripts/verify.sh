@@ -72,6 +72,9 @@ npx tsx --conditions=react-server scripts/realdata-test.mts 2>&1 | grep -vE 'Exp
 step 'user feedback: saving, limits, who reads it, the audit row'
 npx tsx --conditions=react-server scripts/feedback-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
 
+step 'WhatsApp (Meta mocked): sending, the 24-hour window, the webhook, replies and photo proof'
+npx tsx --conditions=react-server scripts/whatsapp-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
+
 if [ "$FULL" = "--full" ]; then
   step 'production build'
   npm run build 2>&1 | tail -4
