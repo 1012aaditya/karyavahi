@@ -94,6 +94,7 @@ person makes every decision.
 | Case → Outcome | **Explain the result** | `get_outcome_evaluation` |
 | Case → Discussion | **Summarise the discussion** | the scoped thread |
 | Case rail | Ready questions that open the drawer already asked | the chat |
+| Saved report | **Write the narrative** to paste above the tables | the saved snapshot |
 
 Drafts come from `/api/ai/copilot` (`src/lib/ai/copilot.ts`): one structured call to
 `claude-opus-5-5` with adaptive thinking, the server-side refusal fallback, and a cached system

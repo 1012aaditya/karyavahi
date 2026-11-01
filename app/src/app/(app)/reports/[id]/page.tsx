@@ -13,6 +13,9 @@ import { REPORT_ICON, REPORT_HI } from '@/components/ReportsRail';
 import { ReportPicture } from '@/components/ReportPicture';
 import { PrintButton } from '@/components/PrintButton';
 import { Icon } from '@/components/Icon';
+import { ClaudeDraft } from '@/components/Copilot';
+import { aiStatus } from '@/lib/ai/config';
+import { may } from '@/lib/guard';
 import { REPORT_TYPES, type BuiltReport } from '@/lib/reports';
 import type { Language } from '@domain/types';
 
@@ -84,6 +87,12 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
   if (!r) notFound();
   const users = userNames([r.generated_by]);
   const { generated } = await searchParams;
+  // Claude drafts the narrative to paste above the tables; the snapshot itself never changes.
+  const narrative = may(session, 'ai.assistant') ? (
+    <ClaudeDraft task="report_narrative" id={r.id} lang={lang} configured={aiStatus().configured} className="no-print"
+      label={pick(lang, 'Write the narrative', 'विवरण लिखें')}
+      followUp={pick(lang, `What decisions does report ${r.id} call for?`, `रिपोर्ट ${r.id} किन निर्णयों की माँग करती है?`)} />
+  ) : null;
 
   if ((r.content as { builder?: string }).builder === 'v2') {
     const built = r.content as unknown as BuiltReport;
@@ -104,6 +113,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
         </div>
         {generated ? <Callout tone="good" title={pick(lang, 'Report generated', 'रिपोर्ट बनी')}>{pick(lang, `Saved as snapshot ${r.id} and recorded in the audit trail. It will not change when the records do.`, `स्थिर प्रति ${r.id} के रूप में सहेजी गई और लेखा-परीक्षा में दर्ज। रिकॉर्ड बदलने पर यह नहीं बदलेगी।`)}</Callout> : null}
         <ReportPicture r={built} lang={lang} />
+        {narrative}
         <div className="rounded-2xl bg-paper-deep/60 p-3 sm:p-6 print:bg-white print:p-0">
           <ReportView r={built} snapshotId={r.id} />
         </div>
@@ -136,6 +146,8 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
           )}
         </Callout>
       ) : null}
+
+      {narrative}
 
       <Card>
         <CardHead title={pick(lang, 'About this report', 'इस रिपोर्ट के बारे में')} />
