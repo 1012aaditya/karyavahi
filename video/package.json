@@ -1,0 +1,25 @@
+{
+  "name": "karyavahi-demo-video",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Karyavahi 3-minute demo video, built with Remotion",
+  "scripts": {
+    "studio": "remotion studio",
+    "prepare-audio": "node scripts/prepare-audio.cjs",
+    "voice": "bash scripts/temp-voice.sh",
+    "record": "node scripts/record.cjs",
+    "render": "remotion render Main out/karyavahi-demo.mp4",
+    "build": "node scripts/parse-script.cjs && node scripts/prepare-audio.cjs && remotion render Main out/karyavahi-demo.mp4",
+    "stills": "node scripts/stills.cjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.535",
+    "react": "19.2.9",
+    "react-dom": "19.2.9",
+    "remotion": "4.0.535"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2",
+    "typescript": "5.9.3"
+  }
+}

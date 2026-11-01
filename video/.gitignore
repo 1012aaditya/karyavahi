@@ -1,0 +1,9 @@
+node_modules/
+out/
+public/footage/raw/
+*.log
+# Large media: footage is re-recorded from the live site (scripts/record.cjs), the temp voice from script.md
+public/footage/*.mp4
+public/audio/temp/*.aiff
+public/audio/temp/*.wav
+public/audio/user/

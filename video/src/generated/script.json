@@ -1,0 +1,143 @@
+[
+  {
+    "id": "01",
+    "title": "The challenge",
+    "start": 0,
+    "end": 20,
+    "text": "In a block office in Rampur, a dashboard turns red: Class 3 subtraction has fallen eighteen points. And then… nothing happens. Officers have data, but every system stops at the alert. No owner, no deadline, no proof, and no one checks whether children learned more.",
+    "phrases": [
+      "In a block office in Rampur,",
+      "a dashboard turns red:",
+      "Class 3 subtraction has fallen eighteen points.",
+      "And then…",
+      "nothing happens.",
+      "Officers have data,",
+      "but every system stops at the alert.",
+      "No owner,",
+      "no deadline,",
+      "no proof,",
+      "and no one checks whether children learned more."
+    ]
+  },
+  {
+    "id": "02",
+    "title": "Our answer",
+    "start": 20,
+    "end": 32,
+    "text": "Karyavahi turns every learning drop into a case: flag, diagnose, plan, approve, act, verify. And a case closes only when the next assessment shows children learned more.",
+    "phrases": [
+      "Karyavahi turns every learning drop into a case:",
+      "flag, diagnose, plan, approve, act, verify.",
+      "And a case closes only when the next assessment shows",
+      "children learned more."
+    ]
+  },
+  {
+    "id": "03",
+    "title": "The officer's view",
+    "start": 32,
+    "end": 75,
+    "text": "The block officer starts on a command centre, not a spreadsheet: their own area on a real map, and what needs them today. Anything is one search away, or they can just ask Claude. Here is the case: the drop, the schools driving it, and the conditions behind it. Claude explains it in plain words, and every figure it writes is checked against the records. It suggests a plan from an evidence library, with real costs. But the officer decides, and a second officer approves, in one tap. Every task gets an owner and a deadline.",
+    "phrases": [
+      "The block officer starts on a command centre,",
+      "not a spreadsheet:",
+      "their own area on a real map,",
+      "and what needs them today.",
+      "Anything is one search away,",
+      "or they can just ask Claude.",
+      "Here is the case:",
+      "the drop,",
+      "the schools driving it,",
+      "and the conditions behind it.",
+      "Claude explains it in plain words,",
+      "and every figure it writes is checked against the records.",
+      "It suggests a plan from an evidence library,",
+      "with real costs.",
+      "But the officer decides,",
+      "and a second officer approves,",
+      "in one tap.",
+      "Every task gets an owner",
+      "and a deadline."
+    ]
+  },
+  {
+    "id": "04",
+    "title": "Easy for people in the field",
+    "start": 75,
+    "end": 110,
+    "text": "For headmasters and field staff, it works the way they already work. It opens in Hindi. They can listen to their day instead of reading it, and speak a note instead of typing. No signal? Proof is saved on the phone, and sent when the network returns, with the location checked. And they don't even need the app: on WhatsApp, tasks arrive, a reply marks them done, and a photo becomes proof.",
+    "phrases": [
+      "For headmasters and field staff,",
+      "it works the way they already work.",
+      "It opens in Hindi.",
+      "They can listen to their day",
+      "instead of reading it,",
+      "and speak a note",
+      "instead of typing.",
+      "No signal?",
+      "Proof is saved on the phone,",
+      "and sent when the network returns,",
+      "with the location checked.",
+      "And they don't even need the app:",
+      "on WhatsApp,",
+      "tasks arrive,",
+      "a reply marks them done,",
+      "and a photo becomes proof."
+    ]
+  },
+  {
+    "id": "05",
+    "title": "Proof, then results",
+    "start": 110,
+    "end": 130,
+    "text": "Proof is checked by someone other than the person who did the work. When the next round arrives, Karyavahi compares plan schools with similar schools, and asks: did it work? If not, the case reopens. And the Action Taken Report writes itself.",
+    "phrases": [
+      "Proof is checked by someone other than the person who did the work.",
+      "When the next round arrives,",
+      "Karyavahi compares plan schools with similar schools,",
+      "and asks:",
+      "did it work?",
+      "If not,",
+      "the case reopens.",
+      "And the Action Taken Report",
+      "writes itself."
+    ]
+  },
+  {
+    "id": "06",
+    "title": "Why you can trust it",
+    "start": 130,
+    "end": 155,
+    "text": "Claude only drafts and explains, from records the user is allowed to see, always cited. The decisions are made by people, and every change goes into a tamper-evident audit trail. Schools, costs and district figures come from real public data. And it's tested end to end: every page, every role.",
+    "phrases": [
+      "Claude only drafts and explains,",
+      "from records the user is allowed to see,",
+      "always cited.",
+      "The decisions are made by people,",
+      "and every change goes into a tamper-evident audit trail.",
+      "Schools, costs and district figures come from real public data.",
+      "And it's tested end to end:",
+      "every page,",
+      "every role."
+    ]
+  },
+  {
+    "id": "07",
+    "title": "Next, and close",
+    "start": 155,
+    "end": 180,
+    "text": "Next: a pilot in one district, with the state's own data, then state-wide. Karyavahi. AI drafts. Officers decide. The ledger proves. Close a case only when children learn more.",
+    "phrases": [
+      "Next:",
+      "a pilot in one district,",
+      "with the state's own data,",
+      "then state-wide.",
+      "Karyavahi.",
+      "AI drafts.",
+      "Officers decide.",
+      "The ledger proves.",
+      "Close a case",
+      "only when children learn more."
+    ]
+  }
+]

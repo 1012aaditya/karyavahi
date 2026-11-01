@@ -1,0 +1,737 @@
+{
+  "full": null,
+  "blocks": {
+    "01": {
+      "src": "audio/temp/01.wav",
+      "kind": "temp",
+      "lead": 0.3,
+      "duration": 18.072,
+      "phrases": [
+        {
+          "start": 0,
+          "end": 1.75
+        },
+        {
+          "start": 1.849,
+          "end": 3.251
+        },
+        {
+          "start": 3.476,
+          "end": 6.653
+        },
+        {
+          "start": 6.878,
+          "end": 7.46
+        },
+        {
+          "start": 7.685,
+          "end": 8.718
+        },
+        {
+          "start": 8.943,
+          "end": 10.209
+        },
+        {
+          "start": 10.308,
+          "end": 12.674
+        },
+        {
+          "start": 12.899,
+          "end": 13.711
+        },
+        {
+          "start": 13.81,
+          "end": 14.681
+        },
+        {
+          "start": 14.78,
+          "end": 15.592
+        },
+        {
+          "start": 15.691,
+          "end": 18.072
+        }
+      ]
+    },
+    "02": {
+      "src": "audio/temp/02.wav",
+      "kind": "temp",
+      "lead": 0.3,
+      "duration": 10.892,
+      "phrases": [
+        {
+          "start": 0,
+          "end": 2.671
+        },
+        {
+          "start": 2.896,
+          "end": 6.84
+        },
+        {
+          "start": 7.065,
+          "end": 9.935
+        },
+        {
+          "start": 10.034,
+          "end": 10.892
+        }
+      ]
+    },
+    "03": {
+      "src": "audio/temp/03.wav",
+      "kind": "temp",
+      "lead": 0.3,
+      "duration": 38.005,
+      "phrases": [
+        {
+          "start": 0,
+          "end": 2.772
+        },
+        {
+          "start": 2.992,
+          "end": 4.199
+        },
+        {
+          "start": 4.699,
+          "end": 6.636
+        },
+        {
+          "start": 6.856,
+          "end": 8.331
+        },
+        {
+          "start": 8.831,
+          "end": 10.478
+        },
+        {
+          "start": 10.698,
+          "end": 12.406
+        },
+        {
+          "start": 12.906,
+          "end": 13.91
+        },
+        {
+          "start": 14.41,
+          "end": 15.046
+        },
+        {
+          "start": 15.266,
+          "end": 16.564
+        },
+        {
+          "start": 16.784,
+          "end": 18.398
+        },
+        {
+          "start": 18.898,
+          "end": 21.054
+        },
+        {
+          "start": 21.274,
+          "end": 24.572
+        },
+        {
+          "start": 25.072,
+          "end": 27.925
+        },
+        {
+          "start": 28.145,
+          "end": 29.268
+        },
+        {
+          "start": 29.768,
+          "end": 31.321
+        },
+        {
+          "start": 31.541,
+          "end": 33.412
+        },
+        {
+          "start": 33.632,
+          "end": 34.499
+        },
+        {
+          "start": 34.999,
+          "end": 36.843
+        },
+        {
+          "start": 37.063,
+          "end": 38.005
+        }
+      ]
+    },
+    "04": {
+      "src": "audio/temp/04.wav",
+      "kind": "temp",
+      "lead": 0.3,
+      "duration": 28.415,
+      "phrases": [
+        {
+          "start": 0,
+          "end": 2.189
+        },
+        {
+          "start": 2.409,
+          "end": 4.333
+        },
+        {
+          "start": 4.833,
+          "end": 6.084
+        },
+        {
+          "start": 6.584,
+          "end": 8.195
+        },
+        {
+          "start": 8.415,
+          "end": 9.724
+        },
+        {
+          "start": 9.944,
+          "end": 10.989
+        },
+        {
+          "start": 11.209,
+          "end": 12.425
+        },
+        {
+          "start": 12.925,
+          "end": 13.725
+        },
+        {
+          "start": 14.225,
+          "end": 15.966
+        },
+        {
+          "start": 16.186,
+          "end": 18.231
+        },
+        {
+          "start": 18.451,
+          "end": 19.818
+        },
+        {
+          "start": 20.318,
+          "end": 22.235
+        },
+        {
+          "start": 22.735,
+          "end": 23.606
+        },
+        {
+          "start": 23.826,
+          "end": 24.783
+        },
+        {
+          "start": 25.003,
+          "end": 26.487
+        },
+        {
+          "start": 26.707,
+          "end": 28.415
+        }
+      ]
+    },
+    "05": {
+      "src": "audio/temp/05.wav",
+      "kind": "temp",
+      "lead": 0.3,
+      "duration": 17.666,
+      "phrases": [
+        {
+          "start": 0,
+          "end": 3.645
+        },
+        {
+          "start": 4.145,
+          "end": 5.919
+        },
+        {
+          "start": 6.139,
+          "end": 9.234
+        },
+        {
+          "start": 9.454,
+          "end": 10.28
+        },
+        {
+          "start": 10.78,
+          "end": 11.613
+        },
+        {
+          "start": 12.113,
+          "end": 12.725
+        },
+        {
+          "start": 12.945,
+          "end": 14.104
+        },
+        {
+          "start": 14.604,
+          "end": 16.323
+        },
+        {
+          "start": 16.543,
+          "end": 17.666
+        }
+      ]
+    },
+    "06": {
+      "src": "audio/temp/06.wav",
+      "kind": "temp",
+      "lead": 0.3,
+      "duration": 21.533,
+      "phrases": [
+        {
+          "start": 0,
+          "end": 2.295
+        },
+        {
+          "start": 2.515,
+          "end": 4.901
+        },
+        {
+          "start": 5.121,
+          "end": 6.248
+        },
+        {
+          "start": 6.748,
+          "end": 8.754
+        },
+        {
+          "start": 8.974,
+          "end": 12.366
+        },
+        {
+          "start": 12.866,
+          "end": 17.112
+        },
+        {
+          "start": 17.612,
+          "end": 19.296
+        },
+        {
+          "start": 19.796,
+          "end": 20.584
+        },
+        {
+          "start": 20.804,
+          "end": 21.533
+        }
+      ]
+    },
+    "07": {
+      "src": "audio/temp/07.wav",
+      "kind": "temp",
+      "lead": 0.3,
+      "duration": 14.866,
+      "phrases": [
+        {
+          "start": 0,
+          "end": 0.543
+        },
+        {
+          "start": 1.043,
+          "end": 2.701
+        },
+        {
+          "start": 2.921,
+          "end": 4.416
+        },
+        {
+          "start": 4.636,
+          "end": 5.69
+        },
+        {
+          "start": 6.19,
+          "end": 6.964
+        },
+        {
+          "start": 7.464,
+          "end": 8.495
+        },
+        {
+          "start": 8.995,
+          "end": 10.076
+        },
+        {
+          "start": 10.576,
+          "end": 11.618
+        },
+        {
+          "start": 12.118,
+          "end": 13.02
+        },
+        {
+          "start": 13.24,
+          "end": 14.866
+        }
+      ]
+    }
+  },
+  "whatsapp": null,
+  "footage": {
+    "approve": 8.533,
+    "case": 15.633,
+    "cmdk": 15,
+    "dictate": 8.833,
+    "evidence": 8.267,
+    "explain": 17.4,
+    "home": 13.033,
+    "myday": 8,
+    "offline": 12.067,
+    "outcome": 7.533,
+    "plan": 20.967,
+    "reopen": 7.267,
+    "report": 10.767,
+    "roadmap": 6.233,
+    "sent": 6.467,
+    "sources": 6.533,
+    "work": 7.4
+  },
+  "captions": [
+    {
+      "block": "01",
+      "text": "In a block office in Rampur, a dashboard turns red:",
+      "start": 0.3,
+      "end": 3.736
+    },
+    {
+      "block": "01",
+      "text": "Class 3 subtraction has fallen eighteen points.",
+      "start": 3.776,
+      "end": 7.138
+    },
+    {
+      "block": "01",
+      "text": "And then…",
+      "start": 7.178,
+      "end": 7.945
+    },
+    {
+      "block": "01",
+      "text": "nothing happens.",
+      "start": 7.985,
+      "end": 9.203
+    },
+    {
+      "block": "01",
+      "text": "Officers have data, but every system stops at the alert.",
+      "start": 9.243,
+      "end": 13.159
+    },
+    {
+      "block": "01",
+      "text": "No owner, no deadline, no proof,",
+      "start": 13.199,
+      "end": 15.951
+    },
+    {
+      "block": "01",
+      "text": "and no one checks whether children learned more.",
+      "start": 15.991,
+      "end": 18.822
+    },
+    {
+      "block": "02",
+      "text": "Karyavahi turns every learning drop into a case:",
+      "start": 20.3,
+      "end": 23.156
+    },
+    {
+      "block": "02",
+      "text": "flag, diagnose, plan, approve, act, verify.",
+      "start": 23.196,
+      "end": 27.325
+    },
+    {
+      "block": "02",
+      "text": "And a case closes only when the next assessment shows",
+      "start": 27.365,
+      "end": 30.294
+    },
+    {
+      "block": "02",
+      "text": "children learned more.",
+      "start": 30.334,
+      "end": 31.642
+    },
+    {
+      "block": "03",
+      "text": "The block officer starts on a command centre,",
+      "start": 32.3,
+      "end": 35.252
+    },
+    {
+      "block": "03",
+      "text": "not a spreadsheet:",
+      "start": 35.292,
+      "end": 36.949
+    },
+    {
+      "block": "03",
+      "text": "their own area on a real map, and what needs them today.",
+      "start": 36.999,
+      "end": 41.081
+    },
+    {
+      "block": "03",
+      "text": "Anything is one search away, or they can just ask Claude.",
+      "start": 41.131,
+      "end": 45.156
+    },
+    {
+      "block": "03",
+      "text": "Here is the case:",
+      "start": 45.206,
+      "end": 46.66
+    },
+    {
+      "block": "03",
+      "text": "the drop, the schools driving it,",
+      "start": 46.71,
+      "end": 49.044
+    },
+    {
+      "block": "03",
+      "text": "and the conditions behind it.",
+      "start": 49.084,
+      "end": 51.148
+    },
+    {
+      "block": "03",
+      "text": "Claude explains it in plain words,",
+      "start": 51.198,
+      "end": 53.534
+    },
+    {
+      "block": "03",
+      "text": "and every figure it writes is checked against the records.",
+      "start": 53.574,
+      "end": 57.322
+    },
+    {
+      "block": "03",
+      "text": "It suggests a plan from an evidence library, with real costs.",
+      "start": 57.372,
+      "end": 62.018
+    },
+    {
+      "block": "03",
+      "text": "But the officer decides, and a second officer approves,",
+      "start": 62.068,
+      "end": 65.892
+    },
+    {
+      "block": "03",
+      "text": "in one tap.",
+      "start": 65.932,
+      "end": 67.249
+    },
+    {
+      "block": "03",
+      "text": "Every task gets an owner and a deadline.",
+      "start": 67.299,
+      "end": 70.755
+    },
+    {
+      "block": "04",
+      "text": "For headmasters and field staff,",
+      "start": 75.3,
+      "end": 77.669
+    },
+    {
+      "block": "04",
+      "text": "it works the way they already work.",
+      "start": 77.709,
+      "end": 80.083
+    },
+    {
+      "block": "04",
+      "text": "It opens in Hindi.",
+      "start": 80.133,
+      "end": 81.834
+    },
+    {
+      "block": "04",
+      "text": "They can listen to their day instead of reading it,",
+      "start": 81.884,
+      "end": 85.204
+    },
+    {
+      "block": "04",
+      "text": "and speak a note instead of typing.",
+      "start": 85.244,
+      "end": 88.175
+    },
+    {
+      "block": "04",
+      "text": "No signal?",
+      "start": 88.225,
+      "end": 89.475
+    },
+    {
+      "block": "04",
+      "text": "Proof is saved on the phone,",
+      "start": 89.525,
+      "end": 91.446
+    },
+    {
+      "block": "04",
+      "text": "and sent when the network returns, with the location checked.",
+      "start": 91.486,
+      "end": 95.568
+    },
+    {
+      "block": "04",
+      "text": "And they don't even need the app:",
+      "start": 95.618,
+      "end": 97.985
+    },
+    {
+      "block": "04",
+      "text": "on WhatsApp, tasks arrive, a reply marks them done,",
+      "start": 98.035,
+      "end": 101.967
+    },
+    {
+      "block": "04",
+      "text": "and a photo becomes proof.",
+      "start": 102.007,
+      "end": 104.165
+    },
+    {
+      "block": "05",
+      "text": "Proof is checked by someone other than the person who did the work.",
+      "start": 110.3,
+      "end": 114.395
+    },
+    {
+      "block": "05",
+      "text": "When the next round arrives,",
+      "start": 114.445,
+      "end": 116.399
+    },
+    {
+      "block": "05",
+      "text": "Karyavahi compares plan schools with similar schools,",
+      "start": 116.439,
+      "end": 119.714
+    },
+    {
+      "block": "05",
+      "text": "and asks:",
+      "start": 119.754,
+      "end": 121.03
+    },
+    {
+      "block": "05",
+      "text": "did it work?",
+      "start": 121.08,
+      "end": 122.363
+    },
+    {
+      "block": "05",
+      "text": "If not, the case reopens.",
+      "start": 122.413,
+      "end": 124.854
+    },
+    {
+      "block": "05",
+      "text": "And the Action Taken Report writes itself.",
+      "start": 124.904,
+      "end": 128.416
+    },
+    {
+      "block": "06",
+      "text": "Claude only drafts and explains,",
+      "start": 130.3,
+      "end": 132.775
+    },
+    {
+      "block": "06",
+      "text": "from records the user is allowed to see, always cited.",
+      "start": 132.815,
+      "end": 136.998
+    },
+    {
+      "block": "06",
+      "text": "The decisions are made by people,",
+      "start": 137.048,
+      "end": 139.234
+    },
+    {
+      "block": "06",
+      "text": "and every change goes into a tamper-evident audit trail.",
+      "start": 139.274,
+      "end": 143.116
+    },
+    {
+      "block": "06",
+      "text": "Schools, costs and district figures come from real public data.",
+      "start": 143.166,
+      "end": 147.862
+    },
+    {
+      "block": "06",
+      "text": "And it's tested end to end:",
+      "start": 147.912,
+      "end": 150.046
+    },
+    {
+      "block": "06",
+      "text": "every page, every role.",
+      "start": 150.096,
+      "end": 152.283
+    },
+    {
+      "block": "07",
+      "text": "Next:",
+      "start": 155.3,
+      "end": 156.293
+    },
+    {
+      "block": "07",
+      "text": "a pilot in one district, with the state's own data,",
+      "start": 156.343,
+      "end": 159.896
+    },
+    {
+      "block": "07",
+      "text": "then state-wide.",
+      "start": 159.936,
+      "end": 161.44
+    },
+    {
+      "block": "07",
+      "text": "Karyavahi.",
+      "start": 161.49,
+      "end": 162.714
+    },
+    {
+      "block": "07",
+      "text": "AI drafts.",
+      "start": 162.764,
+      "end": 164.245
+    },
+    {
+      "block": "07",
+      "text": "Officers decide.",
+      "start": 164.295,
+      "end": 165.826
+    },
+    {
+      "block": "07",
+      "text": "The ledger proves.",
+      "start": 165.876,
+      "end": 167.368
+    },
+    {
+      "block": "07",
+      "text": "Close a case only when children learn more.",
+      "start": 167.418,
+      "end": 170.616
+    }
+  ]
+}

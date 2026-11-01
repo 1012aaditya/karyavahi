@@ -68,7 +68,7 @@ Every change is written to a **hash-chained audit trail**, and editing any row b
 - **Hindi first.** Every screen is in Hindi or English; the account remembers which.
 - **Listen and speak.** Hear the day read aloud instead of reading it, and dictate a note instead of typing.
 - **Works without signal.** Proof is saved on the phone and sent when the network returns, with the location checked against the school.
-- **WhatsApp, with no app to install.** Tasks arrive as messages. Reply `1` for "seen" or `2` for "started", and send a photo as proof (Meta Cloud API test number).
+- **WhatsApp, with no app to install.** Tasks arrive as messages. Reply `1` for "seen" or `2` for "started", and send a photo as proof. Built on Meta's Cloud API and tested end to end against a mocked Meta (111 checks). The live test number is connected and receives messages; delivery of replies to test phones is being finished for the next round.
 
 **Trust**
 - Code computes every number; Claude only narrates (see below).
@@ -247,7 +247,7 @@ A pilot in one district with the state's own assessment data, then state-wide. S
 ## Known limits
 
 - Learning results are simulated. Nothing is connected to a live UDISE+, NAS, state VSK or IVR.
-- WhatsApp uses Meta's test number, so only phone numbers registered as testers receive messages.
+- WhatsApp uses Meta's test number, so only phone numbers registered as testers can take part. Incoming messages reach the live demo; replies to the phone are not yet delivering reliably, so the WhatsApp flow is shown in the video as a re-created chat.
 - The free Render plan sleeps when idle, so the first visit after a pause can take about a minute.
 
 ## Submission
