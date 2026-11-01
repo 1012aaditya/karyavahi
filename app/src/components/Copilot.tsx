@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Icon } from './Icon';
 import { SourceChip } from './AiBriefing';
 import { askClaude } from './ask-claude';
+import { FeedbackThumbs } from './Feedback';
 
 /**
  * A Claude draft on a record: a button, then the draft in place. Renders what /api/ai/copilot
@@ -14,7 +15,7 @@ import { askClaude } from './ask-claude';
 
 type Task = 'explain_finding' | 'suggest_plan' | 'summarise_discussion' | 'explain_outcome' | 'report_narrative';
 interface Draft { headline: string; paragraphs: string[]; points: { text: string; source_ids: string[] }[]; next_step: string; intervention_id: string; caveat: string }
-interface Envelope { status: 'ok' | 'unconfigured' | 'error'; draft?: Draft; model?: string; generatedAt?: string; stale?: boolean; message?: string; audit?: { checked: number; unsupported: string[] } }
+interface Envelope { status: 'ok' | 'unconfigured' | 'error'; draft?: Draft; model?: string; generatedAt?: string; stale?: boolean; message?: string; audit?: { checked: number; unsupported: string[] }; interactionId?: string }
 
 /** Mark the figures the auditor could not find in the records, wherever they appear. */
 function Marked({ text, bad }: { text: string; bad: string[] }) {
@@ -134,6 +135,7 @@ export function ClaudeDraft({ task, id, label, lang = 'en', configured = true, f
                 ) : null}
                 {env?.model ? <span className={`${env?.audit && env.audit.checked > 0 && bad.length === 0 ? '' : 'ml-auto '}font-mono text-2xs text-ink-faint`}>{env.model}</span> : null}
               </footer>
+              <FeedbackThumbs kind="claude_draft" target={`${task}:${id}`} aiInteractionId={env?.interactionId} lang={lang} />
             </div>
           ) : (
             <div className="mt-3 flex flex-wrap items-center gap-2">

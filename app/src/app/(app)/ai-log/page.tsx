@@ -8,6 +8,9 @@ import { Card, CardHead, PageHead, Callout, Grid, Stat, Toolbar, Empty, Mono, fm
 import { Pill, AiDrafted } from '@/components/labels';
 import { FilterChips } from '@/components/lists';
 import { SIM_MODEL } from '@domain/catalog';
+import { feedbackForInteractions, mayReview } from '@/lib/feedback';
+import { TAG_LABEL, type FeedbackTag } from '@/lib/feedback-shared';
+import Link from 'next/link';
 
 /**
  * Every use of generated text, logged.
@@ -40,6 +43,8 @@ export default async function AiLogPage({
   const all = listAi(session, { limit: 3000 });
   const kinds = [...new Set(all.map((a) => a.kind))];
   const users = userNames(rows.map((a) => a.user_id ?? ''));
+  // What the people who read each answer or draft said about it (reviewers only; empty otherwise).
+  const fb = feedbackForInteractions(session, rows.map((a) => a.id));
 
   const blocked = all.filter((a) => a.status === 'blocked_unverified_number').length;
   const edited = all.filter((a) => a.reviewer_decision === 'edited').length;
@@ -77,6 +82,13 @@ export default async function AiLogPage({
           `हर पंक्ति "${SIM_MODEL}" अंकित है। कोई भाषा मॉडल नहीं चलता: मसौदे टेम्पलेट से बनते हैं जिनमें प्रकरण के मान भरे जाते हैं।`,
         )}
       </Callout>
+
+      {mayReview(session) ? (
+        <Callout tone="note" title={pick(lang, 'What users said about Claude', 'उपयोगकर्ताओं ने Claude के बारे में क्या कहा')}>
+          {pick(lang, 'Rows below carry the thumbs up and down people gave each Claude answer or draft. Reasons and comments are on the feedback page.', 'नीचे की पंक्तियों पर लोगों द्वारा हर Claude उत्तर या मसौदे को दी गई पसंद-नापसंद दिखती है। कारण और टिप्पणियाँ सुझाव पृष्ठ पर हैं।')}{' '}
+          <Link href="/admin/feedback?kind=claude_answer" className="link">{pick(lang, 'Open the feedback on Claude', 'Claude पर सुझाव खोलें')}</Link>
+        </Callout>
+      ) : null}
 
       <Card>
         <CardHead title={pick(lang, 'By purpose', 'उद्देश्य के अनुसार')} />
@@ -120,6 +132,11 @@ export default async function AiLogPage({
                   {a.auditor_verdict !== 'not_applicable' ? (
                     <Pill tone={a.auditor_verdict === 'pass' ? 'good' : 'critical'}>
                       {pick(lang, 'auditor', 'लेखा परीक्षक')}: {a.auditor_verdict}
+                    </Pill>
+                  ) : null}
+                  {fb.get(a.id) ? (
+                    <Pill tone={fb.get(a.id)!.down > 0 ? 'critical' : 'good'} title={fb.get(a.id)!.tags.map((t) => pick(lang, TAG_LABEL[t as FeedbackTag]?.en ?? t, TAG_LABEL[t as FeedbackTag]?.hi ?? t)).join(', ') || undefined}>
+                      {pick(lang, 'user', 'उपयोगकर्ता')}: 👍 {fb.get(a.id)!.up} · 👎 {fb.get(a.id)!.down}
                     </Pill>
                   ) : null}
                   <span className="text-sm text-ink-soft">

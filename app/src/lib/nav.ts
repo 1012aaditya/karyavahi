@@ -125,6 +125,7 @@ export function navFor(s: Session): NavSection[] {
   if (may(s, 'settings.configure')) admin.push({ href: '/settings', key: 'navSettings' });
   if (may(s, 'settings.configure') || may(s, 'demo.reset')) admin.push({ href: '/admin/jobs', key: 'navJobs' });
   if (may(s, 'api.manage_keys')) admin.push({ href: '/admin/api-keys', key: 'navApiKeys' });
+  if (may(s, 'feedback.review')) admin.push({ href: '/admin/feedback', key: 'navFeedback' });
   if (may(s, 'demo.reset')) {
     admin.push({ href: '/admin/outbox', key: 'navOutbox' });
     admin.push({ href: '/admin/demo', key: 'navDemoControls' });

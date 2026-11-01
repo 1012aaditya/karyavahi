@@ -14,6 +14,7 @@ import { Logo } from './Brand';
 import { Icon } from './Icon';
 import { fmtDate } from './ui';
 import { AssistantDrawer } from './Chat';
+import { FeedbackButton } from './Feedback';
 import { may } from '@/lib/guard';
 import { can } from '@/lib/authz';
 import { aiStatus } from '@/lib/ai/config';
@@ -102,6 +103,7 @@ export default async function Shell({ children }: { children: ReactNode }) {
             <CommandTrigger label={pick(lang, 'Search or jump to…', 'खोजें या सीधे जाएँ…')} />
           </div>
           {may(session, 'ai.assistant') ? <Suspense fallback={null}><AssistantDrawer configured={aiStatus().configured} userKey={session.user_id} label={pick(lang, 'Ask Claude', 'Claude से पूछें')} hint={pick(lang, 'Ask Claude about this page', 'इस पृष्ठ के बारे में Claude से पूछें')} /></Suspense> : null}
+          <FeedbackButton lang={lang} />
           <Link href="/notifications" className="btn-ghost relative px-2" title={t(lang, 'navNotifications')}>
             <Icon name="bell" size={19} label={t(lang, 'navNotifications')} />
             {badges.notifications > 0 ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-crit" aria-label={`${badges.notifications} unread`} /> : null}

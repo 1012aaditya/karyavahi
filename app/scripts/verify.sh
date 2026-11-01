@@ -66,6 +66,9 @@ npx tsx --conditions=react-server scripts/reminders-test.mts 2>&1 | grep -vE 'Ex
 step 'API keys for state dashboards'
 npx tsx --conditions=react-server scripts/api-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
 
+step 'user feedback: saving, limits, who reads it, the audit row'
+npx tsx --conditions=react-server scripts/feedback-test.mts 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -4
+
 if [ "$FULL" = "--full" ]; then
   step 'production build'
   npm run build 2>&1 | tail -4
@@ -81,6 +84,9 @@ if [ "$FULL" = "--full" ]; then
 
   step 'the read-only API over HTTP: keys, scope, pagination, rate limit'
   npx tsx --conditions=react-server scripts/api-test.mts http://localhost:3000 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
+
+  step 'user feedback over HTTP: signed-out, cross-site, CSV for reviewers only'
+  npx tsx --conditions=react-server scripts/feedback-test.mts http://localhost:3000 2>&1 | grep -vE 'ExperimentalWarning|trace-warnings' | tail -6
 
   step 'the demo story through the browser'
   node scripts/e2e.cjs 2>&1 | tail -6

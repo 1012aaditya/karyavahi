@@ -7,6 +7,7 @@ import { Icon } from './Icon';
 import { ASK_CLAUDE_EVENT } from './ask-claude';
 import { SourceChip } from './AiBriefing';
 import { Sheet, SheetClose, SheetContent, SheetTrigger } from './primitives/sheet';
+import { FeedbackThumbs } from './Feedback';
 
 /**
  * The Claude conversation UI. Streams from /api/ai/chat, shows which tools ran, renders
@@ -27,6 +28,8 @@ interface Msg {
   error?: { message: string; retryable: boolean };
   model?: string;
   streaming?: boolean;
+  /** The AI log row of this answer, from the done event; feedback points at it. */
+  interactionId?: string;
 }
 export interface ChatContext { path?: string; caseId?: string; area?: { level: string; id: string }; reportId?: string; label?: string }
 
@@ -213,7 +216,7 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
           else if (e.type === 'text') patchLast((m) => ({ ...m, content: m.content + e.delta }));
           else if (e.type === 'tool_start') patchLast((m) => ({ ...m, tools: [...(m.tools ?? []), { id: e.id, label: e.label, status: 'running' }] }));
           else if (e.type === 'tool_end') patchLast((m) => ({ ...m, tools: (m.tools ?? []).map((t) => (t.id === e.id ? { ...t, status: e.ok ? 'done' : 'failed', records: e.records } : t)) }));
-          else if (e.type === 'done') patchLast((m) => ({ ...m, streaming: false, sources: e.sources, unverified: e.citedNotRetrieved, unchecked: e.unsupportedFigures ?? [], followUps: e.followUps }));
+          else if (e.type === 'done') patchLast((m) => ({ ...m, streaming: false, sources: e.sources, unverified: e.citedNotRetrieved, unchecked: e.unsupportedFigures ?? [], followUps: e.followUps, interactionId: e.interactionId }));
           else if (e.type === 'error') patchLast((m) => ({ ...m, streaming: false, error: { message: e.message, retryable: e.retryable } }));
         }
       }
@@ -349,6 +352,7 @@ export function ChatPanel({ context, starters, compact = false, configured = tru
                             {i === msgs.length - 1 ? <button type="button" onClick={retry} disabled={busy} className="btn-ghost btn-sm px-2 text-xs"><Icon name="refresh" size={13} />Retry</button> : null}
                             {m.model ? <span className="text-2xs text-ink-faint">{m.model} · AI-generated, verify before acting</span> : null}
                           </div>
+                          {m.interactionId ? <FeedbackThumbs kind="claude_answer" target={m.interactionId} /> : null}
                           {i === msgs.length - 1 && m.followUps && m.followUps.length > 0 ? (
                             <div className="flex flex-wrap gap-1.5 pt-1">
                               {m.followUps.map((f) => (

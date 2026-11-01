@@ -579,6 +579,63 @@ Tests: `npm run test:api` (module checks) and `npx tsx --conditions=react-server
 scripts/api-test.mts http://localhost:3000` (also the HTTP checks: 401s, block/district/state
 scope, 404s, pagination, leak scan, cookies, rate limit, OpenAPI coverage, who may make keys).
 
+## Feedback and user testing
+
+The app collects feedback from the people using it, shows it to the team that runs the user
+testing, and shows everyone what changed because of it. The kit for running sessions with block
+officers, coordinators and headmasters is in **`docs/user-testing/`** at the repository root
+(protocol with Hindi + English consent script and task cards per role, a session sheet, and how
+to turn findings into changes).
+
+**Where people give feedback**
+
+- **👍 / 👎 on Claude.** Under every Claude draft (`ClaudeDraft` in `src/components/Copilot.tsx`)
+  and every chat answer (`src/components/Chat.tsx`). A 👎 offers quick reasons — *wrong figure,
+  unclear, not useful, too long, language problem* — and an optional comment. A chat rating is
+  tied to the answer's AI log id (the `interactionId` of the stream's `done` event), and only
+  the person who asked can rate it; a draft rating names the task and record
+  (`explain_finding:CASE-0184`) and, for fresh drafts, the AI log id too.
+- **Feedback / सुझाव दें.** A speech-bubble button in the top bar of every signed-in page
+  (`FeedbackButton` in `src/components/Feedback.tsx`) opens three questions: how easy was this
+  (1–5), what were you trying to do, what got in the way. It is a bottom sheet on a phone, with
+  44–64 px touch targets, and every word is in Hindi and English.
+
+**Storage and rules.** One table, `feedback`, created by `src/lib/ext/feedback-schema.ts`
+(marker `feedback-v1`): user id, the role they acted in, page path (no query string), kind
+(`page` / `claude_draft` / `claude_answer`), target, AI log id, rating (1–5 for the form, ±1 for
+Claude), tags, comment (≤ 1000 characters), what they were trying to do (≤ 500), language, and
+wall-clock time. `POST /api/feedback` takes the user from the session, refuses cross-site
+requests (`isCrossSite`) and anything that is not JSON, and hands over to `src/lib/feedback.ts`,
+which validates every field, allows 20 pieces of feedback per person per 10 minutes (counted from
+the table, so it survives a restart), and appends a `feedback.submit` audit row — without the
+comment text. A person may change their mind on a Claude rating; the counts use each person's
+latest.
+
+**Who reads it.** Permission `feedback.review` (state programme team and demo administrator) in
+`src/domain/permissions.ts`:
+
+- **/admin/feedback** — totals, ratings by page (grouped by route), 👍/👎 by kind, the top
+  reasons, every response with filters (kind, rating, reason, role, page), and **Export CSV**
+  (`/api/feedback/export`, audited as `feedback.export`; refusals too; formula-looking cells are
+  quoted so a spreadsheet does not run them).
+- **/ai-log** — the 👍/👎 next to each Claude answer or draft.
+- Everyone else sees only their own feedback (`ownFeedback`), never anyone else's.
+
+**What we changed after testing — `/changes`.** Every signed-in user can read it. It lists
+improvements made because of user input from `app/data/changes.json` (date, what users said —
+paraphrased, which roles, what changed, a link to the page, and optionally the `FBK-` feedback
+ids behind it). The file is read on each request, malformed entries are skipped, and links off
+the site are dropped. It ships with one honest placeholder saying no sessions have been run
+yet; `docs/user-testing/analysis.md` explains how to add entries. Never add feedback nobody gave.
+
+**Tests.** `npm run test:feedback` (saving, validation and length limits, scoping, reviewers
+only, the latest-rating rule, CSV and formula quoting, rate limit, audit rows, the changes file)
+and `npx tsx --conditions=react-server scripts/feedback-test.mts http://localhost:3000` (also over
+HTTP: signed-out 401, cross-site 403, non-JSON 415, a spoofed user id ignored, 429 over the
+limit, CSV export only for reviewers, the pages). `scripts/crawl.mjs` loads `/admin/feedback`
+and `/changes` for every role in both languages and checks that a BEO and a headmaster are
+refused the review page.
+
 ## Known limits
 
 - **Only assessment rounds can be uploaded.** Attendance and staff-movement batches are still
