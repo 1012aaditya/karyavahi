@@ -119,6 +119,8 @@ export function acceptWebhook(raw: Uint8Array, signature: string | null): Webhoo
         if (!st?.id || !st.status) continue;
         const e = st.errors?.[0];
         const reason = st.status === 'failed' && e ? `${e.code ?? ''}${e.code ? ': ' : ''}${e.title ?? e.message ?? 'failed'}` : null;
+        // Replies such as the menu have no outbox row, so a late failure would otherwise leave no trace.
+        if (st.status === 'failed') console.warn(`[whatsapp] Meta reported a delivery failure: ${reason ? scrub(reason) : 'no reason given'}`);
         counts.statuses += applyStatus(st.id, st.status, reason ? scrub(reason) : null) > 0 ? 1 : 0;
       }
 
