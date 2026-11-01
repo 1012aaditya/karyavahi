@@ -114,7 +114,8 @@ src/lib/
   viz.ts         Chart colour tokens (kept out of the client module — see the note in the file).
 
 src/components/  ui · labels · charts · lists · dash · case-panels · Shell · ActionForm
-src/app/         the routes, one directory per page
+src/app/         the routes, one directory per page; signed-in pages sit in the (app) group,
+                 whose layout redirects to /login before anything is streamed
 scripts/         build-db · smoke · write-test · crawl · e2e · restart · verify
 ```
 
@@ -204,6 +205,17 @@ aqua), assigned by entity and never by rank, so filtering a series never repaint
 Validated with `--pairs all` against this app's white surface: CVD ΔE 9.2, normal-vision ΔE
 24.0. Aqua is below 3:1 contrast on white, so every chart also carries direct labels and a
 table view. One y-axis, always; two measures of different scale get two charts.
+
+## Design tokens
+
+Every colour is defined once, in `src/lib/tokens.ts`: the palette, a dark variant for map and
+evidence surfaces (`surface-dark` swaps the CSS variables, so classes inside need no change), one
+severity ramp shared by hotspot chips, the map and the charts, and the chart series. Tailwind
+reads the tokens (`tailwind.config.ts`), MapLibre reads the hex values. Text sizes come from one
+scale (`text-2xs` 11px … `text-5xl` 52px); fonts are IBM Plex Sans with its matching Devanagari,
+Plex Mono, and Source Serif 4 for page and case titles, served by `next/font`. Menus and drawers
+are Radix primitives in `src/components/primitives/`, so they trap and return focus and work
+from the keyboard. `src/app/{loading,error,not-found,global-error}.tsx` cover every route.
 
 ## Language
 
